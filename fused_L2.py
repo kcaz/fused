@@ -7,46 +7,42 @@ coefficient = collections.namedtuple('coefficient',['sub','r','c'])
 constraint = collections.namedtuple('constraint',['c1','c2','lam'])
 
 
-coeff1 = coefficient(0, 12, 13)
 
-#returns a list mapping c=1...C to constraints with c in the first position
-#constraints are directional!!!!!! this makes our life simpler
-#but it also means that breaking the symmetry breaks things
-def index_constraints(constraints, s, C):
-    cmap = []
-    for c in range(C):
-        cmap.append([])
-        for con in constraints:
-            if con.sub == s and con.c1.c == c:#hrm direction?
-                cmap[-1].append(con)
-    return cmap
-    
-def solve_from_groups_i(Xs, TFs, Ys, Gs, groups, priorset, lamP, lamR, lamS, it):
-    fuse_constraints = make_fusion_constraints(groups, lamS)
-    ridge_constraints = [] #TODO
-    
-    return direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lamR) 
-    #return iter_solve(Xs, Ys, fuse_constraints, ridge_constraints, lamR, it)
 
-def solve_group_orth(Xs, Ys, groups, priorset, lamP, lamR, lamS):
+    
+#solves the fused regression problem with constraints coming from groups
+#Xs: list of X matrices
+#Ys: lsit of Y matrices
+#groups: evil mess of a list
+#    each entry in groups is a list of 2 elements
+#        each entry in the first element is a list of (tf, gene) pairs
+#        each entry in the second element is a list of (tf, gene) pairs
+#    these (tf, gene) pairs are, collectively, fused to one another
+def solve_group_direct(Xs, Ys, groups, priorset, lamP, lamR, lamS):
     fuse_constraints = make_fusion_constraints(groups, lamS)
     ridge_constraints = [] # TODO
     return direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lamR) 
-    
 
-def pred_err_grps(B, X_lo, Y_lo):
-    errs = np.zeros(Y_lo.shape[1])
-    predY = np.array(np.dot(X_lo, B))
-    for c in range(Y_lo.shape[1]):
-        err = np.mean((predY[:, c] - Y_lo[:,c])**2)
-        errs[c] = err    
-    return errs.mean()
-
- 
+#solves the fused regression problem with constraints coming from groups
+#Xs: list of X matrices
+#Ys: lsit of Y matrices
+#groups: evil mess of a list
+#    each entry in groups is a list of 2 elements
+#        each entry in the first element is a list of (tf, gene) pairs
+#        each entry in the second element is a list of (tf, gene) pairs
+#    these (tf, gene) pairs are, collectively, fused to one another
+def solve_group_iter(Xs, Ys, groups, priorset, lamP, lamR, lamS,it):
+    fuse_constraints = make_fusion_constraints(groups, lamS)
+    ridge_constraints = [] # TODO
+    return iter_solve(Xs, Ys, fuse_constraints, ridge_constraints, lamR, it) 
+     
 
 #makes constraints from the list of fusion groups given by groups
 #groups: [ [ sub1list, sub2list], ... ]
 #sub1list/sub2list: [(tf, gene), ...]
+#enumerates every fusion constraint between a (tf, gene) in sublist 1 and a (tf, gene) in sublist2
+#IMPORTANT: this only adds sub1 -> sub2 constraints
+#this is because constraints are treated as symmetric
 def make_fusion_constraints(groups, lam):
     Cs=[]
     
@@ -61,7 +57,6 @@ def make_fusion_constraints(groups, lam):
                 (tf1, g1) = coeff1
                 (tf2, g2) = coeff2
                 Cs.append(constraint(coefficient(0, tf1, g1), coefficient(1, tf2, g2), lam))
-                #Cs.append(constraint(coefficient(0, tf2, g2), coefficient(1, tf1, g1), lam)) #symmetry important here
                 
     return Cs
 
@@ -120,43 +115,9 @@ def iter_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, it):
                 cB[j][:, [c]] = b
     return Bss[np.mod(it,2)]
 
-def con_to_inds(TFs, Gs, Cs):
-    tfi = map(lambda x: {x[y] : y for y in range(len(x))}, TFs)
-    gsi = map(lambda x: {x[y] : y for y in range(len(x))}, Gs)
-    
-    Cs2 = []
-    for con in Cs:
-        (i1, tf1, g1, i2, tf2, g2) = con
-        Cs2.append((i1, tfi[i1][tf1], gsi[i1][g1], i2, tfi[i2][tf2], gsi[i2][g2]))
-    return Cs2
 
-def make_bpad(Bs, j, c, Csi):
-    padS = []
-    P = []
-    #reminder format for Csi: (i, tf1i, g1i, j, tf2i, g2i)
-    for con in Csi:
-        (i1, t1i, g1i, i2, t2i, g2i) = con
-        #print (i1, t1i, g1i, i2, t2i, g2i)
-        if i1 == j and g1i == c:
-            g2im = np.mod(g2i, Bs[i2].shape[1])
-            padS.append(Bs[i2][t2i, g2im])
-            Prow = np.zeros((1, Bs[i1].shape[0]))
-            Prow[0, t1i] = 1
-            P.append(Prow)
-        if i2 == j and g2i == c:
-            g1im = np.mod(g1i, Bs[i1].shape[1])
-            padS.append(Bs[i1][t1i, g1im])
-            Prow = np.zeros((1, Bs[i2].shape[0]))
-            Prow[0, t2i] = 1
-            P.append(Prow)
-    if len(padS)>0:             
-        pad = np.vstack(padS)
-        P = np.vstack(P)
-    else:
-        pad = np.zeros((0, 1))
-        P = np.zeros((0, Bs[j].shape[0]))
-    return (P, pad)
-
+#diagonally concatenates two matrices
+#TODO: sparse
 def diag_concat(mats):
 
     tot_rows=sum(map(lambda x: x.shape[0], mats))
@@ -171,6 +132,7 @@ def diag_concat(mats):
         col += mi.shape[1]
     return A
 
+#this needs commenting!
 def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR):
     (coeff_l, con_l) = factor_constraints(Xs, Ys, fuse_constraints)
     Bs = []
@@ -179,9 +141,10 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR):
     for i in range(len(Xs)):
         Bs.append(np.zeros((Xs[i].shape[1], Ys[i].shape[1])))
     
+    #iterate over constraint sets
     for f in range(len(coeff_l)):
-        #print 'subproblem %d of %d' % (f+1, len(coeff_l))
-        t1 = time.time()
+        
+        #get the coefficients and constraints associated with the current problem
         coefficients = coeff_l[f]
         constraints = con_l[f]
         
@@ -193,6 +156,7 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR):
         
         num_subproblems = len(set(map(lambda co: co.sub, coefficients)))
         
+        #we're building a canonical ordering over the columns for the current set of columns
         counter = 0
         sub_map = dict()
         for co in columns:
@@ -211,6 +175,7 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR):
             Y = Ys[co.sub]
             Y_l.append(Y[:, [co.c]])
 
+        #compute a cumulative sum over the number of columns in each sub-block, for use as offsets when computing coefficient indices for penalties
 
         cums = [0]+list(np.cumsum(map(lambda x: x.shape[1], X_l)))
         P_l = [np.zeros((0, cums[-1]))]
@@ -238,29 +203,23 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR):
         X = np.vstack((diag_concat(X_l), P, I))
         y = np.vstack(Y_l)
         
-        #from matplotlib import pyplot as plt
-        #plt.matshow(X, aspect = float(X.shape[1])/X.shape[0])
-        #plt.show()
-        t2 = time.time()
-        #print 'setup took %f'%(t2-t1)
         (b, resid, rank, sing) = np.linalg.lstsq(X, y)        
         
-#now we put it all together - blah!
+        #now we put it all together
         for co_i in range(len(columns)):
             co = columns[co_i]
             start_ind = cums[co_i]
             end_ind = cums[co_i+1]
             
             Bs[co.sub][:, [co.c]] = b[start_ind:end_ind]
-        t3 = time.time()
-        #print 'solving took %f'%(t3-t2)
-    #B2 = np.dot(np.dot(np.linalg.inv(np.dot(Xs[0].T, Xs[0])), Xs[0].T), Ys[0])
-    #print B2
+        
+        
     return Bs
         
         
 
 #no cleverness at all
+#this is here as a sanity check
 def direct_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, it):
     ncols = sum(map(lambda y: y.shape[1], Ys))
     nrowsX = sum(map(lambda x: x.shape[0], Xs))
@@ -310,43 +269,8 @@ def direct_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, it):
     return Bs
 
 
-def iter_rr(Xs, TFs, Ys, Gs, Cs, priorset, lamP, lamR, lamS, it):   
-    Bs = []
-    Is = []
-    Csi = con_to_inds(TFs, Gs, Cs)
-    for j in range(len(Xs)):
-        Bs.append(np.zeros((Xs[j].shape[1], Ys[j].shape[1])))
-        Is.append(0)#not set here
-    Bsn = map(lambda x: x.copy(), Bs)
-    for i in range(it):
-        lamSit = lamS*float(i+1)/it        
-        for j in range(len(Xs)):
-            priors = priorset[j]
-            for c in range(Bs[j].shape[1]):
-                Is[j] = np.eye(Xs[j].shape[1])*lamR**2#here 
-                for k in range(len(priors)):
-                    if priors[k][1] == c:
-                        Is[j][priors[k][0],priors[k][0]] = (lamP*lamR)**2     
-                padR = np.zeros((Xs[j].shape[1], 1))
-                (P, padS) = make_bpad(Bs, j, c, Csi)
-                #now solve the regression problem
-                Xc = Xs[j].copy()
-                AP = np.matrix(np.vstack((Xc, P*lamSit)))
-                ypad = np.matrix(np.vstack((Ys[j][:,[c]], lamSit*padS)))
-                b = np.linalg.inv(AP.T * AP + Is[j])*AP.T*ypad
-                Bsn[j][:, [c]] = b
 
-        change = 0
-        for j in range(len(Xs)):                 
-            change += ((Bs[j] - Bsn[j])**2).sum()            
-
-        
-        tmp = Bs
-        Bs = Bsn
-        Bsn = tmp
-    return Bs
-
-#
+#factors the constraints!
 def factor_constraints(Xs, Ys, constraints):
     cset = set() 
     cmap = dict()
@@ -362,9 +286,15 @@ def factor_constraints(Xs, Ys, constraints):
     for con in constraints:
         cmap[con.c1].append(con)
         cmap[con.c2].append(con) 
+        
+    #starts with the last entry in coeffs and recursively adds connected constraints and coefficients to the lists cons and coeffs, while removing coefficients from cset
+    #every constraint connected to the current coefficient is added
+    #recursively called on coefficients linked by constraints or in the same column, which have not already been visited
 
-
-    def factor_constraints_helper(cons, coeffs):
+    #cset: set containing unvisited constraints
+    #cons: list of constraints 
+    #coeffs: list of coefficients in current problem
+    def factor_constraints_helper(cset, cons, coeffs):
         coe_fr = coeffs[-1]
         #first go down the column
         for r in range(Xs[coe_fr.sub].shape[1]):
@@ -372,7 +302,7 @@ def factor_constraints(Xs, Ys, constraints):
             if col_nbr in cset:
                 cset.remove(col_nbr)
                 coeffs.append(col_nbr)
-                factor_constraints_helper(cons, coeffs)
+                factor_constraints_helper(cset, cons, coeffs)
         #now go down the constraints
         for con in cmap[coe_fr]:
             #we traverse edges in both directions, but only keep track of the ones that have the same direction we're traveling
@@ -382,33 +312,12 @@ def factor_constraints(Xs, Ys, constraints):
                 if coe_to in cset:
                     coeffs.append(coe_to)
                     cset.remove(coe_to)
-                    factor_constraints_helper(cons, coeffs)        
+                    factor_constraints_helper(cset, cons, coeffs)        
     coeff_l = []
     con_l = []
     while len(cset):
         coeff = cset.pop()
         coeff_l.append([coeff])
         con_l.append([])
-        factor_constraints_helper(con_l[-1], coeff_l[-1])
+        factor_constraints_helper(cset, con_l[-1], coeff_l[-1])
     return (coeff_l, con_l)
-
-
-
-def solve_from_groups(Xs, TFs, Ys, Gs, groups, priorset, lamP, lamR, lamS, it):
-    Cs = make_constraints_group(groups)
-    return iter_rr(Xs, TFs, Ys, Gs, Cs, priorset, lamP, lamR, lamS, it)
-
-
-#makes constraints from the list of fusion groups given by groups
-#groups: [[[(tf, gene),...],[(tf,gene),...]],...]
-#reminder format for Cs: (i, tf1, g1, j, tf2, g2) 
-#currently only works for two subproblems
-def make_constraints_group(groups):
-    Cs=[]
-    for n in range(len(groups)):
-        b1 = groups[n][0]
-        b2 = groups[n][1]
-        for a in range(len(b1)):
-            for b in range(len(b2)):
-                Cs.append((0, str(b1[a][0]), str(b1[a][1]), 1, str(b2[b][0]), str(b2[b][1])))
-    return Cs
