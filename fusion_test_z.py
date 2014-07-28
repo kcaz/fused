@@ -218,6 +218,16 @@ def messwpriors(b, falsepos, falseneg):
                 priors.append((r, c))
     return priors
 
+
+def pred_err_grps(B, X_lo, Y_lo):
+    errs = np.zeros(Y_lo.shape[1])
+    predY = np.array(np.dot(X_lo, B))
+    for c in range(Y_lo.shape[1]):
+        err = np.mean((predY[:, c] - Y_lo[:,c])**2)
+        errs[c] = err    
+    return errs.mean()
+
+
 #xsamples = x.shape[0]
 def test_linearBs(b1, b2, fusiongroups, xsamples1, xsamples2, noise_std1, noise_std2, p_falsep, p_falseneg, lamP, lamR, lamS):
     TFs = [map(str, range(b1.shape[0])), map(str, range(b2.shape[0]))]
@@ -232,12 +242,11 @@ def test_linearBs(b1, b2, fusiongroups, xsamples1, xsamples2, noise_std1, noise_
     p2 = messwpriors(b2, p_falsep, p_falseneg)
     priorset = [p1, p2]
     #changed
-    bs_solve = fr.solve_group_orth([x1, x2], [y1, y2], fusiongroups, priorset, lamP, lamR, lamS)
-    err1 = fr.pred_err_grps(bs_solve[0], x1test, y1test)
-    err2 = fr.pred_err_grps(bs_solve[1], x2test, y2test)
+    bs_solve = fr.solve_group_direct([x1, x2], [y1, y2], fusiongroups, priorset, lamP, lamR, lamS)
+    err1 = pred_err_grps(bs_solve[0], x1test, y1test)
+    err2 = pred_err_grps(bs_solve[1], x2test, y2test)
 
-    err1 = ((b1 - bs_solve[0])**2).mean()
-    err2 = ((b2 - bs_solve[1])**2).mean()
+    
     return (bs_solve, err1, err2)
 
 
