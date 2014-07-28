@@ -26,19 +26,13 @@ def generate_from_linear(xdims, B, noise_std):
     Y = np.dot(X,B) + noise_std*np.random.randn(xdims[0], B.shape[1]) #note the inconsistency!!!!! AARGH!
     return (X, Y)    
 
-#rows and columns of b1/b2 are fused
-def fuse_bs_orth(b1dims, b2dims, max_grp_size, pct_fused, min_fuse_std, max_fuse_std):
-    b1 = np.zeros(b1dims)
-    b2 = np.zeros(b2dims)
-    genes1 = range(b1.shape[1])
-    genes2 = range(b2.shape[1])
+def build_orth(genes1, genes2, max_grp_size, pct_fused, min_fuse_std, max_fuse_std, omap):
     random.shuffle(genes1)
     random.shuffle(genes2)
     
     amt_fused = np.round((len(genes1)+len(genes2))*pct_fused)
     ind1 = 0
     ind2 = 0
-    omap = dict()
     while ind1 + ind2 < amt_fused:
         grp_size = random.randrange(2, max_grp_size+1)
 
@@ -61,10 +55,20 @@ def fuse_bs_orth(b1dims, b2dims, max_grp_size, pct_fused, min_fuse_std, max_fuse
                     omap[sub2c].append(sub1c)
                 else:
                     omap[sub2c] = [sub1c]
-
-
         ind1 += grp1_size
         ind2 += grp2_size
+
+#rows and columns of b1/b2 are fused
+def fuse_bs_orth(b1dims, b2dims, max_grp_size, pct_fused, min_fuse_std, max_fuse_std, sparse):
+    b1 = np.nan * np.ones(b1dims)
+    b2 = np.nan * np.ones(b2dims)
+    tfs1 = range(b1.shape[0])
+    tfs2 = range(b2.shape[0])    
+    genes1 = range(b1.shape[0], b1.shape[1])
+    genes2 = range(b2.shape[0], b2.shape[1])
+    omap = dict()
+    build_orth(tfs1, tfs2, max_grp_size, pct_fused, min_fuse_std, max_fuse_std, omap)
+    build_orth(genes1, genes2, max_grp_size, pct_fused, min_fuse_std, max_fuse_std, omap)
     bs = [b1, b2]
     fusion_groups = []    
     #print 'map built'
@@ -83,11 +87,7 @@ def fuse_bs_orth(b1dims, b2dims, max_grp_size, pct_fused, min_fuse_std, max_fuse
                     continue
                 if not con in acc_set:
                     acc_set.add(con)
-                    fused_to(orth_to_r, orth_to_c, acc_set)
-
-    
-    
-    
+                    fused_to(orth_to_r, orth_to_c, acc_set)        
     orth_fr_r_l = []
     orth_fr_c_l = []
     #SET UP THESE DUDES TO ITERATE OVER
@@ -115,23 +115,22 @@ def fuse_bs_orth(b1dims, b2dims, max_grp_size, pct_fused, min_fuse_std, max_fuse
                         
 #check to make sure it's not set yet
             #NOTE this isn't really right, because the value of b could be set to zero, but it's not very likely
-            if not bs[sub1][r, c] == 0:
-                continue
-            
-            s = set()
-            
-            
+            if not np.isnan(bs[sub1][r, c]):
+                continue            
+            s = set()                        
             fused_to(orth_fr_r, orth_fr_c, s)
-            
-            val = np.random.randn()
-            std = random.uniform(min_fuse_std, max_fuse_std)
+            coin = random.random()
+            if coin < sparse:
+                val = 0
+                std = 0
+            else:            
+                val = np.random.randn()
+                std = random.uniform(min_fuse_std, max_fuse_std)
             b1_coeffs = []
             b2_coeffs = []
             b_coeffs = [b1_coeffs, b2_coeffs]
             bs[sub1][r, c] = val + np.random.randn() * std
             for con in s:
-                
-                
                 (coeff1, coeff2) = con
                 ((sub11, r1), (sub12, c1)) = coeff1
                 ((sub21, r2), (sub22, c2)) = coeff2
@@ -139,13 +138,9 @@ def fuse_bs_orth(b1dims, b2dims, max_grp_size, pct_fused, min_fuse_std, max_fuse
                 if sub11 == sub21 or sub11 > sub21:
                     continue #no fusion within groups FOR NOW!
                 #is sock
-
-                
                 bs[sub11][r1, c1] = val + np.random.randn() * std
                 bs[sub21][r2, c2] = val + np.random.randn() * std
-                #the format for fusion groups is a list of tuples, containing lists of (r, c) tuples for sub1 in the first position and lists of (r, c) tuples for sub 2 in the second. these coefficients are fused
-                
-            
+                #the format for fusion groups is a list of tuples, containing lists of (r, c) tuples for sub1 in the first position and lists of (r, c) tuples for sub 2 in the second. these coefficients are fused           
                 b_coeffs[sub11].append((r1, c1))
                 b_coeffs[sub21].append((r2, c2))
             if len(b1_coeffs) or len(b2_coeffs):
@@ -155,8 +150,6 @@ def fuse_bs_orth(b1dims, b2dims, max_grp_size, pct_fused, min_fuse_std, max_fuse
     return (b1, b2, fusion_groups)
                 
                 
-                            
-
 #max_grp_size is the maximum size of fusion group
 #pct_fused is the proportion of the entries in b1 + b2 that become fused
 #min_fuse_std, max_fuse_std range of std for fusion error
@@ -248,7 +241,7 @@ def test_linearBs(b1, b2, fusiongroups, xsamples1, xsamples2, noise_std1, noise_
     return (bs_solve, err1, err2)
 
 
-def benchmark(lamP, lamR, lamS, b1dim, b1spars, b2dim, b2spars, maxgroupsize, pct_fused, minfusestd, maxfusestd, xsamples1, xsamples2, noise1, noise2, p_falsep, p_falsen, it):
+def benchmark(lamP, lamR, lamS, b1dim, b2dim, maxgroupsize, pct_fused, minfusestd, maxfusestd, xsamples1, xsamples2, noise1, noise2, p_falsep, p_falsen, sparse, it):
     watdict = dict()
     for R in lamR:
         for S in lamS:
@@ -259,8 +252,8 @@ def benchmark(lamP, lamR, lamS, b1dim, b1spars, b2dim, b2spars, maxgroupsize, pc
                     #b1 = make_bs(b1dim,b1spars)
                     #b2 = make_bs(b2dim,b2spars)
                     #(b1f, b2f, o) = fuse_bs(b1, b2, maxgroupsize, pct_fused, minfusestd, maxfusestd)
-                    (b1f, b2f,o) = fuse_bs_orth(b1dim,b2dim, maxgroupsize, pct_fused, minfusestd, maxfusestd)
-                    print b1f
+                    (b1f, b2f,o) = fuse_bs_orth(b1dim,b2dim, maxgroupsize, pct_fused, minfusestd, maxfusestd, sparse)
+                    
                     (bs_solve, err1, err2) = test_linearBs(b1f, b2f, o, xsamples1, xsamples2, noise1, noise2, p_falsep, p_falsen, P, R, S)
                     wat.append(np.mean([err1.mean(), err2.mean()]))                    
                     #wat += np.mean([err1.mean(), err2.mean()])
