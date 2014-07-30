@@ -7,6 +7,87 @@ coefficient = collections.namedtuple('coefficient',['sub','r','c'])
 constraint = collections.namedtuple('constraint',['c1','c2','lam'])
 
 
+one_gene = collections.namedtuple('gene',['name','organism'])
+
+#returns a list of lists of all pairs of entries from l, where the first entry in the pair occurs before the second in l
+def all_pairs(l):
+    pl = []
+    for li1 in range(len(l)):
+        for li2 in range(li1+1, len(l)):
+           pl.append([li1, li2])
+    return pl
+
+class dictl(dict):
+    def __getitem__(self, i):
+        if not i in self:
+            self[i] = []
+        return super(dictl, self).__getitem__(i)
+
+def priors_to_constraints(organisms, gene_ls, tf_ls, priors, lam):
+    org_to_ind = {organisms[x] : x for x in range(len(organisms))}
+    gene_to_inds = map(lambda o: {gene_ls[o][x] : x for x in range(len(gene_ls[o]))}, range(len(organisms)))
+    tf_to_inds = map(lambda o: {tf_ls[o][x] : x for x in range(len(tf_ls[o]))}, range(len(organisms)))
+    constraints = []
+    for prior in priors:
+        (gene1, gene2) = prior
+        sub1 = org_to_ind[gene1.organism]
+        sub2 = org_to_ind[gene2.organism]
+        if not sub1 == sub2:
+            print '!?!?!?!?!?'
+            continue
+        tfi = tf_to_inds[sub1][gene1.name]
+        gi = gene_to_inds[sub2][gene2.name]
+        constr = constraint(coefficient(sub1, tfi, gi), None, lam)
+        constraints.append(constr)
+    return constraints
+    
+#args as in solve_ortho_direct
+def orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS):
+    #build some maps
+    org_to_ind = {organisms[x] : x for x in range(len(organisms))}
+    gene_to_inds = map(lambda o: {gene_ls[o][x] : x for x in range(len(gene_ls[o]))}, range(len(organisms)))
+    tf_to_inds = map(lambda o: {tf_ls[o][x] : x for x in range(len(tf_ls[o]))}, range(len(organisms)))
+    
+    #turn orth into a list of all pairs of coefficients
+    orth_pairs = reduce(lambda x,y: x+y, map(all_pairs, orth),[])
+    
+    ortho_dict = dictl()
+    for op in orth_pairs:
+        (gene1, gene2) = op
+        ortho_dict[gene1].append(gene2)
+        ortho_dict[gene2].append(gene2)
+    
+    constraints = []
+    for org_i in range(len(organisms)):
+        for tf_i in range(len(tf_ls[org_i])):
+            for g_i in range(len(gene_ls[org_i])):
+                tf = one_gene(tf_ls[org_i][tf_i], organisms[org_i])
+                g = one_gene(gene_ls[org_i][g_i], organisms[org_i])
+                for tf_orth in ortho_dict[tf]:
+                    for g_orth in ortho-dict[g]:
+                        sub1 = org_i
+                        sub2 = org_to_ind[tf_orth.organism]
+                        sub3 = org_to_ind[g_orth.organism]
+                        if not sub2 == sub3:
+                            continue
+                        coeff1 = coefficient(sub1, tf_to_inds[sub1][tf.name], gene_to_inds[sub1][g.name])
+                        coeff2 = coefficient(sub2, tf_to_inds[sub2][tf_orth.name], gene_to_inds[sub2][g_orth.name])
+                        constr = constraint(coeff1, coeff2, lamS)
+                        constraints.append(constr)
+
+    return constraints
+                                             
+
+#gene_ls/tf_ls: lists of gene names and tf names for each problem
+#Xs: list of TF expression matrices
+#YS: list of gene expression matrices
+#Orth: list of lists of one_genes
+#priors: list of lists of one_gene pairs
+def solve_ortho_direct(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS):
+    ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
+    fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
+    Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
+    return Bs
 
 
     
@@ -134,7 +215,8 @@ def diag_concat(mats):
 
 #this needs commenting!
 def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR):
-    (coeff_l, con_l) = factor_constraints(Xs, Ys, fuse_constraints)
+    #(coeff_l, con_l) = factor_constraints(Xs, Ys, fuse_constraints)
+    (coeff_l, con_l) = factor_constraints_columns(Xs, Ys, fuse_constraints)
     Bs = []
         
     #Initialize matrices to hold solutions
@@ -143,7 +225,7 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR):
     
     #iterate over constraint sets
     for f in range(len(coeff_l)):
-        
+        print 'working on subproblem %d of %d'%(f,len(coeff_l))
         #get the coefficients and constraints associated with the current problem
         coefficients = coeff_l[f]
         constraints = con_l[f]
@@ -181,8 +263,6 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR):
         P_l = [np.zeros((0, cums[-1]))]
                 
         for con in constraints:
-            
-            
             P = np.zeros((1, cums[-1]))
             #get the indices of the diagonal blocks in X corresponding to the coefficients in this constraint
             ind1 = sub_map[(con.c1.sub, con.c1.c)]
@@ -196,6 +276,17 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR):
             P_l.append(P)
         #set up ridge constraint. TODO: implement priors
         I = np.eye((cums[-1])) * lambdaR
+        coefficients_set = set(coefficients)
+        #now we go through the ridge constraints and set entries of I
+        for con in ridge_constraints:
+            coeff = con.c1
+            if coeff in coefficients_set:
+                ind1 = sub_map[(con.c1.sub, con.c1.c)]
+                pc1 = cums[ind1] + con.c1.r
+                I[pc1, pc1] = con.lam
+        
+
+
         #now add an appropriate number of zeros to Y_l
         Y_l.append(np.zeros((cums[-1] + len(constraints), 1)))
         
@@ -269,13 +360,62 @@ def direct_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, it):
     return Bs
 
 
+#TODO: test this
+def factor_constraints_columns(Xs, Ys, constraints):
+    columns = []
+    for sub in range(len(Xs)):
+        for c in range(Ys[sub].shape[1]):
+            columns.append((sub, c))
+            
+    constraints_c = set()
+    for con in constraints:
+        con_c.add(constraint(coefficient(con.c1.sub, None, con.c1.c), coefficient(con.c2.sub, None, con.c2.c), None))
+    
+    columns_s = set(columns)
+    def factor_helper(col_fr, col_l):
+        for col_to in columns_s:
+            if constraint(coefficient(col_fr[0], None, col_fr[1]), coefficient(col_to[1], None, col_to[1]), None) in constraints_c:
+                col_l.append(col_to)
+                columns_s.remove(col_to)
+                factor_helper(col_to, col_l)
+    col_subls = []
+    while len(columns_s):
 
+        col_fr = columns_s.pop()
+        print 'factoring starting with '+str(col_fr)
+        print str(len(columns_s)) + ' left'
+
+        col_l = [col_fr]
+        factor_helper(col_fr, col_l)
+        col_subls.append(col_l)
+    
+    coeffs_l = []
+    cons_l = []
+    for col_subl in col_subls:
+        #now we need to get all the coefficients that really go here
+        coeffs = []
+        cons = []
+        for col in col_subl:
+            (sub, c) = col
+            for r in range(Xs[sub].shape[1]):
+                coeffs.append(coefficient(sub, r, c))
+            for con in constraints:
+                
+                if (con.c1.sub == sub and con.c1.c == c) or (con.c1.sub == sub and con.c1.c == c):
+                    cons.append(con)
+        coeffs_l.append(coeffs)
+        cons_l.append(cons)
+    
+    return (coeffs_l, cons_l)
 #factors the constraints!
+#this is a bit slower than it really needs to be because it isn't really working based on columns
+
 def factor_constraints(Xs, Ys, constraints):
     cset = set() 
     cmap = dict()
     #enumerate the coefficients
     for sub in range(len(Xs)):
+        
         for r in range(Xs[sub].shape[1]):
             for c in range(Ys[sub].shape[1]):
                 coeff = coefficient(sub, r, c)
@@ -317,6 +457,8 @@ def factor_constraints(Xs, Ys, constraints):
     con_l = []
     while len(cset):
         coeff = cset.pop()
+        print 'factoring starting with '+str(coeff)
+        print str(len(cset)) + ' left'
         coeff_l.append([coeff])
         con_l.append([])
         factor_constraints_helper(cset, con_l[-1], coeff_l[-1])
