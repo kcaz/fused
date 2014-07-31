@@ -307,6 +307,41 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR):
         
     return Bs
         
+#from matplotlib import pyplot as plt
+def prediction_error(X, B, Y, metric):
+    Ypred = np.dot(X, B)
+    
+    
+    #plt.plot(yp[1:200])
+    #plt.hold(True)
+    #plt.plot(y[1:200])
+    #plt.show()
+    if metric == 'R2':
+        r2a = 0.0
+        for c in range(Ypred.shape[1]):
+            y = Y[:, c]
+            yp = Ypred[:, c]
+            r2 = 1 - ((y-yp)**2).sum()/ (y**2).sum()
+            r2a += r2
+            
+        return r2a/Ypred.shape[1]
+    if metric == 'mse':
+        msea = 0.0
+        for c in range(Ypred.shape[1]):
+            y = Y[:, c]
+            yp = Ypred[:, c]
+            mse = ((y-yp)**2).mean()
+            msea += mse
+
+        return msea / Ypred.shape[1]
+    if metric == 'corr':
+        corra = 0.0
+        for c in range(Ypred.shape[1]):
+            y = Y[:, c]
+            yp = Ypred[:, c]
+            corr = np.corrcoef(y, yp)[0,1]
+            corra += corr
+        return corra / Ypred.shape[1]
         
 
 #no cleverness at all
@@ -342,8 +377,6 @@ def direct_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, it):
     F = np.vstack(xpad_l)
     p = np.vstack(ypad_l)
     
-
-
     (b, resid, rank, sing) = np.linalg.lstsq(F, p)    
 
     B = np.reshape(b, (ncolsX, ncols),order='F')
@@ -407,9 +440,9 @@ def factor_constraints_columns(Xs, Ys, constraints):
         cons_l.append(cons)
     
     return (coeffs_l, cons_l)
+
 #factors the constraints!
 #this is a bit slower than it really needs to be because it isn't really working based on columns
-
 def factor_constraints(Xs, Ys, constraints):
     cset = set() 
     cmap = dict()
