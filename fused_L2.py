@@ -307,23 +307,26 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR):
         
     return Bs
         
-#from matplotlib import pyplot as plt
+from matplotlib import pyplot as plt
 def prediction_error(X, B, Y, metric):
     Ypred = np.dot(X, B)
-    
-    
-    #plt.plot(yp[1:200])
-    #plt.hold(True)
-    #plt.plot(y[1:200])
-    #plt.show()
+    y = Y[:,0]
+    yp = Ypred[:,0]
+
     if metric == 'R2':
         r2a = 0.0
         for c in range(Ypred.shape[1]):
             y = Y[:, c]
             yp = Ypred[:, c]
-            r2 = 1 - ((y-yp)**2).sum()/ (y**2).sum()
+            r2 = 1 - ((y-yp)**2).sum()/ ((y-y.mean())**2).sum()
             r2a += r2
+            #if r2 < 0:
+            #plt.plot(yp)
+            #plt.hold(True)
+            #plt.plot(y)
+            #plt.show()
             
+            #print r2
         return r2a/Ypred.shape[1]
     if metric == 'mse':
         msea = 0.0
