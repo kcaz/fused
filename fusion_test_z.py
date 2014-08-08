@@ -2,7 +2,7 @@ import numpy as np
 import itertools
 import random
 import fused_L2 as fr
-fr.metric = 'mse'
+fr.metric = 'R2'
 
 #b_sparse is max num of nonzero entries in each col 
 #returns b
@@ -222,9 +222,17 @@ def messwpriors(b, falsepos, falseneg):
 def pred_err_grps(B, X_lo, Y_lo):
     errs = np.zeros(Y_lo.shape[1])
     predY = np.array(np.dot(X_lo, B))
+    from matplotlib import pyplot as plt
     for c in range(Y_lo.shape[1]):
-        err = np.mean((predY[:, c] - Y_lo[:,c])**2)
-        errs[c] = err    
+        #plt.plot(Y_lo[:, c])
+        #plt.plot(predY[:, c])
+        #plt.show()
+        mse = ((Y_lo[:, c] - predY[:, c])**2).sum()
+        var = ((Y_lo[:, c] - Y_lo[:, c].mean())**2).sum()
+        r2 = 1 - mse/var
+
+#err = np.mean((predY[:, c] - Y_lo[:,c])**2)
+        errs[c] = r2    
     return errs.mean()
 
 
