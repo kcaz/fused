@@ -1,15 +1,55 @@
 import numpy as np
 import fused_L2 as fl
-
+import random
 iron_conds = 24
 timeseries_conds = 51
 subtilis_conds = 359
+
+def write_bs(genes, tfs, B, outf):
+    Bs_str_l = []
+    Bs_str_l.append('\t'.join(tfs))
+    for gi in range(len(genes)):
+        gene = genes[gi]
+        regulators = B[:, gi]
+        
+        Bs_str_l.append(gene +'\t'+ '\t'.join(map(str, regulators)))
+    f = file(outf, 'w')
+    f.write('\n'.join(Bs_str_l))
+    f.close()
+
+def run_both(lamP, lamR, lamS, outf, sub_s, sub_i, sub_t):
+    (bs_e, bs_t , bs_genes, bs_tfs) = load_B_subtilis(sub_s)
+    (BS_priors, sign) = load_priors('gsSDnamesWithActivitySign082213','B_subtilis')
+    (ba_e, ba_t, ba_genes, ba_tfs) = load_B_anthracis(sub_i, sub_t)
+    (BA_priors, sign) = ([], [])
+
+    Xs = [bs_t, ba_t]
+    Ys = [bs_e, ba_e]
+    priors = BS_priors + BA_priors
+    
+    orth = load_orth('bs_ba_ortho_804',['B_anthracis','B_subtilis'])
+    #orth = load_orth('',['B_subtilis'])
+    organisms = ['B_subtilis','B_anthracis']
+    #ortht = random_orth(bs_tfs, ba_tfs, organisms, 250)
+    #orthg = random_orth(bs_genes, ba_genes, organisms, 2500)
+    #orth = ortht+orthg
+    #print orth
+    #return
+    gene_ls = [bs_genes, ba_genes]
+    tf_ls = [bs_tfs, ba_tfs]
+
+
+    Bs = fl.solve_ortho_direct(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS)
+    write_bs(bs_genes, bs_tfs, Bs[0], outf+'_subtilis')
+    write_bs(ba_genes, ba_tfs, Bs[1], outf+'_anthracis')
+    
+
 
 def run_scr(lamP, lamR, lamS, outf, sub):
     #(ba,tf, genes, tfs) = load_bacteria('B_subtilis.csv','tfNames.txt',range(250))
     (ba,tf, genes, tfs) = load_B_subtilis(sub)
     (BC_priors, sign) = load_priors('gsSDnamesWithActivitySign082213','B_subtilis')
-    orth = load_orth('',['B_subtilis'])
+    orth = []#load_orth('',['B_subtilis'])
 
     print ba.shape
     organisms = ['B_subtilis']
@@ -32,12 +72,12 @@ def run_scr(lamP, lamR, lamS, outf, sub):
     f.write('\n'.join(Bs_str_l))
     f.close()
 
-def run_scr2(lamP, lamR, lamS, outf, sub1, sub2):
+def run_scr2(lamP, lamR, lamS, outf, subi, subt):
     #(ba,tf, genes, tfs) = load_bacteria('B_subtilis.csv','tfNames.txt',range(250))
-    (ba,tf, genes, tfs) = load_B_anthracis(sub1, sub2)
+    (ba,tf, genes, tfs) = load_B_anthracis(subi, subt)
     (BC_priors, sign) = ([], [])
     #(BC_priors, sign) = load_priors('gsSDnamesWithActivitySign082213','B_subtilis')
-    orth = load_orth('',['B_subtilis'])
+    orth = []
 
     print ba.shape
     organisms = ['B_subtilis']
@@ -71,9 +111,29 @@ def load_priors(priors_fn, organism):
     p.close()
     return (priors,signs)
 
+
+#returns a list of random 2 element ortho groups for testing purposes
+def random_orth(genes1, genes2, organisms, n_orth):
+    orths = []
+    for i in range(n_orth):
+        g1 = genes1[int(np.floor(random.random() * len(genes1)))]
+        g2 = genes2[int(np.floor(random.random() * len(genes2)))]
+        orth_group = [fl.one_gene(g1, organisms[0]), fl.one_gene(g2, organisms[1])]
+        orths.append(orth_group)
+    return orths
+        
 #TODO pending seeing the orth file format
-def load_orth(orth_fns, organisms):
-    return []
+def load_orth(orth_fn, organisms):
+    f = file(orth_fn)
+    fs = f.read()
+    fsn = filter(len, fs.split('\n'))
+    fsnt = map(lambda x: x.split('\t'), fsn)
+    #print fsn
+    orths = []
+    for o in fsnt:
+        #print o
+        orths.append([fl.one_gene(name=o[0],organism=organisms[0]), fl.one_gene(name=o[1], organism=organisms[1])])
+    return orths
 
 def load_network(net_fn):
     f = file(net_fn)
@@ -157,10 +217,10 @@ def join_expr_data(names1, names2, exp_a1, exp_a2):
 
 
 #quantile normalizes conditions AND scales to mean zero/unit variance
+#AND DOES NOT divides expression matrices by the square root of the sample size
+#CHANGED! mean subtract after quantile normalizing
 def normalize(exp_a, mean_zero = False):
     
-    if mean_zero:
-        exp_a = exp_a - exp_a.mean(axis=0)
     
     canonical_dist = np.sort(exp_a, axis=1).mean(axis=0)
     #if mean_zero:
@@ -172,6 +232,9 @@ def normalize(exp_a, mean_zero = False):
     for r in range(exp_a.shape[0]):
         order = np.argsort(exp_a[r, :])
         exp_n_a[r, order] = canonical_dist
+    #exp_n_a / np.sqrt(exp_n_a.shape[0])
+    if mean_zero:
+        exp_n_a = exp_n_a - exp_n_a.mean(axis=0)
 
     return exp_n_a
 
@@ -181,6 +244,9 @@ def load_B_anthracis(sub_conds1 = [], sub_conds2 = []):
     (e2, t2, genes2, tfs2) = load_ba_timeseries(sub_conds2)
     (e, genes) = join_expr_data(genes1, genes2, e1, e2)
     (t, tfs) = join_expr_data(tfs1, tfs2, t1, t2)
+    #drop the _at from the name
+    genes = map(lambda x: x.replace('_at',''), genes)
+    tfs = map(lambda x: x.replace('_at',''), tfs)
     e = normalize(e, True)
     t = normalize(t, False)
 
@@ -329,5 +395,144 @@ def load_bacteria(expr_fn, tfs_fn, sub_conds=[]):
     exp_mat = exp_mat[sub_conds, :]
     
     return (exp_mat, tf_mat[sub_conds, :], genes, tfs)
+
+
+def order_corr_mat(cmat, init):
+
+    cols = set(range(cmat.shape[1]))
+    curr = init
+    cols.remove(init)
+    order = [init, ]
+
+    while len(cols):
+        best_c = 0
+        best_val = np.inf
+        for c in cols:
+            nrm = np.linalg.norm(cmat[:, c] - cmat[:,curr]) 
+            if nrm < best_val:
+                best_c = c
+                best_val = nrm
+        order.append(best_c)
+        cols.remove(best_c)
+        curr = best_c
+        
+    return order
+
+#no args!
+def betas_fused_visualize(net_s, net_a, orth):
+    from matplotlib import pyplot as plt
+    (ns, gs, ts) = load_network(net_s)
+    (na, ga, ta) = load_network(net_a)
+    #we want to enumerate the constraints, fused_L2 can do that
+    constraints = fl.orth_to_constraints(['B_subtilis','B_anthracis'], [gs, ga], [ts, ta], orth, 0)
+
+    coeffs_s = []
+    coeffs_a = []
+    for con in constraints:
+        
+        if con.c1.sub == 1:
+            continue
+        beta_s = ns[con.c1.r, con.c1.c]
+        beta_a = na[con.c2.r, con.c2.c]
+        coeffs_s.append(beta_s)
+        coeffs_a.append(beta_a)
+    print np.corrcoef(coeffs_s, coeffs_a)
+    plt.scatter(coeffs_s, coeffs_a)
+    plt.xlabel('B subtilis')
+    plt.ylabel('B anthracis')
+    
+    plt.show()
+
+def corr_visualize(genes1, genes2, exp1, exp2, organisms, orth):
+    from matplotlib import pyplot as plt
+    def ind_rc(m, inds):
+        return m[:, inds][inds, :]
+
+    orth12 = dict()
+    orth21 = dict()
+    for ogroup in orth:
+        
+        org1 = filter(lambda x: x.organism == organisms[0], ogroup)
+        org2 = filter(lambda x: x.organism == organisms[1], ogroup)
+        
+#take only the first pair in each orthology group
+        if len(org1) and len(org2):
+            orth12[org1[0].name] = org2[0].name
+            orth21[org2[0].name] = org1[0].name
+
+
+    
+    genes1o = filter(lambda x: x in orth12, genes1)
+    genes2o = filter(lambda x: x in orth21, genes2)
+    
+    genes1o_s = set(genes1o)
+    genes2o_s = set(genes2o)
+    genes1o = filter(lambda x: orth12[x] in genes2o_s, genes1o)
+    genes2o = filter(lambda x: orth21[x] in genes1o_s, genes2o)
+    genes1o_s = set(genes1o)
+    genes2o_s = set(genes2o)
+
+
+    #print len(genes1o)
+    #print len(genes2o)
+    
+    gi1 = {genes1o[x]:x for x in range(len(genes1o))}
+    gi2 = {genes2o[x]:x for x in range(len(genes2o))}
+    
+    
+    org2_order = np.array(map(lambda x: gi1[orth21[x]], genes2o))
+    
+    
+    in_orth1 = np.array(map(lambda x: x in genes1o_s, genes1))
+    in_orth2 = np.array(map(lambda x: x in genes2o_s, genes2))
+    
+    exp1 = exp1[:, in_orth1]
+    exp2 = exp2[:, in_orth2]
+    #exp2 = exp2[:, org2_order]
+    #return (genes1o, genes2o, org2_order, orth21)
+    #print org2_order
+
+    #plt.matshow(exp1)
+    #plt.show()
+    cmat1 = np.corrcoef(exp1, rowvar=False)
+    cmat2 = np.corrcoef(exp2, rowvar=False)
+
+    
+    cmat2 = ind_rc(cmat2, org2_order)
+    
+#cmat1 = ind_rc(cmat1, org2_order)
+    
+
+    nice_order = order_corr_mat(cmat1,int(cmat1.shape[1]*random.random()))
+    #nice_order = org2_order
+    cmat1 = ind_rc(cmat1, nice_order)
+   # 
+    cmat2 = ind_rc(cmat2, nice_order)
+    #plt.subplot(121)
+    plt.matshow(cmat1)
+    #plt.subplot(122)
+    
+    plt.matshow(cmat2)
+    plt.show()
+
+    
+    cflat1 = cmat1.ravel().copy()
+    cflat2 = cmat2.ravel().copy()
+    #print sum(in_orth1)
+    #print sum(in_orth2)
+    #print cmat1.shape
+    #print cmat2.shape
+    #print np.corrcoef(cflat1, cflat2)
+    #print exp1.shape
+    #print exp2.shape
+    random.shuffle(cflat1)
+    random.shuffle(cflat2)
+    plt.scatter(cflat1[0:1000], cflat2[0:1000])
+    plt.xlabel('B subtilis correlation')
+    plt.ylabel('B anthracis correlation')
+    plt.show()
+    
+    return (cmat1, cmat2)
+
 
 f = lambda x: run_scr(0.001,5,0,'wat4.tsv')
