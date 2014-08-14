@@ -1,6 +1,7 @@
 import numpy as np
 import fused_L2 as fl
 import random
+from sklearn.metrics import roc_curve, auc
 iron_conds = 24
 timeseries_conds = 51
 subtilis_conds = 359
@@ -101,6 +102,10 @@ def run_scr2(lamP, lamR, lamS, outf, subi, subt):
     f.close()
 
 
+
+#this returns pairs of genes, not coefficients, along with interaction valences
+
+#that's weird, but was done so decouple loading priors from needing to know the tfs
 def load_priors(priors_fn, organism):    
     p = file(priors_fn)
     ps = p.read()
@@ -156,6 +161,7 @@ def eval_prediction(net_fn, e, t, genes, tfs, metric):
     print net.shape
     err = fl.prediction_error(t, net, e, metric)
     return err
+
 #looks at a network and returns an array of interaction weights for all priors in the network, along with an array containing the sign of the prior (+1, -1)
 def check_prior_recovery(net_fn, priors_fn):
     (net, genes, tfs) = load_network(net_fn)
@@ -239,9 +245,10 @@ def normalize(exp_a, mean_zero = False):
     return exp_n_a
 
 #sub_conds is a bit weird here
-def load_B_anthracis(sub_conds1 = [], sub_conds2 = []):
-    (e1, t1, genes1, tfs1) = load_ba_iron(sub_conds1)
-    (e2, t2, genes2, tfs2) = load_ba_timeseries(sub_conds2)
+def load_B_anthracis(subi = [], subt = []):
+    (e1, t1, genes1, tfs1) = load_ba_iron()
+    (e2, t2, genes2, tfs2) = load_ba_timeseries()
+    
     (e, genes) = join_expr_data(genes1, genes2, e1, e2)
     (t, tfs) = join_expr_data(tfs1, tfs2, t1, t2)
     #drop the _at from the name
@@ -249,7 +256,19 @@ def load_B_anthracis(sub_conds1 = [], sub_conds2 = []):
     tfs = map(lambda x: x.replace('_at',''), tfs)
     e = normalize(e, True)
     t = normalize(t, False)
-
+    #if empty, use everything
+    if not len(subi):
+        subi = range(e1.shape[0])
+    if not len(subt):
+        subt = range(e2.shape[0])
+    subi = np.array(subi)
+    subt = e1.shape[0] + np.array(subt)
+    
+    
+    
+    e = e[np.concatenate((subi, subt)), :]
+    
+    t = t[np.concatenate((subi, subt)), :]
     #(t, tfs) = join_expr_data(tfs1, tfs2, t1, t2)
     return (e, t, genes, tfs)
 #this is a NAIVE loader.
@@ -347,10 +366,15 @@ def load_ba_iron(sub_conds = []):
 #this is a NAIVE loader.
 #does not consider time series relationships
 #returns (gene expr, tf expr, genes, tfs)
+#changed to normalize after subsetting conditions
 def load_B_subtilis(sub_conds=[]):
-    (e, t, genes, tfs) =  load_bacteria('B_subtilis.csv', 'tfNames_subtilis.txt',sub_conds)
+    (e, t, genes, tfs) =  load_bacteria('B_subtilis.csv', 'tfNames_subtilis.txt',[])
     e = normalize(e, True)
     t = normalize(t, False)
+    sub_conds = np.array(sub_conds)
+    if len(sub_conds):
+        e = e[sub_conds,:]
+        t = t[sub_conds,:]
     return (e, t, genes, tfs)
 #genes are mean 0
 #not as general as I had hoped!
@@ -534,5 +558,31 @@ def corr_visualize(genes1, genes2, exp1, exp2, organisms, orth):
     
     return (cmat1, cmat2)
 
-
+def eval_network_roc(net, genes, tfs, priors):
+    from matplotlib import pyplot as plt
+    org = priors[0][0].organism
+    priors_set = set(priors)
+    scores = np.zeros(len(genes)*len(tfs))
+    labels = np.zeros(len(genes)*len(tfs))
+    i=0
+    for tfi in range(len(tfs)):
+        for gi in range(len(genes)):
+            tf = tfs[tfi]
+            g = genes[gi]
+            score = np.abs(net[tfi, gi])
+            label = 0
+            if (fl.one_gene(tf, org), fl.one_gene(g, org)) in priors_set:
+                label = 1
+            if (fl.one_gene(g, org), fl.one_gene(tf, org)) in priors_set:
+                label = 1
+            scores[i] = score
+            labels[i] = label
+            i += 1
+    (fpr, tpr, t) = roc_curve(labels, scores)
+    auroc = auc(fpr, tpr)
+    plt.plot(fpr, tpr)
+    plt.show()
+    print auroc
+    return (labels, scores)
+        
 f = lambda x: run_scr(0.001,5,0,'wat4.tsv')
