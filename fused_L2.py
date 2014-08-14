@@ -40,7 +40,77 @@ def priors_to_constraints(organisms, gene_ls, tf_ls, priors, lam):
         constr = constraint(coefficient(sub1, tfi, gi), None, lam)
         constraints.append(constr)
     return constraints
+
+def quad(a, b, c):
+    x1 = 0.5*(-b + (b**2 - 4*a*c)**0.5)/a
+    x2 = 0.5*(-b - (b**2 - 4*a*c)**0.5)/a
+    #print (x1, x2)
+    return (x1, x2)
+
+def adjust(lamR1, lamR2, lamS):
+        #this code is written strangely, to match the google doc
+    if lamS == 0:
+        return (lamR1, lamR2) #avoid numerical problems
+    lamR1 = float(lamR1)
+    lamR2 = float(lamR2)
+    lamS = float(lamS)#just in case
+    a = 1
+    b = lamS - lamR1
+    c = lamS
+    d = -lamR1*lamS
     
+    e = 1
+    f = lamS
+    g = lamS - lamR2
+    h = -lamR2*lamS
+    
+    qa1 = (g*a - e*c)
+    qb1 = (b*g + h*a - e*d - f*c)
+    qc1 = (h*b - f*d)
+    
+    qa2 = (f*a - e*b)
+    qb2 = (f*c + h*a - e*d - g*b)
+    qc2 = (h*c - g*d)
+    
+    lamRa1 = max(quad(qa1, qb1, qc1))
+    lamRa2 = max(quad(qa2, qb2, qc2))
+    
+    return (lamRa1, lamRa2)
+
+
+#for each fusion constraint, introduces a ridge constraint to compensate for over-regularization. Equalizes variance of priors in case of 1-1 fusion
+def adjust_ridge_fused(fuse_con, ridge_con, lamR):
+    #this dictionary maps a coefficient to the fusion constraint that it occurs in
+    ridge_con_dict = dict() 
+    for con in ridge_con:
+        ridge_con_dict[con.c1] = con
+    
+    #the set of ridge constraints that should continue to exist
+    ridge_con_s = set(ridge_con)
+
+        
+    new_cons = []
+    for con in fuse_con:
+        lam1 = lamR
+        lam2 = lamR
+        if con.c1 in ridge_con_dict and ridge_con_dict[con.c1] in ridge_con_s:
+            lam1 = ridge_con_dict[con.c1].lam
+            ridge_con_s.remove(ridge_con_dict[con.c1])
+            
+        if con.c2 in ridge_con_dict and ridge_con_dict[con.c2] in ridge_con_s:
+            lam2 = ridge_con_dict[con.c2].lam
+            ridge_con_s.remove(ridge_con_dict[con.c2])
+            
+        (lam1a, lam2a) = adjust(lam1, lam2, con.lam)
+    
+            
+            
+        ridge_con_s.add(constraint(con.c1, None, lam1a))
+        ridge_con_s.add(constraint(con.c2, None, lam2a))
+
+    return list(ridge_con_s)
+
+#enumerates constraints from orthology
 #args as in solve_ortho_direct
 def orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS):
     #build some maps
@@ -97,7 +167,11 @@ def orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS):
 def solve_ortho_direct(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS):
     ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
     fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
-    Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
+    
+    ridge_con = adjust_ridge_fused(fuse_con, ridge_con, lamR)
+    Bs = direct_solve_factor_support(Xs, Ys, fuse_con, ridge_con, lamR)
+    support = compute_support(Bs, 20)
+    Bs = direct_solve_factor_support(Xs, Ys, fuse_con, ridge_con, lamR, support)
     return Bs
 
 
@@ -327,6 +401,130 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR):
         
         
     return Bs
+
+#return a new support, consisting of the top k regressors for each col
+def compute_support(Bs, k):
+    Bs_k = []
+    for B in Bs:
+        Bi = np.argsort(np.abs(B), axis=0)
+        Bk = np.zeros(B.shape)
+        for c in range(Bk.shape[1]):
+
+            Bk[Bi[0:k, c], c] = B[Bi[0:k, c], c]
+        Bs_k.append(Bk)
+    return Bs_k
+
+#just like direct_solve_factor, but also takes a list of matrixes (same dims as B) specifying the support.
+def direct_solve_factor_support(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, support=None):
+    if support == None:
+        support = []
+        for i in range(len(Xs)):
+            support.append(np.ones((Xs[i].shape[1], Ys[i].shape[1])))
+    #first thing we do is remove unsupported fusion constraints
+    def constraint_supported(con):
+        supported = True
+        for co in (con.c1, con.c2):
+            supported = supported and support[co.sub][co.r, co.c]
+        return supported
+    fuse_constraints = filter(constraint_supported, fuse_constraints)
+
+
+    #(coeff_l, con_l) = factor_constraints(Xs, Ys, fuse_constraints)
+    (coeff_l, con_l) = factor_constraints_columns(Xs, Ys, fuse_constraints)
+    Bs = []
+        
+    #Initialize matrices to hold solutions
+    for i in range(len(Xs)):
+        Bs.append(np.zeros((Xs[i].shape[1], Ys[i].shape[1])))
+    
+    #iterate over constraint sets
+    for f in range(len(coeff_l)):
+        #print 'working on subproblem %d of %d'%(f,len(coeff_l))
+        #get the coefficients and constraints associated with the current problem
+        coefficients = coeff_l[f]
+        constraints = con_l[f]
+        
+        columns = set()
+
+        for co in coefficients:
+            columns.add(coefficient(co.sub, None, co.c))
+        columns = list(columns)
+        
+        num_subproblems = len(set(map(lambda co: co.sub, coefficients)))
+        
+        #we're building a canonical ordering over the columns for the current set of columns
+        counter = 0
+        sub_map = dict()
+        for co in columns:
+            sub = co.sub
+            if not (co.sub, co.c) in sub_map:
+                sub_map[(sub, co.c)] = counter
+                counter += 1
+                
+        #make X
+        X_l = []
+        for co in columns:
+            #get the support for the current subproblem/column of outp
+            col_support = support[co.sub][:, co.c]
+            Xc = Xs[co.sub] * col_support #multiplies columns by 0/1
+            X_l.append(Xc)
+        #make Y. 
+        Y_l = []
+        for co in columns:
+            Y = Ys[co.sub]
+            Y_l.append(Y[:, [co.c]])
+
+        #compute a cumulative sum over the number of columns in each sub-block, for use as offsets when computing coefficient indices for penalties
+
+        cums = [0]+list(np.cumsum(map(lambda x: x.shape[1], X_l)))
+        P_l = [np.zeros((0, cums[-1]))]
+                
+        for con in constraints:
+            P = np.zeros((1, cums[-1]))
+            #get the indices of the diagonal blocks in X corresponding to the coefficients in this constraint
+            ind1 = sub_map[(con.c1.sub, con.c1.c)]
+            ind2 = sub_map[(con.c2.sub, con.c2.c)]
+            #the locations corresponding to the coefficients we want to penalize are the start index of that block plus the row
+            pc1 = cums[ind1] + con.c1.r
+            pc2 = cums[ind2] + con.c2.r
+            P[0, pc1] = con.lam
+            P[0, pc2] = -con.lam
+            
+            P_l.append(P)
+        #set up ridge constraint. 
+        I = np.eye((cums[-1])) * lambdaR
+        coefficients_set = set(coefficients)
+        #now we go through the ridge constraints and set entries of I
+        for con in ridge_constraints:
+            coeff = con.c1
+            if coeff in coefficients_set:
+                ind1 = sub_map[(con.c1.sub, con.c1.c)]
+                pc1 = cums[ind1] + con.c1.r
+                I[pc1, pc1] = con.lam
+        
+
+
+        #now add an appropriate number of zeros to Y_l
+        Y_l.append(np.zeros((cums[-1] + len(constraints), 1)))
+        
+        P = np.vstack(P_l)
+        X = np.vstack((diag_concat(X_l), P, I))
+        y = np.vstack(Y_l)
+        
+        (b, resid, rank, sing) = np.linalg.lstsq(X, y)        
+        
+        #now we put it all together
+        for co_i in range(len(columns)):
+            co = columns[co_i]
+            start_ind = cums[co_i]
+            end_ind = cums[co_i+1]
+            
+            Bs[co.sub][:, [co.c]] = b[start_ind:end_ind]
+        
+        
+    return Bs
+
+
         
 from matplotlib import pyplot as plt
 def prediction_error(X, B, Y, metric):
