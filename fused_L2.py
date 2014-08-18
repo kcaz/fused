@@ -1,6 +1,7 @@
 import numpy as np
 import collections
 import time
+import scipy.sparse
 coefficient = collections.namedtuple('coefficient',['sub','r','c'])
 
 #c2 == None is a constant constraint
@@ -44,7 +45,7 @@ def priors_to_constraints(organisms, gene_ls, tf_ls, priors, lam):
 def quad(a, b, c):
     x1 = 0.5*(-b + (b**2 - 4*a*c)**0.5)/a
     x2 = 0.5*(-b - (b**2 - 4*a*c)**0.5)/a
-    #print (x1, x2)
+    
     return (x1, x2)
 
 def adjust(lamR1, lamR2, lamS):
@@ -140,9 +141,7 @@ def orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS):
                         sub1 = org_i
                         sub2 = org_to_ind[tf_orth.organism]
                         sub3 = org_to_ind[g_orth.organism]
-                        #print (tf, tf_orth)
-                        #print (g, g_orth)
-                        #print ''
+                        
                         if not sub2 == sub3:
                             continue
                         if not tf_orth.name in tf_to_inds[sub2]:
@@ -150,8 +149,7 @@ def orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS):
                                               
                         coeff1 = coefficient(sub1, tf_to_inds[sub1][tf.name], gene_to_inds[sub1][g.name])
                         coeff2 = coefficient(sub2, tf_to_inds[sub2][tf_orth.name], gene_to_inds[sub2][g_orth.name])
-                        #print 'making'
-                        #print (coeff1, coeff2)
+                        
 
                         constr = constraint(coeff1, coeff2, lamS)
                         constraints.append(constr)
@@ -167,15 +165,81 @@ def orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS):
 def solve_ortho_direct(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS):
     ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
     fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
-    
     ridge_con = adjust_ridge_fused(fuse_con, ridge_con, lamR)
     Bs = direct_solve_factor_support(Xs, Ys, fuse_con, ridge_con, lamR)
-    support = compute_support(Bs, 20)
-    Bs = direct_solve_factor_support(Xs, Ys, fuse_con, ridge_con, lamR, support)
+    
+    
+    return Bs
+
+def solve_ortho_direct_refit(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS, it, k):
+    ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
+    print 'got ridge constraints'
+    fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
+    print 'got fusion constraints'
+    ridge_con = adjust_ridge_fused(fuse_con, ridge_con, lamR)
+    print 'adjusted constraints'
+    Bs = direct_solve_factor_support(Xs, Ys, fuse_con, ridge_con, lamR)
+    print 'solved one'
+    
+    for i in range(1, it):
+        #n = round(2**(it - i - 1) * float(k))
+        
+        #print n
+        support = compute_support(Bs, i, it-1, k)
+        print 'computed new support'
+        Bs = direct_solve_factor_support(Xs, Ys, fuse_con, ridge_con, lamR, support)
+        print 'solved another'
     return Bs
 
 
+def solve_ortho_scad_refit(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS, it, k, s_it):
+    ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
+    print 'got ridge constraints'
+    fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
+    print 'got fusion constraints'
+    ridge_con = adjust_ridge_fused(fuse_con, ridge_con, lamR)
+    print 'adjusted constraints'
+    Bs = solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, support=None, it=s_it)
+    print 'solved one'
     
+    for i in range(1, it):
+        n = round(2**(it - i - 1) * float(k))
+        
+        print n
+        support = compute_support(Bs, i, it-1, k)
+        print 'computed new support'
+        Bs = solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, support, s_it)
+        print 'solved another'
+    return Bs
+
+    
+#iteratively adjusts fusion constraint weight to approximate saturating penalty
+def solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, support, it):
+    fuse_con2 = fuse_con    
+    a = 3.7 #!?
+    for i in range(it):
+        Bs = direct_solve_factor_support(Xs, Ys, fuse_con2, ridge_con, lamR, support)
+        fuse_con2 = scad(Bs, fuse_con, lamS, a)
+    return Bs
+
+#returns a new set of fusion constraints corresponding to a saturating penalty
+def scad(Bs_init, fuse_constraints, lamS, a):
+    new_fuse_constraints = []
+    for i in range(len(fuse_constraints)):
+        con = fuse_constraints[i]
+        b_init_1 = Bs_init[con.c1.sub][con.c1.r, con.c1.c]
+        b_init_2 = Bs_init[con.c2.sub][con.c2.r, con.c2.c]
+        theta_init = np.abs(b_init_1 - b_init_2)
+        olamS = con.lam
+        if theta_init <= lamS:
+            nlamS = lamS
+        else:
+            
+            nlamS = max(0, ((a*lamS - theta_init)/((a-1)*lamS)))/theta_init
+        new_con = constraint(con.c1, con.c2, nlamS)
+        new_fuse_constraints.append(new_con)
+    return new_fuse_constraints
+
 #solves the fused regression problem with constraints coming from groups
 #Xs: list of X matrices
 #Ys: lsit of Y matrices
@@ -320,7 +384,7 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR):
     
     #iterate over constraint sets
     for f in range(len(coeff_l)):
-        #print 'working on subproblem %d of %d'%(f,len(coeff_l))
+        
         #get the coefficients and constraints associated with the current problem
         coefficients = coeff_l[f]
         constraints = con_l[f]
@@ -403,10 +467,15 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR):
     return Bs
 
 #return a new support, consisting of the top k regressors for each col
-def compute_support(Bs, k):
+def compute_support(Bs, i, it, n):
     Bs_k = []
     for B in Bs:
-        Bi = np.argsort(np.abs(B), axis=0)
+        #Bs.shape[0] * p**it = n
+        #(k/Bs.shape[0])**(1/it) = p
+        p = (float(n)/B.shape[0])**(1.0/it)
+        k = (p**i) * B.shape[0]
+        print k
+        Bi = np.argsort(-np.abs(B), axis=0)
         Bk = np.zeros(B.shape)
         for c in range(Bk.shape[1]):
 
@@ -439,7 +508,8 @@ def direct_solve_factor_support(Xs, Ys, fuse_constraints, ridge_constraints, lam
     
     #iterate over constraint sets
     for f in range(len(coeff_l)):
-        #print 'working on subproblem %d of %d'%(f,len(coeff_l))
+        
+        print('\r working on subproblem: %d'%f), #!?!?!?!
         #get the coefficients and constraints associated with the current problem
         coefficients = coeff_l[f]
         constraints = con_l[f]
@@ -510,8 +580,12 @@ def direct_solve_factor_support(Xs, Ys, fuse_constraints, ridge_constraints, lam
         P = np.vstack(P_l)
         X = np.vstack((diag_concat(X_l), P, I))
         y = np.vstack(Y_l)
+        t1 = time.time()
+        Xsp = scipy.sparse.csr_matrix(X)
         
-        (b, resid, rank, sing) = np.linalg.lstsq(X, y)        
+        ysp = scipy.sparse.csr_matrix(y)
+        bsp = scipy.sparse.linalg.lsqr(Xsp, y)#returns many things!
+        b = bsp[0][:, None] #god this is annoying
         
         #now we put it all together
         for co_i in range(len(columns)):
@@ -539,13 +613,7 @@ def prediction_error(X, B, Y, metric):
             yp = Ypred[:, c]
             r2 = 1 - ((y-yp)**2).sum()/ ((y-y.mean())**2).sum()
             r2a += r2
-            #if r2 < 0:
-            #plt.plot(yp)
-            #plt.hold(True)
-            #plt.plot(y)
-            #plt.show()
             
-            #print r2
         return r2a/Ypred.shape[1]
     if metric == 'mse':
         msea = 0.0
@@ -627,7 +695,7 @@ def factor_constraints_columns(Xs, Ys, constraints):
         constraints_c.add(constraint(coefficient(con.c1.sub, None, con.c1.c), coefficient(con.c2.sub, None, con.c2.c), None))
         constraints_c.add(constraint( coefficient(con.c2.sub, None, con.c2.c), coefficient(con.c1.sub, None, con.c1.c), None))
 
-    #print constraints_c
+    
     not_visited = set(columns)
     
     def factor_helper(col_fr, col_l):
@@ -681,7 +749,7 @@ def factor_constraints_columns(Xs, Ys, constraints):
                         cons.append(con)
         coeffs_l.append(coeffs)
         cons_l.append(cons)
-    print 'done: %d subproblems, %d columns'%(len(coeffs_l), len(columns))
+    print '\ndone: %d subproblems, %d columns'%(len(coeffs_l), len(columns))
     return (coeffs_l, cons_l)
 
 #factors the constraints!
