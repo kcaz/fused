@@ -1,7 +1,7 @@
 import numpy as np
 import fused_L2 as fl
 import random
-from sklearn.metrics import roc_curve, auc
+from sklearn.metrics import roc_curve, auc, precision_recall_curve
 iron_conds = 24
 timeseries_conds = 51
 subtilis_conds = 359
@@ -44,6 +44,33 @@ def run_both(lamP, lamR, lamS, outf, sub_s, sub_i, sub_t):
     write_bs(bs_genes, bs_tfs, Bs[0], outf+'_subtilis')
     write_bs(ba_genes, ba_tfs, Bs[1], outf+'_anthracis')
     
+#with saturation
+def run_both_scad(lamP, lamR, lamS, outf, sub_s, sub_i, sub_t, it,k, it_s):
+    (bs_e, bs_t , bs_genes, bs_tfs) = load_B_subtilis(sub_s)
+    (BS_priors, sign) = load_priors('gsSDnamesWithActivitySign082213','B_subtilis')
+    (ba_e, ba_t, ba_genes, ba_tfs) = load_B_anthracis(sub_i, sub_t)
+    (BA_priors, sign) = ([], [])
+
+    Xs = [bs_t, ba_t]
+    Ys = [bs_e, ba_e]
+    priors = BS_priors + BA_priors
+    
+    orth = load_orth('bs_ba_ortho_804',['B_anthracis','B_subtilis'])
+    #orth = load_orth('',['B_subtilis'])
+    organisms = ['B_subtilis','B_anthracis']
+    #ortht = random_orth(bs_tfs, ba_tfs, organisms, 250)
+    #orthg = random_orth(bs_genes, ba_genes, organisms, 2500)
+    #orth = ortht+orthg
+    #print orth
+    #return
+    gene_ls = [bs_genes, ba_genes]
+    tf_ls = [bs_tfs, ba_tfs]
+
+
+    Bs = fl.solve_ortho_scad_refit(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS, it, k, it_s)
+    write_bs(bs_genes, bs_tfs, Bs[0], outf+'_subtilis')
+    write_bs(ba_genes, ba_tfs, Bs[1], outf+'_anthracis')
+
 
 
 def run_scr(lamP, lamR, lamS, outf, sub):
@@ -60,7 +87,8 @@ def run_scr(lamP, lamR, lamS, outf, sub):
     Ys = [ba]
     priors = BC_priors
     
-    Bs = fl.solve_ortho_direct(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS)
+    Bs = fl.solve_ortho_direct_refit(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS, 0, 100)
+    #Bs = fl.solve_ortho_direct(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS)
     Bs_str_l = []
 
     Bs_str_l.append('\t'.join(tfs))
@@ -557,6 +585,76 @@ def corr_visualize(genes1, genes2, exp1, exp2, organisms, orth):
     plt.show()
     
     return (cmat1, cmat2)
+
+#scores: R
+#labels: 0/1
+def prc(scores, labels):
+    i_scores = np.argsort(-1*scores)
+    s_labels = np.array(labels)[i_scores]
+    cs = np.cumsum(s_labels)
+    true_positive = np.sum(labels)
+    precision = cs / np.arange(1, len(cs)+1)
+    
+    recall = cs / true_positive
+    
+    precision2 = []
+    recall2 = []
+    #prev = -np.inf
+    #for sci in range(1, len(scores[i_scores])):
+    #    if scores[i_scores[sci]] != prev:
+    #        precision2.append(precision[sci-1])
+    #        recall2.append(recall[sci-1])
+    #    prev = scores[i_scores[sci]]
+        
+    return (precision, recall)
+
+def eval_network_pr(net, genes, tfs, priors):
+    from matplotlib import pyplot as plt
+    org = priors[0][0].organism
+    priors_set = set(priors)
+    gene_to_ind = {genes[x] : x for x in range(len(genes))}
+    tf_to_ind = {tfs[x] : x for x in range(len(tfs))}
+    gene_marked = np.zeros(len(genes)) != 0
+    tf_marked = np.zeros(len(tfs)) != 0
+    for prior in priors:
+        gene_marked[gene_to_ind[prior[0].name]] = True
+        gene_marked[gene_to_ind[prior[1].name]] = True
+        if prior[0].name in tf_to_ind:
+            tf_marked[tf_to_ind[prior[0].name]] = True
+        if prior[1].name in tf_to_ind:
+            tf_marked[tf_to_ind[prior[1].name]] = True
+
+    genes = np.array(genes)[gene_marked]
+    tfs = np.array(tfs)[tf_marked]
+    net = net[:, gene_marked]
+    net = net[tf_marked, :]
+    scores = np.zeros(len(genes)*len(tfs))
+    labels = np.zeros(len(genes)*len(tfs))
+    i=0
+    for tfi in range(len(tfs)):
+        for gi in range(len(genes)):
+            tf = tfs[tfi]
+            g = genes[gi]
+            score = np.abs(net[tfi, gi])
+            label = 0
+            if (fl.one_gene(tf, org), fl.one_gene(g, org)) in priors_set:
+                label = 1
+            if (fl.one_gene(g, org), fl.one_gene(tf, org)) in priors_set:
+                label = 1
+            scores[i] = score
+            labels[i] = label
+            i += 1
+    (precision, recall,t) = precision_recall_curve(labels, scores)#prc(scores, labels)
+    aupr = auc(recall, precision)
+    print aupr
+    plt.plot(recall, precision)
+    #plt.xlabel('recall')
+    #plt.ylabel('precision')
+    #plt.title('B subtilis alone, no refitting')
+    #plt.show()
+    
+    return (labels, scores)
+
 
 def eval_network_roc(net, genes, tfs, priors):
     from matplotlib import pyplot as plt
