@@ -166,7 +166,7 @@ def solve_ortho_direct(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, la
     ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
     fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
     ridge_con = adjust_ridge_fused(fuse_con, ridge_con, lamR)
-    Bs = direct_solve_factor_support(Xs, Ys, fuse_con, ridge_con, lamR)
+    Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
     
     
     return Bs
@@ -381,10 +381,10 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR):
     #Initialize matrices to hold solutions
     for i in range(len(Xs)):
         Bs.append(np.zeros((Xs[i].shape[1], Ys[i].shape[1])))
-    
+    print 'starting solver'
     #iterate over constraint sets
     for f in range(len(coeff_l)):
-        
+        print('\r working on subproblem: %d'%f), #!?!?!?!
         #get the coefficients and constraints associated with the current problem
         coefficients = coeff_l[f]
         constraints = con_l[f]
@@ -453,7 +453,14 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR):
         X = np.vstack((diag_concat(X_l), P, I))
         y = np.vstack(Y_l)
         
-        (b, resid, rank, sing) = np.linalg.lstsq(X, y)        
+        Xsp = scipy.sparse.csr_matrix(X)
+        
+        ysp = scipy.sparse.csr_matrix(y)
+        bsp = scipy.sparse.linalg.lsqr(Xsp, y)#returns many things!
+        b = bsp[0][:, None] #god this is annoying
+
+
+        #(b, resid, rank, sing) = np.linalg.lstsq(X, y)        
         
         #now we put it all together
         for co_i in range(len(columns)):
