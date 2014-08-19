@@ -187,16 +187,17 @@ def test_scad():
                     
     ba.run_both_scad(lamP=1, lamR=2, lamS=0.1, outf='sub_scad_5.0', sub_s = sub_s, sub_i = [], sub_t = [], it=1, k=50, it_s=3)
     
-def bench_lam():
+def bench_lam(s, lamS):
     
     subtilis_conds = range(ba.subtilis_conds)
     random.shuffle(subtilis_conds)    
         
-    sub_s = subtilis_conds#[0:int(len(subtilis_conds)*0.05)]
+    sub_s = subtilis_conds[0:int(len(subtilis_conds)*0.025)]
                     
     
-    ba.run_both(lamP=1, lamR=2, lamS=0, outf='sub_def_s2_0', sub_s = sub_s, sub_i = [], sub_t = [])
-    ba.run_both(lamP=1, lamR=2, lamS=0.1, outf='sub_def_s2_5.0', sub_s = sub_s, sub_i = [], sub_t = [])
+    ba.run_both(lamP=1, lamR=2, lamS=0, outf=s+'ft_0', sub_s = sub_s, sub_i = [], sub_t = [])
+
+    ba.run_both(lamP=1, lamR=2, lamS=lamS, outf=s+'ft_s', sub_s = sub_s, sub_i = [], sub_t = [])
 
 
 def rescale_points_cov(c, points):
