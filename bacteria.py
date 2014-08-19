@@ -492,8 +492,11 @@ def betas_fused_visualize(net_s, net_a, orth):
     plt.scatter(coeffs_s, coeffs_a)
     plt.xlabel('B subtilis')
     plt.ylabel('B anthracis')
-    
     plt.show()
+    cs = np.array(coeffs_s)
+    ca = np.array(coeffs_a)
+    #plt.hist(np.abs(cs-ca)/(0.5*(np.abs(cs)+np.abs(ca))), bins=50)
+    #plt.show()
 
 def corr_visualize(genes1, genes2, exp1, exp2, organisms, orth):
     from matplotlib import pyplot as plt
