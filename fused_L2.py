@@ -1,7 +1,9 @@
 import numpy as np
+from numpy import linalg
 import collections
 import time
 import scipy.sparse
+import scipy.sparse.linalg
 coefficient = collections.namedtuple('coefficient',['sub','r','c'])
 
 #c2 == None is a constant constraint
@@ -166,9 +168,7 @@ def solve_ortho_direct(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, la
     ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
     fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
     ridge_con = adjust_ridge_fused(fuse_con, ridge_con, lamR)
-    Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
-    
-    
+    Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)    
     return Bs
 
 def solve_ortho_direct_refit(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS, it, k):
@@ -182,8 +182,7 @@ def solve_ortho_direct_refit(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, la
     print 'solved one'
     
     for i in range(1, it):
-        #n = round(2**(it - i - 1) * float(k))
-        
+        #n = round(2**(it - i - 1) * float(k))        
         #print n
         support = compute_support(Bs, i, it-1, k)
         print 'computed new support'
@@ -191,6 +190,25 @@ def solve_ortho_direct_refit(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, la
         print 'solved another'
     return Bs
 
+#same as above, but without orth_to_constraints. to be used for benchmarking, where orthology is between entries of Bs, not between genes/tfs
+def solve_ortho_direct_refit_bench(organisms, gene_ls, tf_ls, Xs, Ys, constraints, priors, lamP, lamR, lamS, it, k):
+    ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
+    print 'got ridge constraints'
+    fuse_con = constraints
+    print 'got fusion constraints'
+    ridge_con = adjust_ridge_fused(fuse_con, ridge_con, lamR)
+    print 'adjusted constraints'
+    Bs = direct_solve_factor_support(Xs, Ys, fuse_con, ridge_con, lamR)
+    print 'solved one'
+    #print Bs
+    for i in range(1, it):
+        support = compute_support(Bs, i, it-1, k)
+        print 'computed new support'
+        #print support
+        Bs = direct_solve_factor_support(Xs, Ys, fuse_con, ridge_con, lamR, support)
+        print 'solved another'
+        #print support[0]
+    return Bs
 
 def solve_ortho_scad_refit(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS, it, k, s_it):
     ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
@@ -235,7 +253,7 @@ def scad(Bs_init, fuse_constraints, lamS, a):
             nlamS = lamS
         else:
             
-            nlamS = max(0, ((a*lamS - theta_init)/((a-1)*lamS)))/theta_init
+            nlamS = lamS* (max(0, ((a*lamS - theta_init)/((a-1)*lamS)))/(2*theta_init))
         new_con = constraint(con.c1, con.c2, nlamS)
         new_fuse_constraints.append(new_con)
     return new_fuse_constraints
@@ -481,12 +499,11 @@ def compute_support(Bs, i, it, n):
         #(k/Bs.shape[0])**(1/it) = p
         p = (float(n)/B.shape[0])**(1.0/it)
         k = (p**i) * B.shape[0]
-        print k
         Bi = np.argsort(-np.abs(B), axis=0)
         Bk = np.zeros(B.shape)
         for c in range(Bk.shape[1]):
 
-            Bk[Bi[0:k, c], c] = B[Bi[0:k, c], c]
+            Bk[Bi[0:k, c], c] = 1
         Bs_k.append(Bk)
     return Bs_k
 

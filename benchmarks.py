@@ -49,7 +49,7 @@ def single_species_benchmarks():
 
 def multi_species_benchmarks():
     repeats = 2
-    lamPs = np.array([0])#np.logspace(0, 3, 10)
+    lamPs = np.array([1])#np.logspace(0, 3, 10)
     lamSs = np.logspace(0, 2, 5)
     lamRs = np.logspace(0, 2, 5)
     iron_conds = range(ba.iron_conds)
