@@ -316,6 +316,47 @@ def test_linearBs_refit(b1, b2, fusiongroups, xsamples1, xsamples2, noise_std1, 
     err2p = pred_err_grps(bs_solve[1], x2test, y2test)    
     return (bs_solve, err1, err2, err1p, err2p, support_score1, support_score2)
 
+#s_it is number of iterations for scad
+def test_scadBs_refit(b1, b2, fusiongroups, xsamples1, xsamples2, noise_std1, noise_std2, p_falsep, p_falseneg, lamP, lamR, lamS, it, k, s_it):
+    TFs = [map(lambda x: str(x)+'tfa', range(b1.shape[0])), map(lambda x: str(x)+'tfb', range(b2.shape[0]))]
+    Gs = [map(lambda x: str(x)+'ga', range(b1.shape[1])), map(lambda x: str(x)+'gb', range(b2.shape[1]))]
+    xdims1 = (xsamples1, b1.shape[0])
+    xdims2 = (xsamples2, b2.shape[0])
+    (x1, y1) = generate_from_linear(xdims1, b1, noise_std1)
+    (x2, y2) = generate_from_linear(xdims2, b2, noise_std2)
+    (x1test, y1test) = generate_from_linear(xdims1, b1, noise_std1)
+    (x2test, y2test) = generate_from_linear(xdims2, b2, noise_std2)
+    p1 = messwpriors(b1, p_falsep, p_falseneg)
+    p2 = messwpriors(b2, p_falsep, p_falseneg)
+    priorset = []
+    for i in range(len(p1)):
+        tf = fr.one_gene(TFs[0][p1[i][0]], 'a')
+        gene = fr.one_gene(Gs[0][p1[i][1]], 'a')
+        priorset.append((tf,gene))
+    for i in range(len(p2)):
+        tf = fr.one_gene(TFs[1][p2[i][0]], 'b')
+        gene = fr.one_gene(Gs[1][p2[i][1]], 'b')
+        priorset.append((tf,gene))
+    organisms = ['a','b']
+    constraints=[]
+    for i in range(len(fusiongroups)):
+        fg = fusiongroups[i]
+        for j in range(len(fg[0])):        
+            for m in range(len(fg[1])):
+                coeff1 = fr.coefficient(0,fg[0][j][0], fg[0][j][1])
+                coeff2 = fr.coefficient(1,fg[1][m][0], fg[1][m][1])
+                constr = fr.constraint(coeff1,coeff2, lamS)
+                constraints.append(constr)
+    bs_solve = fr.solve_ortho_scad_refit_bench(organisms, Gs, TFs, [x1, x2], [y1, y2], constraints, priorset, lamP, lamR, lamS, it, k, s_it)
+    err1 = B_err(bs_solve[0], b1)
+    err2 = B_err(bs_solve[1], b2)
+    support_score1 = check_support(bs_solve[0], b1)
+    support_score2 = check_support(bs_solve[1], b2)
+    err1p = pred_err_grps(bs_solve[0], x1test, y1test)
+    err2p = pred_err_grps(bs_solve[1], x2test, y2test)    
+    return (bs_solve, err1, err2, err1p, err2p, support_score1, support_score2)
+
+
 def benchmark(lamP, lamR, lamS, b1dim, b2dim, maxgroupsize, pct_fused, minfusestd, maxfusestd, xsamples1, xsamples2, noise1, noise2, p_falsep, p_falsen, sparse, it):
     watdict = dict()
     for R in lamR:
@@ -359,6 +400,28 @@ def benchthresh(lamP, lamR, lamS, b1dim, b2dim, maxgroupsize, pct_fused, minfuse
                     prederr1.append(err1p)
                     prederr2.append(err2p)
                 watdict[(P, R, S, threshit)] = (np.mean(wat), np.std(wat)/it**0.5, np.mean(sup1), np.mean(sup2), np.mean(err1p), np.mean(err2p))
+    return watdict
+
+#right now it is used twice for different purposes; can change
+def benchscad(lamP, lamR, lamS, b1dim, b2dim, maxgroupsize, pct_fused, minfusestd, maxfusestd, xsamples1, xsamples2, noise1, noise2, p_falsep, p_falsen, sparse, it, s_it, k):
+    watdict = dict()
+    for R in lamR:
+        for S in lamS:
+            for P in lamP:
+                wat = []
+                sup1 = [] 
+                sup2 = []
+                prederr1 = []
+                prederr2 = []               
+                for i in range(it):
+                    (b1f, b2f,o) = fuse_bs_orth(b1dim,b2dim, maxgroupsize, pct_fused, minfusestd, maxfusestd, sparse)
+                    (bs_solve, err1, err2, err1p, err2p, supp1, supp2) = test_scadBs_refit(b1f, b2f, o, xsamples1, xsamples2, noise1, noise2, p_falsep, p_falsen, P, R, S, it, k, s_it)
+                    wat.append(np.mean([err1.mean(), err2.mean()]))                 
+                    sup1.append(supp1)
+                    sup2.append(supp2) 
+                    prederr1.append(err1p)
+                    prederr2.append(err2p)
+                watdict[(P, R, S)] = (np.mean(wat), np.std(wat)/it**0.5, np.mean(sup1), np.mean(sup2), np.mean(err1p), np.mean(err2p))
     return watdict
 
 

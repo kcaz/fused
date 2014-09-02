@@ -83,6 +83,8 @@ def adjust(lamR1, lamR2, lamS):
 
 #for each fusion constraint, introduces a ridge constraint to compensate for over-regularization. Equalizes variance of priors in case of 1-1 fusion
 def adjust_ridge_fused(fuse_con, ridge_con, lamR):
+    #TEMPORARILY DOES NOTHING
+    return ridge_con
     #this dictionary maps a coefficient to the fusion constraint that it occurs in
     ridge_con_dict = dict() 
     for con in ridge_con:
@@ -104,7 +106,7 @@ def adjust_ridge_fused(fuse_con, ridge_con, lamR):
             lam2 = ridge_con_dict[con.c2].lam
             ridge_con_s.remove(ridge_con_dict[con.c2])
             
-        (lam1a, lam2a) = adjust(lam1, lam2, con.lam)
+
     
             
             
@@ -218,11 +220,27 @@ def solve_ortho_scad_refit(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP
     ridge_con = adjust_ridge_fused(fuse_con, ridge_con, lamR)
     print 'adjusted constraints'
     Bs = solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, support=None, it=s_it)
-    print 'solved one'
-    
+    print 'solved one'    
     for i in range(1, it):
-        n = round(2**(it - i - 1) * float(k))
-        
+        n = round(2**(it - i - 1) * float(k))        
+        print n
+        support = compute_support(Bs, i, it-1, k)
+        print 'computed new support'
+        Bs = solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, support, s_it)
+        print 'solved another'
+    return Bs
+
+def solve_ortho_scad_refit_bench(organisms, gene_ls, tf_ls, Xs, Ys, constraints, priors, lamP, lamR, lamS, it, k, s_it):
+    ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
+    print 'got ridge constraints'
+    fuse_con = constraints
+    print 'got fusion constraints'
+    ridge_con = adjust_ridge_fused(fuse_con, ridge_con, lamR)
+    print 'adjusted constraints'
+    Bs = solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, support=None, it=s_it)
+    print 'solved one'    
+    for i in range(1, it):
+        n = round(2**(it - i - 1) * float(k))        
         print n
         support = compute_support(Bs, i, it-1, k)
         print 'computed new support'

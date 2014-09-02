@@ -39,8 +39,32 @@ def run_both(lamP, lamR, lamS, outf, sub_s, sub_i, sub_t):
     gene_ls = [bs_genes, ba_genes]
     tf_ls = [bs_tfs, ba_tfs]
 
-
     Bs = fl.solve_ortho_direct(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS)
+    write_bs(bs_genes, bs_tfs, Bs[0], outf+'_subtilis')
+    write_bs(ba_genes, ba_tfs, Bs[1], outf+'_anthracis')
+
+def run_both_refit(lamP, lamR, lamS, outf, sub_s, sub_i, sub_t, it, k):
+    (bs_e, bs_t , bs_genes, bs_tfs) = load_B_subtilis(sub_s)
+    (BS_priors, sign) = load_priors('gsSDnamesWithActivitySign082213','B_subtilis')
+    (ba_e, ba_t, ba_genes, ba_tfs) = load_B_anthracis(sub_i, sub_t)
+    (BA_priors, sign) = ([], [])
+
+    Xs = [bs_t, ba_t]
+    Ys = [bs_e, ba_e]
+    priors = BS_priors + BA_priors
+    
+    orth = load_orth('bs_ba_ortho_804',['B_anthracis','B_subtilis'])
+    #orth = load_orth('',['B_subtilis'])
+    organisms = ['B_subtilis','B_anthracis']
+    #ortht = random_orth(bs_tfs, ba_tfs, organisms, 250)
+    #orthg = random_orth(bs_genes, ba_genes, organisms, 2500)
+    #orth = ortht+orthg
+    #print orth
+    #return
+    gene_ls = [bs_genes, ba_genes]
+    tf_ls = [bs_tfs, ba_tfs]
+
+    Bs = fl.solve_ortho_direct_refit(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS, it, k)
     write_bs(bs_genes, bs_tfs, Bs[0], outf+'_subtilis')
     write_bs(ba_genes, ba_tfs, Bs[1], outf+'_anthracis')
     
@@ -649,14 +673,14 @@ def eval_network_pr(net, genes, tfs, priors):
             i += 1
     (precision, recall,t) = precision_recall_curve(labels, scores)#prc(scores, labels)
     aupr = auc(recall, precision)
-    print aupr
-    plt.plot(recall, precision)
+    
+    #plt.plot(recall, precision)
     #plt.xlabel('recall')
     #plt.ylabel('precision')
     #plt.title('B subtilis alone, no refitting')
     #plt.show()
     
-    return (labels, scores)
+    return aupr
 
 
 def eval_network_roc(net, genes, tfs, priors):

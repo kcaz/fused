@@ -90,92 +90,63 @@ def multi_species_benchmarks():
                     
     outf.close()
 
-def multi_species_benchmarks2():
-    repeats = 2
-    lamPs = np.array([0])#np.logspace(0, 3, 10)
-    lamSs = [0]+list(np.logspace(-1.5, 1.5, 5))
+def multi_species_benchmarks2(solver):
+    repeats = 10
+    lamPs = np.array([1])#np.logspace(0, 3, 10)
+    lamSs = [0,10**-1.5]#+list(np.logspace(-1.5, 1.5, 3))
     lamRs = [3]#np.logspace(0, 2, 5)
     iron_conds = range(ba.iron_conds)
     timeseries_conds = range(ba.timeseries_conds)
     subtilis_conds = range(ba.subtilis_conds)
-    outf = file('benchmark_results/multi_species_bench3','w')
+    outf = file('benchmark_results/multi_species_bench4','w')
+    (BS_priors, sign) = ba.load_priors('gsSDnamesWithActivitySign082213','B_subtilis')
     for lamP in lamPs:
         for lamS in lamSs:
             for lamR in lamRs:
                 
                 acc_s = 0
                 acc_a = 0
+                aupr = 0
                 for rep in range(repeats):
                     random.shuffle(iron_conds)
                     random.shuffle(timeseries_conds)
                     random.shuffle(subtilis_conds)
 
-                    sub_s = subtilis_conds[0:int(len(subtilis_conds)/2)]
-                    sub_i = iron_conds[0:int(len(iron_conds)*0.25)]
-                    sub_t = timeseries_conds[0:int(len(timeseries_conds)*0.25)]
-                    
-                    ba.run_both(lamP=lamP, lamR=lamR, lamS=lamS, outf='tmp2', sub_s = sub_s, sub_i = sub_i, sub_t = sub_t)
-                    
-                    sub_st = subtilis_conds[int(len(subtilis_conds)*0.75):len(subtilis_conds)]
-                    sub_it = iron_conds[int(len(iron_conds)*0.75):len(iron_conds)]
-                    sub_tt = timeseries_conds[int(len(timeseries_conds)*0.75):len(timeseries_conds)]                    
+                    sub_s_i = int(len(subtilis_conds)/8)
+                    sub_i_i = int(len(iron_conds)*0.75)
+                    sub_t_i = int(len(timeseries_conds)*0.75)
+
+                    sub_s = subtilis_conds[0:sub_s_i]
+                    sub_i = iron_conds[0:sub_i_i]
+                    sub_t = timeseries_conds[0:sub_t_i]
+                    if solver=='run_both':
+                        ba.run_both(lamP=lamP, lamR=lamR, lamS=lamS, outf='tmp2', sub_s = sub_s, sub_i = sub_i, sub_t = sub_t)
+                    if solver=='run_both_refit':
+                        ba.run_both_refit(lamP=lamP, lamR=lamR, lamS=lamS, outf='tmp2', sub_s = sub_s, sub_i = sub_i, sub_t = sub_t, it=10,k=20)
+                    if solver=='scad':
+                        ba.run_both(lamP=lamP, lamR=lamR, lamS=lamS, outf='tmp2', sub_s=sub_s, sub_i=sub_i, sub_t=sub_t, it=10, k=20, it_s=10)
+
+                    sub_st = subtilis_conds[sub_s_i:]
+                    sub_it = iron_conds[sub_i_i:]
+                    sub_tt = timeseries_conds[sub_t_i:]                    
 
                     (bs_e, bs_t, bs_genes, bs_tfs) = ba.load_B_subtilis(sub_st)
                     (ba_e, ba_t, ba_genes, ba_tfs) = ba.load_B_anthracis(sub_it, sub_tt)
 
                     eval_s = ba.eval_prediction('tmp2_subtilis', bs_e, bs_t, bs_genes, bs_tfs,'R2')
                     eval_a = ba.eval_prediction('tmp2_anthracis', ba_e, ba_t, ba_genes, ba_tfs,'R2')
+
+                    (net, bs_genes, bs_tfs) = ba.load_network('tmp2_subtilis')
+                    aupr += ba.eval_network_pr(net, bs_genes, bs_tfs, BS_priors)
                     acc_s += eval_s
                     acc_a += eval_a
-                writestr = 'lamP=%f\tlamS=%f\tlamR=%f\tsubtilis=%f\tanthracis=%f\n' % (lamP, lamS, lamR, acc_s/repeats, acc_a/repeats)
+                writestr = 'lamP=%f\tlamS=%f\tlamR=%f\tsubtilis=%f\tanthracis=%f\taupr=%f\n' % (lamP, lamS, lamR, acc_s/repeats, acc_a/repeats, aupr/repeats)
                 outf.write(writestr)
                 print writestr
                     
     outf.close()
 
 
-def multi_species_benchmarks2():
-    repeats = 2
-    lamPs = np.array([0])#np.logspace(0, 3, 10)
-    lamSs = [0]+list(np.logspace(-1.5, 1.5, 5))
-    lamRs = [3]#np.logspace(0, 2, 5)
-    iron_conds = range(ba.iron_conds)
-    timeseries_conds = range(ba.timeseries_conds)
-    subtilis_conds = range(ba.subtilis_conds)
-    outf = file('benchmark_results/multi_species_bench3','w')
-    for lamP in lamPs:
-        for lamS in lamSs:
-            for lamR in lamRs:
-                
-                acc_s = 0
-                acc_a = 0
-                for rep in range(repeats):
-                    random.shuffle(iron_conds)
-                    random.shuffle(timeseries_conds)
-                    random.shuffle(subtilis_conds)
-
-                    sub_s = subtilis_conds[0:int(len(subtilis_conds)/2)]
-                    sub_i = iron_conds[0:int(len(iron_conds)*0.25)]
-                    sub_t = timeseries_conds[0:int(len(timeseries_conds)*0.25)]
-                    
-                    ba.run_both(lamP=lamP, lamR=lamR, lamS=lamS, outf='tmp2', sub_s = sub_s, sub_i = sub_i, sub_t = sub_t)
-                    
-                    sub_st = subtilis_conds[int(len(subtilis_conds)*0.75):len(subtilis_conds)]
-                    sub_it = iron_conds[int(len(iron_conds)*0.75):len(iron_conds)]
-                    sub_tt = timeseries_conds[int(len(timeseries_conds)*0.75):len(timeseries_conds)]                    
-
-                    (bs_e, bs_t, bs_genes, bs_tfs) = ba.load_B_subtilis(sub_st)
-                    (ba_e, ba_t, ba_genes, ba_tfs) = ba.load_B_anthracis(sub_it, sub_tt)
-
-                    eval_s = ba.eval_prediction('tmp2_subtilis', bs_e, bs_t, bs_genes, bs_tfs,'R2')
-                    eval_a = ba.eval_prediction('tmp2_anthracis', ba_e, ba_t, ba_genes, ba_tfs,'R2')
-                    acc_s += eval_s
-                    acc_a += eval_a
-                writestr = 'lamP=%f\tlamS=%f\tlamR=%f\tsubtilis=%f\tanthracis=%f\n' % (lamP, lamS, lamR, acc_s/repeats, acc_a/repeats)
-                outf.write(writestr)
-                print writestr
-                    
-    outf.close()
 
 
 
@@ -257,7 +228,7 @@ def draw_scad():
     fuse_constraint = fl.constraint(fl.coefficient(0, 0, 0), fl.coefficient(1, 0, 0), 1)
     fuse_constraints = [fuse_constraint]
     b2 = np.zeros((1,1))
-    b1 = np.zeros((1,1,))
+    b1 = np.zeros((1,1))
     penalties = []
     for b1val in b1vals:
         b1[0,0] = b1val
@@ -266,7 +237,7 @@ def draw_scad():
 
     pv = np.cumsum(penalties*b1vals)
     plt.plot(b1vals, pv - np.min(pv))
-    plt.ylim(0,12)
+    #plt.ylim(0,12)
     plt.xlabel('|B0 - B1|')
     plt.ylabel('saturating penalty')
     plt.figure()
