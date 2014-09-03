@@ -203,9 +203,7 @@ def solve_ortho_scad_refit(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP
     print 'solved one'
     
     for i in range(1, it):
-        n = round(2**(it - i - 1) * float(k))
-        
-        print n
+                
         support = compute_support(Bs, i, it-1, k)
         print 'computed new support'
         Bs = solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, support, s_it)
