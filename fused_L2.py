@@ -1,7 +1,10 @@
 import numpy as np
+from numpy import linalg
+import random
 import collections
 import time
 import scipy.sparse
+import scipy.sparse.linalg
 coefficient = collections.namedtuple('coefficient',['sub','r','c'])
 
 #c2 == None is a constant constraint
@@ -81,6 +84,8 @@ def adjust(lamR1, lamR2, lamS):
 
 #for each fusion constraint, introduces a ridge constraint to compensate for over-regularization. Equalizes variance of priors in case of 1-1 fusion
 def adjust_ridge_fused(fuse_con, ridge_con, lamR):
+    #TEMPORARILY DOES NOTHING
+    return ridge_con
     #this dictionary maps a coefficient to the fusion constraint that it occurs in
     ridge_con_dict = dict() 
     for con in ridge_con:
@@ -102,7 +107,7 @@ def adjust_ridge_fused(fuse_con, ridge_con, lamR):
             lam2 = ridge_con_dict[con.c2].lam
             ridge_con_s.remove(ridge_con_dict[con.c2])
             
-        (lam1a, lam2a) = adjust(lam1, lam2, con.lam)
+
     
             
             
@@ -166,9 +171,7 @@ def solve_ortho_direct(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, la
     ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
     fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
     ridge_con = adjust_ridge_fused(fuse_con, ridge_con, lamR)
-    Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
-    
-    
+    Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)    
     return Bs
 
 def solve_ortho_direct_refit(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS, it, k):
@@ -182,8 +185,7 @@ def solve_ortho_direct_refit(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, la
     print 'solved one'
     
     for i in range(1, it):
-        #n = round(2**(it - i - 1) * float(k))
-        
+        #n = round(2**(it - i - 1) * float(k))        
         #print n
         support = compute_support(Bs, i, it-1, k)
         print 'computed new support'
@@ -191,6 +193,25 @@ def solve_ortho_direct_refit(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, la
         print 'solved another'
     return Bs
 
+#same as above, but without orth_to_constraints. to be used for benchmarking, where orthology is between entries of Bs, not between genes/tfs
+def solve_ortho_direct_refit_bench(organisms, gene_ls, tf_ls, Xs, Ys, constraints, priors, lamP, lamR, lamS, it, k):
+    ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
+    print 'got ridge constraints'
+    fuse_con = constraints
+    print 'got fusion constraints'
+    ridge_con = adjust_ridge_fused(fuse_con, ridge_con, lamR)
+    print 'adjusted constraints'
+    Bs = direct_solve_factor_support(Xs, Ys, fuse_con, ridge_con, lamR)
+    print 'solved one'
+    #print Bs
+    for i in range(1, it):
+        support = compute_support(Bs, i, it-1, k)
+        print 'computed new support'
+        #print support
+        Bs = direct_solve_factor_support(Xs, Ys, fuse_con, ridge_con, lamR, support)
+        print 'solved another'
+        #print support[0]
+    return Bs
 
 def solve_ortho_scad_refit(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS, it, k, s_it):
     ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
@@ -200,21 +221,56 @@ def solve_ortho_scad_refit(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP
     ridge_con = adjust_ridge_fused(fuse_con, ridge_con, lamR)
     print 'adjusted constraints'
     Bs = solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, support=None, it=s_it)
-    print 'solved one'
-    
+    print 'solved one'    
     for i in range(1, it):
-                
+        n = round(2**(it - i - 1) * float(k))        
+        print n
         support = compute_support(Bs, i, it-1, k)
         print 'computed new support'
         Bs = solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, support, s_it)
         print 'solved another'
     return Bs
 
+def solve_ortho_scad_refit_bench(organisms, gene_ls, tf_ls, Xs, Ys, constraints, priors, lamP, lamR, lamS, it, k, s_it):
+    ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
+    print 'got ridge constraints'
+    fuse_con = constraints
+    print 'got fusion constraints'
+    ridge_con = adjust_ridge_fused(fuse_con, ridge_con, lamR)
+    print 'adjusted constraints'
+    Bs = solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, support=None, it=s_it)
+    print 'solved one'
+    plot_scad(Bs, fuse_con)
+
+    randconstraints = []
+    for i in range(1,10000):
+        r1 = random.randrange(1, Bs[0].shape[0]+1)
+        c1 = random.randrange(1, Bs[0].shape[1]+1)
+        r2 = random.randrange(1, Bs[1].shape[0]+1)
+        c2 = random.randrange(1, Bs[1].shape[1]+1)
+        randconstr = constraint(coefficient(1, r1, c1), coefficient(2, r2, c2), lamS)
+    randconstraints = scad(Bs, randconstraints, lamS, 3.7)
+    #plot_scad(Bs, randconstraints)
+    
+    for i in range(1, it):
+<<<<<<< HEAD
+                
+=======
+        n = round(2**(it - i - 1) * float(k))        
+        print n
+>>>>>>> 23b5934ffe69d00eea76eea6f12cf6371d795ca0
+        support = compute_support(Bs, i, it-1, k)
+        print 'computed new support'
+        Bs = solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, support, s_it)
+        print 'solved another'
+        plot_scad(Bs, fuse_con)
+    return Bs
+
     
 #iteratively adjusts fusion constraint weight to approximate saturating penalty
 def solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, support, it):
     fuse_con2 = fuse_con    
-    a = 3.7 #!?
+    a = 1.5 #3.7 #!?
     for i in range(it):
         Bs = direct_solve_factor_support(Xs, Ys, fuse_con2, ridge_con, lamR, support)
         fuse_con2 = scad(Bs, fuse_con, lamS, a)
@@ -233,10 +289,28 @@ def scad(Bs_init, fuse_constraints, lamS, a):
             nlamS = lamS
         else:
             
-            nlamS = max(0, ((a*lamS - theta_init)/((a-1)*lamS)))/theta_init
+            nlamS = lamS* (max(0, ((a*lamS - theta_init)/((a-1)*lamS)))/(2*theta_init))
         new_con = constraint(con.c1, con.c2, nlamS)
         new_fuse_constraints.append(new_con)
     return new_fuse_constraints
+
+def plot_scad(Bs, fuse_constraints):
+    from matplotlib import pyplot as plt
+    deltab = []
+    penalty = []
+    for i in range(len(fuse_constraints)):
+        con = fuse_constraints[i]
+        b_1 = Bs[con.c1.sub][con.c1.r, con.c1.c]
+        b_2 = Bs[con.c2.sub][con.c2.r, con.c2.c]
+        deltab.append(b_1-b_2)
+        penalty.append(con.lam * (b_1-b_2)**2)
+    plt.scatter(deltab, penalty)
+    plt.xlabel('delta B')
+    plt.ylabel('penalty')
+    plt.figure()
+
+    plt.hist(penalty, bins=30)
+    plt.show()
 
 #solves the fused regression problem with constraints coming from groups
 #Xs: list of X matrices
@@ -479,12 +553,11 @@ def compute_support(Bs, i, it, n):
         #(k/Bs.shape[0])**(1/it) = p
         p = (float(n)/B.shape[0])**(1.0/it)
         k = (p**i) * B.shape[0]
-        print k
         Bi = np.argsort(-np.abs(B), axis=0)
         Bk = np.zeros(B.shape)
         for c in range(Bk.shape[1]):
 
-            Bk[Bi[0:k, c], c] = B[Bi[0:k, c], c]
+            Bk[Bi[0:k, c], c] = 1
         Bs_k.append(Bk)
     return Bs_k
 
