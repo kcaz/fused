@@ -1,5 +1,6 @@
 import numpy as np
 from numpy import linalg
+import random
 import collections
 import time
 import scipy.sparse
@@ -238,7 +239,19 @@ def solve_ortho_scad_refit_bench(organisms, gene_ls, tf_ls, Xs, Ys, constraints,
     ridge_con = adjust_ridge_fused(fuse_con, ridge_con, lamR)
     print 'adjusted constraints'
     Bs = solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, support=None, it=s_it)
-    print 'solved one'    
+    print 'solved one'
+    plot_scad(Bs, fuse_con)
+
+    randconstraints = []
+    for i in range(1,10000):
+        r1 = random.randrange(1, Bs[0].shape[0]+1)
+        c1 = random.randrange(1, Bs[0].shape[1]+1)
+        r2 = random.randrange(1, Bs[1].shape[0]+1)
+        c2 = random.randrange(1, Bs[1].shape[1]+1)
+        randconstr = constraint(coefficient(1, r1, c1), coefficient(2, r2, c2), lamS)
+    randconstraints = scad(Bs, randconstraints, lamS, 3.7)
+    #plot_scad(Bs, randconstraints)
+    
     for i in range(1, it):
         n = round(2**(it - i - 1) * float(k))        
         print n
@@ -246,13 +259,14 @@ def solve_ortho_scad_refit_bench(organisms, gene_ls, tf_ls, Xs, Ys, constraints,
         print 'computed new support'
         Bs = solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, support, s_it)
         print 'solved another'
+        plot_scad(Bs, fuse_con)
     return Bs
 
     
 #iteratively adjusts fusion constraint weight to approximate saturating penalty
 def solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, support, it):
     fuse_con2 = fuse_con    
-    a = 3.7 #!?
+    a = 1.5 #3.7 #!?
     for i in range(it):
         Bs = direct_solve_factor_support(Xs, Ys, fuse_con2, ridge_con, lamR, support)
         fuse_con2 = scad(Bs, fuse_con, lamS, a)
@@ -275,6 +289,24 @@ def scad(Bs_init, fuse_constraints, lamS, a):
         new_con = constraint(con.c1, con.c2, nlamS)
         new_fuse_constraints.append(new_con)
     return new_fuse_constraints
+
+def plot_scad(Bs, fuse_constraints):
+    from matplotlib import pyplot as plt
+    deltab = []
+    penalty = []
+    for i in range(len(fuse_constraints)):
+        con = fuse_constraints[i]
+        b_1 = Bs[con.c1.sub][con.c1.r, con.c1.c]
+        b_2 = Bs[con.c2.sub][con.c2.r, con.c2.c]
+        deltab.append(b_1-b_2)
+        penalty.append(con.lam * (b_1-b_2)**2)
+    plt.scatter(deltab, penalty)
+    plt.xlabel('delta B')
+    plt.ylabel('penalty')
+    plt.figure()
+
+    plt.hist(penalty, bins=30)
+    plt.show()
 
 #solves the fused regression problem with constraints coming from groups
 #Xs: list of X matrices

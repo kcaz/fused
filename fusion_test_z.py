@@ -402,7 +402,7 @@ def benchthresh(lamP, lamR, lamS, b1dim, b2dim, maxgroupsize, pct_fused, minfuse
                 watdict[(P, R, S, threshit)] = (np.mean(wat), np.std(wat)/it**0.5, np.mean(sup1), np.mean(sup2), np.mean(err1p), np.mean(err2p))
     return watdict
 
-#right now it is used twice for different purposes; can change
+#right now 'it' is used twice for different purposes; can change
 def benchscad(lamP, lamR, lamS, b1dim, b2dim, maxgroupsize, pct_fused, minfusestd, maxfusestd, xsamples1, xsamples2, noise1, noise2, p_falsep, p_falsen, sparse, it, s_it, k):
     watdict = dict()
     for R in lamR:
