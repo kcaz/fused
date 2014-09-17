@@ -51,6 +51,40 @@ def quad(a, b, c):
     
     return (x1, x2)
 
+
+def adjust_vol(Xs, cols, fuse_cons, ridge_cons):
+    
+        #we're building a canonical ordering over the columns for the current set of columns
+    counter = 0
+    sub_offs = dict()
+    for co in cols:
+        sub = co.sub
+        if not (co.sub, co.c) in sub_offs:
+            sub_offs[(sub, co.c)] = counter
+            counter += Xs[sub].shape[1]
+    N = counter
+    Einv = np.zeros((N, N))
+    for ridge_con in ridge_cons:
+        n = sub_offs[(ridge_con.c1.sub, ridge_con.c1.c)] + ridge_con.c1.r
+        Einv[n, n] += ridge_con.lam
+
+    Einv_noS = Einv.copy()
+
+    for fuse_con in fuse_cons:
+        n = sub_offs[(fuse_con.c1.sub, fuse_con.c1.c)] + fuse_con.c1.r
+        m = sub_offs[(fuse_con.c2.sub, fuse_con.c2.c)] + fuse_con.c2.r
+        Einv[n, m] += -2*fuse_con.lam
+        Einv[m, n] += -2*fuse_con.lam
+        Einv[n, n] += fuse_con.lam
+        Einv[m, m] += fuse_con.lam
+    d1 = np.linalg.det(Einv)
+    d2 = np.linalg.det(Einv_noS)
+    c = (d2/d1)**(1.0/N)
+    
+    fuse_adj = map(lambda x: constraint(x.c1, x.c2, x.lam*c), fuse_cons)
+    ridge_adj = map(lambda x: constraint(x.c1,x.c2, x.lam*c), ridge_cons)
+    return (fuse_adj, ridge_adj)
+
 def adjust(lamR1, lamR2, lamS):
         #this code is written strangely, to match the google doc
     if lamS == 0:
@@ -170,7 +204,8 @@ def orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS):
 def solve_ortho_direct(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS):
     ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
     fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
-    ridge_con = adjust_ridge_fused(fuse_con, ridge_con, lamR)
+    #ridge_con = adjust_ridge_fused(fuse_con, ridge_con, lamR)
+
     Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)    
     return Bs
 
@@ -240,7 +275,7 @@ def solve_ortho_scad_refit_bench(organisms, gene_ls, tf_ls, Xs, Ys, constraints,
     print 'adjusted constraints'
     Bs = solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, support=None, it=s_it)
     print 'solved one'
-    plot_scad(Bs, fuse_con)
+    #plot_scad(Bs, fuse_con)
 
     randconstraints = []
     for i in range(1,10000):
@@ -253,17 +288,12 @@ def solve_ortho_scad_refit_bench(organisms, gene_ls, tf_ls, Xs, Ys, constraints,
     #plot_scad(Bs, randconstraints)
     
     for i in range(1, it):
-<<<<<<< HEAD
-                
-=======
-        n = round(2**(it - i - 1) * float(k))        
-        print n
->>>>>>> 23b5934ffe69d00eea76eea6f12cf6371d795ca0
+
         support = compute_support(Bs, i, it-1, k)
         print 'computed new support'
         Bs = solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, support, s_it)
         print 'solved another'
-        plot_scad(Bs, fuse_con)
+        #plot_scad(Bs, fuse_con)
     return Bs
 
     
@@ -273,7 +303,9 @@ def solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, support, it):
     a = 1.5 #3.7 #!?
     for i in range(it):
         Bs = direct_solve_factor_support(Xs, Ys, fuse_con2, ridge_con, lamR, support)
+        
         fuse_con2 = scad(Bs, fuse_con, lamS, a)
+        plot_scad(Bs, fuse_con2)
     return Bs
 
 #returns a new set of fusion constraints corresponding to a saturating penalty
@@ -307,9 +339,9 @@ def plot_scad(Bs, fuse_constraints):
     plt.scatter(deltab, penalty)
     plt.xlabel('delta B')
     plt.ylabel('penalty')
-    plt.figure()
+    #plt.figure()
 
-    plt.hist(penalty, bins=30)
+    #plt.hist(penalty, bins=30)
     plt.show()
 
 #solves the fused regression problem with constraints coming from groups
@@ -448,6 +480,7 @@ def diag_concat(mats):
 def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR):
     #(coeff_l, con_l) = factor_constraints(Xs, Ys, fuse_constraints)
     (coeff_l, con_l) = factor_constraints_columns(Xs, Ys, fuse_constraints)
+    
     Bs = []
         
     #Initialize matrices to hold solutions
@@ -460,12 +493,22 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR):
         #get the coefficients and constraints associated with the current problem
         coefficients = coeff_l[f]
         constraints = con_l[f]
+        ridge_cons = []
         
+        coefficients_set = set(coefficients)
+
+        for con in ridge_constraints:
+            coeff = con.c1
+            if coeff in coefficients_set:
+                ridge_cons.append(con)
+    
         columns = set()
 
         for co in coefficients:
             columns.add(coefficient(co.sub, None, co.c))
         columns = list(columns)
+        
+        (constraints, ridge_cons) = adjust_vol(Xs, columns, constraints, ridge_cons)
         
         num_subproblems = len(set(map(lambda co: co.sub, coefficients)))
         
@@ -507,7 +550,7 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR):
             P_l.append(P)
         #set up ridge constraint. 
         I = np.eye((cums[-1])) * lambdaR
-        coefficients_set = set(coefficients)
+        
         #now we go through the ridge constraints and set entries of I
         for con in ridge_constraints:
             coeff = con.c1
