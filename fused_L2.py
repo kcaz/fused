@@ -203,6 +203,7 @@ def solve_ortho_direct_refit_bench(organisms, gene_ls, tf_ls, Xs, Ys, constraint
     print 'adjusted constraints'
     Bs = direct_solve_factor_support(Xs, Ys, fuse_con, ridge_con, lamR)
     print 'solved one'
+    Bs_0 = Bs
     #print Bs
     for i in range(1, it):
         support = compute_support(Bs, i, it-1, k)
@@ -211,6 +212,7 @@ def solve_ortho_direct_refit_bench(organisms, gene_ls, tf_ls, Xs, Ys, constraint
         Bs = direct_solve_factor_support(Xs, Ys, fuse_con, ridge_con, lamR, support)
         print 'solved another'
         #print support[0]
+    plot_thresh_fn(Bs_0, Bs, fuse_con)
     return Bs
 
 def solve_ortho_scad_refit(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS, it, k, s_it):
@@ -238,18 +240,19 @@ def solve_ortho_scad_refit_bench(organisms, gene_ls, tf_ls, Xs, Ys, constraints,
     print 'got fusion constraints'
     ridge_con = adjust_ridge_fused(fuse_con, ridge_con, lamR)
     print 'adjusted constraints'
-    Bs = solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, support=None, it=s_it)
+    Bs = solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, support=None, s_it=s_it)
     print 'solved one'
-    plot_scad(Bs, fuse_con)
-
-    randconstraints = []
-    for i in range(1,10000):
-        r1 = random.randrange(1, Bs[0].shape[0]+1)
-        c1 = random.randrange(1, Bs[0].shape[1]+1)
-        r2 = random.randrange(1, Bs[1].shape[0]+1)
-        c2 = random.randrange(1, Bs[1].shape[1]+1)
-        randconstr = constraint(coefficient(1, r1, c1), coefficient(2, r2, c2), lamS)
-    randconstraints = scad(Bs, randconstraints, lamS, 3.7)
+    #plot_scad(Bs, fuse_con)
+    #plot_thresh_fn(Bs, Bs, fuse_con)
+    Bs_0 = direct_solve_factor(Xs, Ys, [], ridge_con, lamR)
+    #randconstraints = []
+    #for i in range(1,10000):
+    #    r1 = random.randrange(1, Bs[0].shape[0]+1)
+    #    c1 = random.randrange(1, Bs[0].shape[1]+1)
+    #    r2 = random.randrange(1, Bs[1].shape[0]+1)
+    #    c2 = random.randrange(1, Bs[1].shape[1]+1)
+    #    randconstr = constraint(coefficient(1, r1, c1), coefficient(2, r2, c2), lamS)
+    #randconstraints = scad(Bs, randconstraints, lamS, 3.7)
     #plot_scad(Bs, randconstraints)
     
     for i in range(1, it):
@@ -259,15 +262,17 @@ def solve_ortho_scad_refit_bench(organisms, gene_ls, tf_ls, Xs, Ys, constraints,
         print 'computed new support'
         Bs = solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, support, s_it)
         print 'solved another'
-        plot_scad(Bs, fuse_con)
+
+    print 'WAKA'
+    plot_thresh_fn(Bs_0, Bs, fuse_con)
     return Bs
 
     
 #iteratively adjusts fusion constraint weight to approximate saturating penalty
-def solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, support, it):
+def solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, support, s_it):
     fuse_con2 = fuse_con    
-    a = 1.5 #3.7 #!?
-    for i in range(it):
+    a = 1.0#1.5 #3.7 #!?
+    for i in range(s_it):
         Bs = direct_solve_factor_support(Xs, Ys, fuse_con2, ridge_con, lamR, support)
         fuse_con2 = scad(Bs, fuse_con, lamS, a)
     return Bs
@@ -285,7 +290,7 @@ def scad(Bs_init, fuse_constraints, lamS, a):
             nlamS = lamS
         else:
             
-            nlamS = lamS* (max(0, ((a*lamS - theta_init)/((a-1)*lamS)))/(2*theta_init))
+            nlamS = lamS* max(0, ((a*lamS - theta_init)/((a-1)*lamS)))/(2*theta_init)
         new_con = constraint(con.c1, con.c2, nlamS)
         new_fuse_constraints.append(new_con)
     return new_fuse_constraints
@@ -303,10 +308,35 @@ def plot_scad(Bs, fuse_constraints):
     plt.scatter(deltab, penalty)
     plt.xlabel('delta B')
     plt.ylabel('penalty')
+    plt.title(con.lam)
     plt.figure()
 
     plt.hist(penalty, bins=30)
     plt.show()
+
+def plot_thresh_fn(Bs_init, Bs_current, fuse_constraints):
+    from matplotlib import pyplot as plt
+    deltab = []
+    pen_deltab = []
+    for i in range(len(fuse_constraints)):
+        con = fuse_constraints[i]
+        bi_1 = Bs_init[con.c1.sub][con.c1.r, con.c1.c]
+        bi_2 = Bs_init[con.c2.sub][con.c2.r, con.c2.c]
+        deltab. append(bi_1-bi_2)
+        bc_1 = Bs_current[con.c1.sub][con.c1.r, con.c1.c]
+        bc_2 = Bs_current[con.c2.sub][con.c2.r, con.c2.c]
+        pen_deltab.append(bc_1-bc_2)
+    a=min(deltab)
+    b=max(deltab)
+    x=np.linspace(a,b,100)
+    y=x
+    plt.plot(x,y)
+    plt.scatter(deltab, pen_deltab)
+    plt.xlabel('delta B')
+    plt.ylabel('penalized delta B')
+    plt.title(con.lam)
+    plt.show()
+
 
 #solves the fused regression problem with constraints coming from groups
 #Xs: list of X matrices

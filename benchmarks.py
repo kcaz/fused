@@ -91,10 +91,10 @@ def multi_species_benchmarks():
     outf.close()
 
 def multi_species_benchmarks2(solver):
-    repeats = 10
+    repeats = 30
     lamPs = np.array([1])#np.logspace(0, 3, 10)
-    lamSs = [0,10**-1.5]#+list(np.logspace(-1.5, 1.5, 3))
-    lamRs = [3]#np.logspace(0, 2, 5)
+    lamSs = [0]+list(np.logspace(-1.5, 1.5, 3))
+    lamRs = [0,0.5,1,3]#np.logspace(0, 2, 5)
     iron_conds = range(ba.iron_conds)
     timeseries_conds = range(ba.timeseries_conds)
     subtilis_conds = range(ba.subtilis_conds)
