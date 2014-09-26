@@ -91,10 +91,10 @@ def multi_species_benchmarks():
     outf.close()
 
 def multi_species_benchmarks2(solver):
-    repeats = 30
+    repeats = 20
     lamPs = np.array([1])#np.logspace(0, 3, 10)
-    lamSs = [0]+list(np.logspace(-1.5, 1.5, 3))
-    lamRs = [0,0.5,1,3]#np.logspace(0, 2, 5)
+    lamSs = [0,0.5,1,3,5,10]#+list(np.logspace(-1.5, 1.5, 3))
+    lamRs = [0,0.5,1,3,5,10]#np.logspace(0, 2, 5)
     iron_conds = range(ba.iron_conds)
     timeseries_conds = range(ba.timeseries_conds)
     subtilis_conds = range(ba.subtilis_conds)
@@ -121,6 +121,8 @@ def multi_species_benchmarks2(solver):
                     sub_t = timeseries_conds[0:sub_t_i]
                     if solver=='run_both':
                         ba.run_both(lamP=lamP, lamR=lamR, lamS=lamS, outf='tmp2', sub_s = sub_s, sub_i = sub_i, sub_t = sub_t)
+                    if solver=='run_both_adjust':
+                        ba.run_both_adjust(lamP=lamP, lamR=lamR, lamS=lamS, outf='tmp2', sub_s=sub_s, sub_i=sub_i, sub_t=sub_t)
                     if solver=='run_both_refit':
                         ba.run_both_refit(lamP=lamP, lamR=lamR, lamS=lamS, outf='tmp2', sub_s = sub_s, sub_i = sub_i, sub_t = sub_t, it=10,k=20)
                     if solver=='scad':

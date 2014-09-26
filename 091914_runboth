@@ -1,0 +1,40 @@
+b.multi_species_benchmarks2('run_both'); 30 repeats
+
+lamP=1.000000	lamS=0.000000	lamR=0.000000	subtilis=0.496852	anthracis=0.878525	aupr=0.075425
+
+lamP=1.000000	lamS=0.000000	lamR=0.500000	subtilis=0.504192	anthracis=0.886438	aupr=0.073817
+
+lamP=1.000000	lamS=0.000000	lamR=1.000000	subtilis=0.513706	anthracis=0.891651	aupr=0.077141
+
+lamP=1.000000	lamS=0.000000	lamR=3.000000	subtilis=0.550092	anthracis=0.876921	aupr=0.080431
+
+lamP=1.000000	lamS=0.031623	lamR=0.000000	subtilis=0.477590	anthracis=0.866265	aupr=0.069515
+
+lamP=1.000000	lamS=0.031623	lamR=0.500000	subtilis=0.499017	anthracis=0.880954	aupr=0.075658
+
+lamP=1.000000	lamS=0.031623	lamR=1.000000	subtilis=0.512039	anthracis=0.886010	aupr=0.076493
+
+lamP=1.000000	lamS=0.031623	lamR=3.000000	subtilis=0.554522	anthracis=0.877359	aupr=0.083541
+
+lamP=1.000000	lamS=1.000000	lamR=0.000000	subtilis=0.472752	anthracis=0.883036	aupr=0.067794
+
+lamP=1.000000	lamS=1.000000	lamR=0.500000	subtilis=0.486384	anthracis=0.876639	aupr=0.074908
+
+lamP=1.000000	lamS=1.000000	lamR=3.000000	subtilis=0.546953	anthracis=0.880952	aupr=0.082595
+
+lamP=1.000000	lamS=31.622777	lamR=0.000000	subtilis=0.470671	anthracis=0.874853	aupr=0.067604
+
+lamP=1.000000	lamS=31.622777	lamR=0.500000	subtilis=0.484484	anthracis=0.877958	aupr=0.072619
+
+lamP=1.000000	lamS=31.622777	lamR=1.000000	subtilis=0.502298	anthracis=0.883133	aupr=0.072850
+
+lamP=1.000000	lamS=31.622777	lamR=3.000000	subtilis=0.546321	anthracis=0.874883	aupr=0.079833
+
+
+
+
+
+
+
+
+

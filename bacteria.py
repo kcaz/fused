@@ -39,9 +39,32 @@ def run_both(lamP, lamR, lamS, outf, sub_s, sub_i, sub_t):
     gene_ls = [bs_genes, ba_genes]
     tf_ls = [bs_tfs, ba_tfs]
 
-    Bs = fl.solve_ortho_direct(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS)
+    Bs = fl.solve_ortho_direct(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, 'no_adjust', lamP, lamR, lamS)
     write_bs(bs_genes, bs_tfs, Bs[0], outf+'_subtilis')
     write_bs(ba_genes, ba_tfs, Bs[1], outf+'_anthracis')
+
+def run_both_adjust(lamP, lamR, lamS, outf, sub_s, sub_i, sub_t):
+    (bs_e, bs_t , bs_genes, bs_tfs) = load_B_subtilis(sub_s)
+    (BS_priors, sign) = load_priors('gsSDnamesWithActivitySign082213','B_subtilis')
+    (ba_e, ba_t, ba_genes, ba_tfs) = load_B_anthracis(sub_i, sub_t)
+    (BA_priors, sign) = ([], [])
+    Xs = [bs_t, ba_t]
+    Ys = [bs_e, ba_e]
+    priors = BS_priors + BA_priors
+    orth = load_orth('bs_ba_ortho_804',['B_anthracis','B_subtilis'])
+    #orth = load_orth('',['B_subtilis'])
+    organisms = ['B_subtilis','B_anthracis']
+    #ortht = random_orth(bs_tfs, ba_tfs, organisms, 250)
+    #orthg = random_orth(bs_genes, ba_genes, organisms, 2500)
+    #orth = ortht+orthg
+    #print orth
+    #return
+    gene_ls = [bs_genes, ba_genes]
+    tf_ls = [bs_tfs, ba_tfs]
+    Bs = fl.solve_ortho_direct(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, 'yes', lamP, lamR, lamS)
+    write_bs(bs_genes, bs_tfs, Bs[0], outf+'_subtilis')
+    write_bs(ba_genes, ba_tfs, Bs[1], outf+'_anthracis')
+
 
 def run_both_refit(lamP, lamR, lamS, outf, sub_s, sub_i, sub_t, it, k):
     (bs_e, bs_t , bs_genes, bs_tfs) = load_B_subtilis(sub_s)
@@ -501,7 +524,7 @@ def betas_fused_visualize(net_s, net_a, orth):
     (na, ga, ta) = load_network(net_a)
     #we want to enumerate the constraints, fused_L2 can do that
     constraints = fl.orth_to_constraints(['B_subtilis','B_anthracis'], [gs, ga], [ts, ta], orth, 0)
-
+    
     coeffs_s = []
     coeffs_a = []
     for con in constraints:
