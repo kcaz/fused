@@ -290,17 +290,15 @@ def solve_ortho_scad_refit_bench(organisms, gene_ls, tf_ls, Xs, Ys, constraints,
     #    c2 = random.randrange(1, Bs[1].shape[1]+1)
     #    randconstr = constraint(coefficient(1, r1, c1), coefficient(2, r2, c2), lamS)
     #randconstraints = scad(Bs, randconstraints, lamS, 3.7)
+
     #plot_scad(Bs, randconstraints)
     
     for i in range(1, it):
-        n = round(2**(it - i - 1) * float(k))        
-        print n
+
         support = compute_support(Bs, i, it-1, k)
         print 'computed new support'
         Bs = solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, support, s_it)
         print 'solved another'
-
-    print 'WAKA'
     plot_thresh_fn(Bs_0, Bs, fuse_con)
     return Bs
 
@@ -311,7 +309,9 @@ def solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, support, s_it):
     a = 1.0#1.5 #3.7 #!?
     for i in range(s_it):
         Bs = direct_solve_factor_support(Xs, Ys, fuse_con2, ridge_con, lamR, support)
+        
         fuse_con2 = scad(Bs, fuse_con, lamS, a)
+        plot_scad(Bs, fuse_con2)
     return Bs
 
 #returns a new set of fusion constraints corresponding to a saturating penalty
@@ -347,8 +347,7 @@ def plot_scad(Bs, fuse_constraints):
     plt.ylabel('penalty')
     plt.title(con.lam)
     plt.figure()
-
-    plt.hist(penalty, bins=30)
+    #plt.hist(penalty, bins=30)
     plt.show()
 
 def plot_thresh_fn(Bs_init, Bs_current, fuse_constraints):
@@ -511,6 +510,7 @@ def diag_concat(mats):
 def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR):
     #(coeff_l, con_l) = factor_constraints(Xs, Ys, fuse_constraints)
     (coeff_l, con_l) = factor_constraints_columns(Xs, Ys, fuse_constraints)
+    
     Bs = []
         
     #Initialize matrices to hold solutions
@@ -523,12 +523,22 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR):
         #get the coefficients and constraints associated with the current problem
         coefficients = coeff_l[f]
         constraints = con_l[f]
+        ridge_cons = []
         
+        coefficients_set = set(coefficients)
+
+        for con in ridge_constraints:
+            coeff = con.c1
+            if coeff in coefficients_set:
+                ridge_cons.append(con)
+    
         columns = set()
 
         for co in coefficients:
             columns.add(coefficient(co.sub, None, co.c))
         columns = list(columns)
+        
+        (constraints, ridge_cons) = adjust_vol(Xs, columns, constraints, ridge_cons)
         
         num_subproblems = len(set(map(lambda co: co.sub, coefficients)))
         
@@ -570,7 +580,7 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR):
             P_l.append(P)
         #set up ridge constraint. 
         I = np.eye((cums[-1])) * lambdaR
-        coefficients_set = set(coefficients)
+        
         #now we go through the ridge constraints and set entries of I
         for con in ridge_constraints:
             coeff = con.c1

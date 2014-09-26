@@ -224,7 +224,7 @@ def make_cov(r1, r2, s, adj):
     return np.linalg.inv(e1)
 
 #make a pretty picture
-def draw_scad():
+def draw_scad(lamS, a):
     from matplotlib import pyplot as plt
     b1vals = np.linspace(-10,10,100)
     fuse_constraint = fl.constraint(fl.coefficient(0, 0, 0), fl.coefficient(1, 0, 0), 1)
@@ -234,19 +234,30 @@ def draw_scad():
     penalties = []
     for b1val in b1vals:
         b1[0,0] = b1val
-        fc = fl.scad([b1, b2], fuse_constraints, 1.0, 4)
+        fc = fl.scad([b1, b2], fuse_constraints, lamS, a)
         penalties.append(fc[0].lam)
 
     pv = np.cumsum(penalties*b1vals)
+    
     plt.plot(b1vals, pv - np.min(pv))
+<<<<<<< HEAD
+    plt.hold(True)
+    plt.plot([a, a], [0, np.max(pv-np.min(pv))], '--k')
+    plt.plot([-a, -a], [0, np.max(pv-np.min(pv))], '--k')
+
+    plt.plot([lamS, lamS], [0, np.max(pv-np.min(pv))], 'k')
+    plt.plot([-lamS, -lamS], [0, np.max(pv-np.min(pv))], 'k')
+
+=======
+>>>>>>> 23b5934ffe69d00eea76eea6f12cf6371d795ca0
     #plt.ylim(0,12)
     plt.xlabel('|B0 - B1|')
     plt.ylabel('saturating penalty')
-    plt.figure()
-    plt.plot(b1vals, penalties)
-    plt.ylim(-0.1,1.1)
-    plt.xlabel('|B0 - B1|')
-    plt.ylabel('L2 fusion penalty weight')
-    plt.show()
+    #plt.figure()
+    #plt.plot(b1vals, penalties)
+    #plt.ylim(-0.1,1.1)
+    #plt.xlabel('|B0 - B1|')
+    #plt.ylabel('L2 fusion penalty weight')
+    #plt.show()
     
 #multi_species_benchmarks2()
