@@ -93,7 +93,7 @@ def multi_species_benchmarks():
 def multi_species_benchmarks2(solver):
     repeats = 20
     lamPs = np.array([1])#np.logspace(0, 3, 10)
-    lamSs = [0,0.5,1,3,5,10]#+list(np.logspace(-1.5, 1.5, 3))
+    lamSs = [0,0.5,1,3]#+list(np.logspace(-1.5, 1.5, 3))
     lamRs = [0,0.5,1,3,5,10]#np.logspace(0, 2, 5)
     iron_conds = range(ba.iron_conds)
     timeseries_conds = range(ba.timeseries_conds)
@@ -240,16 +240,12 @@ def draw_scad(lamS, a):
     pv = np.cumsum(penalties*b1vals)
     
     plt.plot(b1vals, pv - np.min(pv))
-<<<<<<< HEAD
     plt.hold(True)
     plt.plot([a, a], [0, np.max(pv-np.min(pv))], '--k')
     plt.plot([-a, -a], [0, np.max(pv-np.min(pv))], '--k')
 
     plt.plot([lamS, lamS], [0, np.max(pv-np.min(pv))], 'k')
     plt.plot([-lamS, -lamS], [0, np.max(pv-np.min(pv))], 'k')
-
-=======
->>>>>>> 23b5934ffe69d00eea76eea6f12cf6371d795ca0
     #plt.ylim(0,12)
     plt.xlabel('|B0 - B1|')
     plt.ylabel('saturating penalty')

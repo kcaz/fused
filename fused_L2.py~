@@ -27,6 +27,18 @@ class dictl(dict):
             self[i] = []
         return super(dictl, self).__getitem__(i)
 
+def get_ridge_constraints(organisms, gene_ls, tf_ls, priors, lam, lamR):
+    priors = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lam)
+    priors_s = set(map(lambda x: x.c1, priors))
+    ridge_cons = []
+    for sub in range(len(organisms)):
+        for tfi in range(len(tf_ls[sub])):
+            for gi in range(len(gene_ls[sub])):
+                coeff = coefficient(sub, tfi, gi)
+                if not coeff in priors_s:
+                   ridge_cons.append(constraint(coeff, None, lamR))
+    return priors + ridge_cons      
+
 def priors_to_constraints(organisms, gene_ls, tf_ls, priors, lam):
     org_to_ind = {organisms[x] : x for x in range(len(organisms))}
     gene_to_inds = map(lambda o: {gene_ls[o][x] : x for x in range(len(gene_ls[o]))}, range(len(organisms)))
@@ -51,8 +63,80 @@ def quad(a, b, c):
     
     return (x1, x2)
 
-def adjust_vol(Xs, cols, fuse_cons, ridge_cons):
+#also introduces new ridge constraints as appropriate
+def adjust_vol2(Xs, cols, fuse_cons, ridge_cons, lamR):
+    return (fuse_cons, ridge_cons)
+        #we're building a canonical ordering over the columns for the current set of columns
+    counter = 0
+    b_to_n = dict()
+    n_to_b = dict()    
+    for co in cols:
+        sub = co.sub
+        for r in Xs[sub].shape[1]:
+            b_to_n[(sub, co.c, r)] = counter
+            n_to_b[counter] = (sub, co.c, r)
+            counter += 1
+    N = counter
+    Einv = np.zeros((N, N))
+    for n in range(N):
+        Einv[n, n] = lamR
+    for ridge_con in ridge_cons:
+        n = b_to_n[(ridge_con.c1.sub, ridge_con.c1.c, ridge_con.c1.r)]
+        Einv[n, n] = ridge_con.lam
+    d2 = np.linalg.det(Einv)
+    adj_rows = set()
+    for fuse_con in fuse_cons:
+        n = b_to_n[(ridge_con.c1.sub, ridge_con.c1.c, ridge_con.c1.r)]
+        m = b_to_n[(ridge_con.c2.sub, ridge_con.c2.c, ridge_con.c2.r)]
+        Einv[n, m] += -2*fuse_con.lam
+        Einv[m, n] += -2*fuse_con.lam
+        Einv[n, n] += fuse_con.lam
+        Einv[m, m] += fuse_con.lam
+        adj_rows.add(m)
+        adj_rows.add(n)
+
+    d1 = np.linalg.det(Einv)
+    #think about left multiplying by an identity matrix with some constant c in entries that show up in adj_rows in order to equate determinants
+    c = (d2/d1)**(1.0/len(adj_rows))
     
+    if np.isnan(c):
+        print Einv
+        print Einv_nos
+        print(d1, d2, c)
+    fuse_adj = []
+    ridge_adj = []
+    for fuse_con in fuse_cons:
+        n = b_to_n[(ridge_con.c1.sub, ridge_con.c1.c, ridge_con.c1.r)]
+        m = b_to_n[(ridge_con.c2.sub, ridge_con.c2.c, ridge_con.c2.r)]
+        if n in adj_rows or m in adj_rows:
+            con = constraint(fuse_con.c1,fuse_con.c2,fuse_con.lam*c)            
+            fuse_adj.append(con)
+        else:
+            con = constraint(fuse_con.c1,fuse_con.c2,fuse_con.lam)
+            fuse_adj.append(con)
+    for ridge_con in ridge_cons:
+        n = b_to_n[(ridge_con.c1.sub, ridge_con.c1.c, ridge_con.c1.r)]
+        if n in adj_rows:
+            con = constraint(ridge_con.c1, ridge_con.c2, ridge_con.lam*c)
+            ridge_adj.append(con)
+        else:
+            con = constraint(ridge_con.c1, ridge_con.c2, ridge_con.lam)
+            ridge_adj.append(con)
+
+    #now introduce new constraints that were previously default
+    ridge_coeff_s = set(map(lambda x: x.c1, ridge_cons))
+    for n in adj_row:
+        (sub, c, r) = n_to_b[n]
+        coeff = coefficient(sub, r, c)
+        if not coeff in ridge_coeff_s:
+            con = constraint(coeff, None, lamR*c)
+            ridge_adj.append(con)        
+        
+    return (fuse_adj, ridge_adj)
+
+
+def adjust_vol(Xs, cols, fuse_cons, ridge_cons, lamR):
+    return (fuse_cons, ridge_cons)
         #we're building a canonical ordering over the columns for the current set of columns
     counter = 0
     sub_offs = dict()
@@ -63,12 +147,12 @@ def adjust_vol(Xs, cols, fuse_cons, ridge_cons):
             counter += Xs[sub].shape[1]
     N = counter
     Einv = np.zeros((N, N))
+    for n in range(N):
+        Einv[n, n] = lamR
     for ridge_con in ridge_cons:
         n = sub_offs[(ridge_con.c1.sub, ridge_con.c1.c)] + ridge_con.c1.r
-        Einv[n, n] += ridge_con.lam
-
-    Einv_noS = Einv.copy()
-
+        Einv[n, n] = ridge_con.lam
+    d2 = np.linalg.det(Einv)
     for fuse_con in fuse_cons:
         n = sub_offs[(fuse_con.c1.sub, fuse_con.c1.c)] + fuse_con.c1.r
         m = sub_offs[(fuse_con.c2.sub, fuse_con.c2.c)] + fuse_con.c2.r
@@ -77,12 +161,15 @@ def adjust_vol(Xs, cols, fuse_cons, ridge_cons):
         Einv[n, n] += fuse_con.lam
         Einv[m, m] += fuse_con.lam
     d1 = np.linalg.det(Einv)
-    d2 = np.linalg.det(Einv_noS)
     c = (d2/d1)**(1.0/N)
     
+    if np.isnan(c):
+        print Einv
+        print Einv_nos
+        print(d1, d2, c)
     fuse_adj = map(lambda x: constraint(x.c1, x.c2, x.lam*c), fuse_cons)
     ridge_adj = map(lambda x: constraint(x.c1,x.c2, x.lam*c), ridge_cons)
-    return (fuse_adj, ridge_adj)
+    return (fuse_adj, ridge_adj, c*lamR)
 
 
 def adjust(lamR1, lamR2, lamS):
@@ -203,6 +290,7 @@ def orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS):
 #priors: list of lists of one_gene pairs
 def solve_ortho_direct(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, adjust,lamP, lamR, lamS):
     ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
+    #ridge_con = get_ridge_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR, lamR)
     fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
     ridge_con = adjust_ridge_fused(fuse_con, ridge_con, lamR)
     if adjust=='adjust':
@@ -213,6 +301,7 @@ def solve_ortho_direct(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, adjust,l
 
 def solve_ortho_direct_refit(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS, it, k):
     ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
+    #ridge_con = get_ridge_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR, lamR)
     print 'got ridge constraints'
     fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
     print 'got fusion constraints'
@@ -233,6 +322,7 @@ def solve_ortho_direct_refit(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, la
 #same as above, but without orth_to_constraints. to be used for benchmarking, where orthology is between entries of Bs, not between genes/tfs
 def solve_ortho_direct_refit_bench(organisms, gene_ls, tf_ls, Xs, Ys, constraints, priors, lamP, lamR, lamS, it, k):
     ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
+    #ridge_con = get_ridge_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR, lamR)
     print 'got ridge constraints'
     fuse_con = constraints
     print 'got fusion constraints'
@@ -254,6 +344,7 @@ def solve_ortho_direct_refit_bench(organisms, gene_ls, tf_ls, Xs, Ys, constraint
 
 def solve_ortho_scad_refit(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS, it, k, s_it):
     ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
+    #ridge_con = get_ridge_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR, lamR)
     print 'got ridge constraints'
     fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
     print 'got fusion constraints'
@@ -272,6 +363,7 @@ def solve_ortho_scad_refit(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP
 
 def solve_ortho_scad_refit_bench(organisms, gene_ls, tf_ls, Xs, Ys, constraints, priors, lamP, lamR, lamS, it, k, s_it):
     ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
+    #ridge_con = get_ridge_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR, lamR)
     print 'got ridge constraints'
     fuse_con = constraints
     print 'got fusion constraints'
@@ -538,7 +630,7 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR):
             columns.add(coefficient(co.sub, None, co.c))
         columns = list(columns)
         
-        (constraints, ridge_cons) = adjust_vol(Xs, columns, constraints, ridge_cons)
+        (constraints, ridge_cons) = adjust_vol2(Xs, columns, constraints, ridge_cons)
         
         num_subproblems = len(set(map(lambda co: co.sub, coefficients)))
         
@@ -649,7 +741,7 @@ def direct_solve_factor_adj(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR
             columns.add(coefficient(co.sub, None, co.c))
         columns = list(columns)
         
-        (constraints, ridge_cons) = adjust_vol(Xs, columns, constraints, ridge_cons)
+        (constraints, ridge_cons) = adjust_vol2(Xs, columns, constraints, ridge_cons)
         
         num_subproblems = len(set(map(lambda co: co.sub, coefficients)))
         
