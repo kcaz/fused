@@ -65,14 +65,15 @@ def quad(a, b, c):
 
 #also introduces new ridge constraints as appropriate
 def adjust_vol2(Xs, cols, fuse_cons, ridge_cons, lamR):
-    return (fuse_cons, ridge_cons)
+    if len(fuse_cons) == 0:    
+        return (fuse_cons, ridge_cons)
         #we're building a canonical ordering over the columns for the current set of columns
     counter = 0
     b_to_n = dict()
     n_to_b = dict()    
     for co in cols:
         sub = co.sub
-        for r in Xs[sub].shape[1]:
+        for r in range(Xs[sub].shape[1]):
             b_to_n[(sub, co.c, r)] = counter
             n_to_b[counter] = (sub, co.c, r)
             counter += 1
@@ -83,31 +84,42 @@ def adjust_vol2(Xs, cols, fuse_cons, ridge_cons, lamR):
     for ridge_con in ridge_cons:
         n = b_to_n[(ridge_con.c1.sub, ridge_con.c1.c, ridge_con.c1.r)]
         Einv[n, n] = ridge_con.lam
-    d2 = np.linalg.det(Einv)
+    Einv_noS = Einv.copy()
+    
     adj_rows = set()
     for fuse_con in fuse_cons:
-        n = b_to_n[(ridge_con.c1.sub, ridge_con.c1.c, ridge_con.c1.r)]
-        m = b_to_n[(ridge_con.c2.sub, ridge_con.c2.c, ridge_con.c2.r)]
-        Einv[n, m] += -2*fuse_con.lam
-        Einv[m, n] += -2*fuse_con.lam
+        n = b_to_n[(fuse_con.c1.sub, fuse_con.c1.c, fuse_con.c1.r)]
+        m = b_to_n[(fuse_con.c2.sub, fuse_con.c2.c, fuse_con.c2.r)]
+        Einv[n, m] += -fuse_con.lam
+        Einv[m, n] += -fuse_con.lam
         Einv[n, n] += fuse_con.lam
         Einv[m, m] += fuse_con.lam
         adj_rows.add(m)
         adj_rows.add(n)
 
+    Einv_noS = Einv_noS/lamR
+    d2 = np.linalg.det(Einv_noS)   
+    Einv = Einv/lamR
     d1 = np.linalg.det(Einv)
+
+    #import matplotlib.pyplot as plt
+    #plt.matshow(Einv)
+    #plt.show()
+    #plt.plot(np.diag(Einv))
+    #plt.show()
+    #print (d2, d1)    
     #think about left multiplying by an identity matrix with some constant c in entries that show up in adj_rows in order to equate determinants
     c = (d2/d1)**(1.0/len(adj_rows))
     
     if np.isnan(c):
         print Einv
-        print Einv_nos
-        print(d1, d2, c)
+        print [Einv[i][i] for i in range(len(matrix[0]))]
+        print(d1, d2, len(adj_rows), c)
     fuse_adj = []
     ridge_adj = []
     for fuse_con in fuse_cons:
-        n = b_to_n[(ridge_con.c1.sub, ridge_con.c1.c, ridge_con.c1.r)]
-        m = b_to_n[(ridge_con.c2.sub, ridge_con.c2.c, ridge_con.c2.r)]
+        n = b_to_n[(fuse_con.c1.sub, fuse_con.c1.c, fuse_con.c1.r)]
+        m = b_to_n[(fuse_con.c2.sub, fuse_con.c2.c, fuse_con.c2.r)]
         if n in adj_rows or m in adj_rows:
             con = constraint(fuse_con.c1,fuse_con.c2,fuse_con.lam*c)            
             fuse_adj.append(con)
@@ -125,7 +137,7 @@ def adjust_vol2(Xs, cols, fuse_cons, ridge_cons, lamR):
 
     #now introduce new constraints that were previously default
     ridge_coeff_s = set(map(lambda x: x.c1, ridge_cons))
-    for n in adj_row:
+    for n in adj_rows:
         (sub, c, r) = n_to_b[n]
         coeff = coefficient(sub, r, c)
         if not coeff in ridge_coeff_s:
@@ -630,7 +642,7 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR):
             columns.add(coefficient(co.sub, None, co.c))
         columns = list(columns)
         
-        (constraints, ridge_cons) = adjust_vol2(Xs, columns, constraints, ridge_cons)
+        (constraints, ridge_cons) = adjust_vol2(Xs, columns, constraints, ridge_cons,lambdaR)
         
         num_subproblems = len(set(map(lambda co: co.sub, coefficients)))
         
@@ -741,7 +753,7 @@ def direct_solve_factor_adj(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR
             columns.add(coefficient(co.sub, None, co.c))
         columns = list(columns)
         
-        (constraints, ridge_cons) = adjust_vol2(Xs, columns, constraints, ridge_cons)
+        (constraints, ridge_cons) = adjust_vol2(Xs, columns, constraints, ridge_cons,lambdaR)
         
         num_subproblems = len(set(map(lambda co: co.sub, coefficients)))
         

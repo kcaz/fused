@@ -93,13 +93,15 @@ def multi_species_benchmarks():
 def multi_species_benchmarks2(solver):
     repeats = 20
     lamPs = np.array([1])#np.logspace(0, 3, 10)
-    lamSs = [0,0.5,1,3]#+list(np.logspace(-1.5, 1.5, 3))
-    lamRs = [0,0.5,1,3,5,10]#np.logspace(0, 2, 5)
+    lamSs = [0.25,0.5,0.75,1,3]#+list(np.logspace(-1.5, 1.5, 3))
+    lamRs = [0.1,0.5,1,3,5]#np.logspace(0, 2, 5)
     iron_conds = range(ba.iron_conds)
     timeseries_conds = range(ba.timeseries_conds)
     subtilis_conds = range(ba.subtilis_conds)
     outf = file('benchmark_results/multi_species_bench4','w')
     (BS_priors, sign) = ba.load_priors('gsSDnamesWithActivitySign082213','B_subtilis')
+    orth = ba.load_orth('bs_ba_ortho_804',['B_anthracis','B_subtilis']) #TODO make the order impossible to get 
+    
     for lamP in lamPs:
         for lamS in lamSs:
             for lamR in lamRs:
@@ -107,6 +109,7 @@ def multi_species_benchmarks2(solver):
                 acc_s = 0
                 acc_a = 0
                 aupr = 0
+                corr = 0
                 for rep in range(repeats):
                     random.shuffle(iron_conds)
                     random.shuffle(timeseries_conds)
@@ -135,6 +138,8 @@ def multi_species_benchmarks2(solver):
                     (bs_e, bs_t, bs_genes, bs_tfs) = ba.load_B_subtilis(sub_st)
                     (ba_e, ba_t, ba_genes, ba_tfs) = ba.load_B_anthracis(sub_it, sub_tt)
 
+                    corr += ba.betas_fused_corr('tmp2_subtilis', 'tmp2_anthracis', orth)
+                    print corr
                     eval_s = ba.eval_prediction('tmp2_subtilis', bs_e, bs_t, bs_genes, bs_tfs,'R2')
                     eval_a = ba.eval_prediction('tmp2_anthracis', ba_e, ba_t, ba_genes, ba_tfs,'R2')
 
@@ -142,7 +147,7 @@ def multi_species_benchmarks2(solver):
                     aupr += ba.eval_network_pr(net, bs_genes, bs_tfs, BS_priors)
                     acc_s += eval_s
                     acc_a += eval_a
-                writestr = 'lamP=%f\tlamS=%f\tlamR=%f\tsubtilis=%f\tanthracis=%f\taupr=%f\n' % (lamP, lamS, lamR, acc_s/repeats, acc_a/repeats, aupr/repeats)
+                writestr = 'lamP=%f\tlamS=%f\tlamR=%f\tsubtilis=%f\tanthracis=%f\taupr=%f\tcorr_bs=%f\n' % (lamP, lamS, lamR, acc_s/repeats, acc_a/repeats, aupr/repeats, corr/repeats)
                 outf.write(writestr)
                 print writestr
                     

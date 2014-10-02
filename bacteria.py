@@ -545,6 +545,27 @@ def betas_fused_visualize(net_s, net_a, orth):
     #plt.hist(np.abs(cs-ca)/(0.5*(np.abs(cs)+np.abs(ca))), bins=50)
     #plt.show()
 
+def betas_fused_corr(net_s, net_a, orth):
+
+    (ns, gs, ts) = load_network(net_s)
+    (na, ga, ta) = load_network(net_a)
+    #we want to enumerate the constraints, fused_L2 can do that
+    constraints = fl.orth_to_constraints(['B_subtilis','B_anthracis'], [gs, ga], [ts, ta], orth, 0)
+    
+    coeffs_s = []
+    coeffs_a = []
+    for con in constraints:
+        
+        if con.c1.sub == 1:
+            continue
+        beta_s = ns[con.c1.r, con.c1.c]
+        beta_a = na[con.c2.r, con.c2.c]
+        coeffs_s.append(beta_s)
+        coeffs_a.append(beta_a)
+    return np.corrcoef(coeffs_s, coeffs_a)[0,1]
+    
+
+
 def corr_visualize(genes1, genes2, exp1, exp2, organisms, orth):
     from matplotlib import pyplot as plt
     def ind_rc(m, inds):
