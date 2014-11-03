@@ -1,0 +1,12 @@
+multi_species_benchmarks2('run_both_adjust') 
+                    sub_s_i = int(len(subtilis_conds)/10)
+                    sub_i_i = int(len(iron_conds)*0.75)
+                    sub_t_i = int(len(timeseries_conds)*0.75)
+
+lamP=1.000000	lamS=0.000000	lamR=3.000000	subtilis=0.509643	anthracis=0.879930	aupr=0.073332	corr_bs=0.052289
+
+multi_species_benchmarks2('run_both_adjust') 
+                    sub_s_i = int(len(subtilis_conds)/5)
+                    sub_i_i = int(len(iron_conds)*0.75)
+                    sub_t_i = int(len(timeseries_conds)*0.75)
+lamP=1.000000	lamS=0.000000	lamR=3.000000	subtilis=0.619630	anthracis=0.882112	aupr=0.098175	corr_bs=0.057824

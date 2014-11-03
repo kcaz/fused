@@ -102,7 +102,7 @@ def adjust_vol2(Xs, cols, fuse_cons, ridge_cons, lamR):
     Einv = Einv/lamR
     d1 = np.linalg.det(Einv)
 
-    #import matplotlib.pyplot as plt
+    import matplotlib.pyplot as plt
     #plt.matshow(Einv)
     #plt.show()
     #plt.plot(np.diag(Einv))
@@ -113,7 +113,9 @@ def adjust_vol2(Xs, cols, fuse_cons, ridge_cons, lamR):
     
     if np.isnan(c):
         print Einv
-        print [Einv[i][i] for i in range(len(matrix[0]))]
+        #print [Einv[i][i] for i in range(len(matrix[0]))]
+        plt.plot(np.diag(Einv))
+        plt.show()
         print(d1, d2, len(adj_rows), c)
     fuse_adj = []
     ridge_adj = []
@@ -351,7 +353,7 @@ def solve_ortho_direct_refit_bench(organisms, gene_ls, tf_ls, Xs, Ys, constraint
         Bs = direct_solve_factor_support(Xs, Ys, fuse_con, ridge_con, lamR, support)
         print 'solved another'
         #print support[0]
-    plot_thresh_fn(Bs_0, Bs, fuse_con)
+    #plot_thresh_fn(Bs_0, Bs, fuse_con)
     return Bs
 
 def solve_ortho_scad_refit(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS, it, k, s_it):
@@ -362,7 +364,7 @@ def solve_ortho_scad_refit(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP
     print 'got fusion constraints'
     ridge_con = adjust_ridge_fused(fuse_con, ridge_con, lamR)
     print 'adjusted constraints'
-    Bs = solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, support=None, it=s_it)
+    Bs = solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, support=None, s_it=s_it)
     print 'solved one'    
     for i in range(1, it):
         n = round(2**(it - i - 1) * float(k))        
@@ -403,19 +405,19 @@ def solve_ortho_scad_refit_bench(organisms, gene_ls, tf_ls, Xs, Ys, constraints,
         print 'computed new support'
         Bs = solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, support, s_it)
         print 'solved another'
-    plot_thresh_fn(Bs_0, Bs, fuse_con)
+    #plot_thresh_fn(Bs_0, Bs, fuse_con)
     return Bs
 
     
 #iteratively adjusts fusion constraint weight to approximate saturating penalty
 def solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, support, s_it):
     fuse_con2 = fuse_con    
-    a = 1.0#1.5 #3.7 #!?
+    a = 3.7.0#1.5 #3.7 #!?
     for i in range(s_it):
         Bs = direct_solve_factor_support(Xs, Ys, fuse_con2, ridge_con, lamR, support)
         
         fuse_con2 = scad(Bs, fuse_con, lamS, a)
-        plot_scad(Bs, fuse_con2)
+        #plot_scad(Bs, fuse_con2)
     return Bs
 
 #returns a new set of fusion constraints corresponding to a saturating penalty

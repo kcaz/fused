@@ -26,9 +26,18 @@ def generate_from_linear(xdims, B, noise_std):
     Y = np.dot(X,B) + noise_std*np.random.randn(xdims[0], B.shape[1]) #note the inconsistency!!!!! AARGH!
     return (X, Y)    
 
-def build_orth(genes1, genes2, max_grp_size, pct_fused, min_fuse_std, max_fuse_std, omap):
-    random.shuffle(genes1)
-    random.shuffle(genes2)
+def omap_to_orths(omap):
+    orths = []
+    for i in range(len(omap)):
+        (organism1, gene1) = omap.keys()[i]
+        (organism2, gene2) = omap[omap.keys()[i]][0]
+        orths.append([fr.one_gene(name=gene1,organism=organism1), fr.one_gene(name=gene2, organism=organism2)])
+    return orths
+
+def build_orth(genes1, genes2, max_grp_size, pct_fused, min_fuse_std, max_fuse_std, omap, organisms):
+
+    #random.shuffle(genes1)
+    #random.shuffle(genes2)
     
     amt_fused = np.round((len(genes1)+len(genes2))*pct_fused)
     ind1 = 0
@@ -44,8 +53,8 @@ def build_orth(genes1, genes2, max_grp_size, pct_fused, min_fuse_std, max_fuse_s
         
         for i in range(ind1, ind1 + grp1_size):
             for j in range(ind2, ind2 + grp2_size):
-                sub1c = (0, genes1[i])
-                sub2c = (1, genes2[j])
+                sub1c = (organisms[0], genes1[i])
+                sub2c = (organisms[1], genes2[j])
                 
                 if sub1c in omap:
                     omap[sub1c].append(sub2c)
@@ -55,20 +64,27 @@ def build_orth(genes1, genes2, max_grp_size, pct_fused, min_fuse_std, max_fuse_s
                     omap[sub2c].append(sub1c)
                 else:
                     omap[sub2c] = [sub1c]
+
         ind1 += grp1_size
         ind2 += grp2_size
 
 #rows and columns of b1/b2 are fused
-def fuse_bs_orth(b1dims, b2dims, max_grp_size, pct_fused, min_fuse_std, max_fuse_std, sparse):
+def fuse_bs_orth(b1dims, b2dims, max_grp_size, pct_fused, min_fuse_std, max_fuse_std, sparse, organisms):
     b1 = np.nan * np.ones(b1dims)
     b2 = np.nan * np.ones(b2dims)
+#    tfs1 = map(lambda x: str(x)+'tfa', range(b1.shape[0]))
+#    tfs2 = map(lambda x: str(x)+'tfb', range(b2.shape[0]))
+#    genes1 = map(lambda x: str(x)+'ga', range(b1.shape[1]))
+#    genes2 = map(lambda x: str(x)+'gb', range(b2.shape[1]))
+
     tfs1 = range(b1.shape[0])
     tfs2 = range(b2.shape[0])    
     genes1 = range(b1.shape[0], b1.shape[1])
     genes2 = range(b2.shape[0], b2.shape[1])
     omap = dict()
-    build_orth(tfs1, tfs2, max_grp_size, pct_fused, min_fuse_std, max_fuse_std, omap)
-    build_orth(genes1, genes2, max_grp_size, pct_fused, min_fuse_std, max_fuse_std, omap)
+    build_orth(tfs1, tfs2, max_grp_size, pct_fused, min_fuse_std, max_fuse_std, omap, organisms)
+    build_orth(genes1, genes2, max_grp_size, pct_fused, min_fuse_std, max_fuse_std, omap, organisms)
+    orths = omap_to_orths(omap)
     bs = [b1, b2]
     fusion_groups = []    
     #print 'map built'
@@ -147,7 +163,7 @@ def fuse_bs_orth(b1dims, b2dims, max_grp_size, pct_fused, min_fuse_std, max_fuse
                 #don't append empty groups
                 fusion_groups.append((b1_coeffs, b2_coeffs))
             
-    return (b1, b2, fusion_groups)
+    return (b1, b2, orths) #fusion_groups)
                 
                 
 #max_grp_size is the maximum size of fusion group
@@ -277,9 +293,12 @@ def test_linearBs(b1, b2, fusiongroups, xsamples1, xsamples2, noise_std1, noise_
     return (bs_solve, err1, err2)
 
 #can't use orth_to_constraints because we are fusing bs, not genes/tfs
-def test_linearBs_refit(b1, b2, fusiongroups, xsamples1, xsamples2, noise_std1, noise_std2, p_falsep, p_falseneg, lamP, lamR, lamS, it, k):
-    TFs = [map(lambda x: str(x)+'tfa', range(b1.shape[0])), map(lambda x: str(x)+'tfb', range(b2.shape[0]))]
-    Gs = [map(lambda x: str(x)+'ga', range(b1.shape[1])), map(lambda x: str(x)+'gb', range(b2.shape[1]))]
+def test_linearBs_refit(b1, b2, fusiongroups, xsamples1, xsamples2, noise_std1, noise_std2, p_falsep, p_falseneg, lamP, lamR, lamS, it, k, organisms):
+#    TFs = [map(lambda x: str(x)+'tfa', range(b1.shape[0])), map(lambda x: str(x)+'tfb', range(b2.shape[0]))]
+#    Gs = [map(lambda x: str(x)+'ga', range(b1.shape[1])), map(lambda x: str(x)+'gb', range(b2.shape[1]))]
+    TFs = [map(lambda x: x, range(b1.shape[0])), map(lambda x: x, range(b2.shape[0]))]
+    Gs = [map(lambda x: x, range(b1.shape[1])), map(lambda x: x, range(b2.shape[1]))]
+
     xdims1 = (xsamples1, b1.shape[0])
     xdims2 = (xsamples2, b2.shape[0])
     (x1, y1) = generate_from_linear(xdims1, b1, noise_std1)
@@ -290,24 +309,26 @@ def test_linearBs_refit(b1, b2, fusiongroups, xsamples1, xsamples2, noise_std1, 
     p2 = messwpriors(b2, p_falsep, p_falseneg)
     priorset = []
     for i in range(len(p1)):
-        tf = fr.one_gene(TFs[0][p1[i][0]], 'a')
-        gene = fr.one_gene(Gs[0][p1[i][1]], 'a')
+        tf = fr.one_gene(TFs[0][p1[i][0]], 0)
+        gene = fr.one_gene(Gs[0][p1[i][1]], 0)
         priorset.append((tf,gene))
     for i in range(len(p2)):
-        tf = fr.one_gene(TFs[1][p2[i][0]], 'b')
-        gene = fr.one_gene(Gs[1][p2[i][1]], 'b')
+        tf = fr.one_gene(TFs[1][p2[i][0]], 1)
+        gene = fr.one_gene(Gs[1][p2[i][1]], 1)
         priorset.append((tf,gene))
-    organisms = ['a','b']
-    constraints=[]
-    for i in range(len(fusiongroups)):
-        fg = fusiongroups[i]
-        for j in range(len(fg[0])):        
-            for m in range(len(fg[1])):
-                coeff1 = fr.coefficient(0,fg[0][j][0], fg[0][j][1])
-                coeff2 = fr.coefficient(1,fg[1][m][0], fg[1][m][1])
-                constr = fr.constraint(coeff1,coeff2, lamS)
-                constraints.append(constr)
-    bs_solve = fr.solve_ortho_direct_refit_bench(organisms, Gs, TFs, [x1, x2], [y1, y2], constraints, priorset, lamP, lamR, lamS, it, k)
+    #organisms = ['a','b']
+    #constraints=[]
+    #for i in range(len(fusiongroups)):
+    #    fg = fusiongroups[i]
+    #    for j in range(len(fg[0])):        
+    #        for m in range(len(fg[1])):
+    #            coeff1 = fr.coefficient(0,fg[0][j][0], fg[0][j][1])
+    #            coeff2 = fr.coefficient(1,fg[1][m][0], fg[1][m][1])
+    #            constr = fr.constraint(coeff1,coeff2, lamS)
+    #            constraints.append(constr)
+    #bs_solve = fr.solve_ortho_direct_refit_bench(organisms, Gs, TFs, [x1, x2], [y1, y2], constraints, priorset, lamP, lamR, lamS, it, k)
+    bs_solve = fr.solve_ortho_direct_refit(organisms, Gs, TFs, [x1, x2], [y1, y2], fusiongroups, priorset, lamP, lamR, lamS, it, k)
+
     err1 = B_err(bs_solve[0], b1)
     err2 = B_err(bs_solve[1], b2)
     support_score1 = check_support(bs_solve[0], b1)
@@ -318,8 +339,11 @@ def test_linearBs_refit(b1, b2, fusiongroups, xsamples1, xsamples2, noise_std1, 
 
 #s_it is number of iterations for scad
 def test_scadBs_refit(b1, b2, fusiongroups, xsamples1, xsamples2, noise_std1, noise_std2, p_falsep, p_falseneg, lamP, lamR, lamS, it, k, s_it):
-    TFs = [map(lambda x: str(x)+'tfa', range(b1.shape[0])), map(lambda x: str(x)+'tfb', range(b2.shape[0]))]
-    Gs = [map(lambda x: str(x)+'ga', range(b1.shape[1])), map(lambda x: str(x)+'gb', range(b2.shape[1]))]
+#    TFs = [map(lambda x: str(x)+'tfa', range(b1.shape[0])), map(lambda x: str(x)+'tfb', range(b2.shape[0]))]
+#    Gs = [map(lambda x: str(x)+'ga', range(b1.shape[1])), map(lambda x: str(x)+'gb', range(b2.shape[1]))]
+    TFs = [map(lambda x: x, range(b1.shape[0])), map(lambda x: x, range(b2.shape[0]))]
+    Gs = [map(lambda x: x, range(b1.shape[1])), map(lambda x: x, range(b2.shape[1]))]
+
     xdims1 = (xsamples1, b1.shape[0])
     xdims2 = (xsamples2, b2.shape[0])
     (x1, y1) = generate_from_linear(xdims1, b1, noise_std1)
@@ -330,14 +354,14 @@ def test_scadBs_refit(b1, b2, fusiongroups, xsamples1, xsamples2, noise_std1, no
     p2 = messwpriors(b2, p_falsep, p_falseneg)
     priorset = []
     for i in range(len(p1)):
-        tf = fr.one_gene(TFs[0][p1[i][0]], 'a')
-        gene = fr.one_gene(Gs[0][p1[i][1]], 'a')
+        tf = fr.one_gene(TFs[0][p1[i][0]], 0)
+        gene = fr.one_gene(Gs[0][p1[i][1]], 0)
         priorset.append((tf,gene))
     for i in range(len(p2)):
-        tf = fr.one_gene(TFs[1][p2[i][0]], 'b')
-        gene = fr.one_gene(Gs[1][p2[i][1]], 'b')
+        tf = fr.one_gene(TFs[1][p2[i][0]], 1)
+        gene = fr.one_gene(Gs[1][p2[i][1]], 1)
         priorset.append((tf,gene))
-    organisms = ['a','b']
+    organisms = [0,1]
     constraints=[]
     for i in range(len(fusiongroups)):
         fg = fusiongroups[i]
@@ -347,7 +371,9 @@ def test_scadBs_refit(b1, b2, fusiongroups, xsamples1, xsamples2, noise_std1, no
                 coeff2 = fr.coefficient(1,fg[1][m][0], fg[1][m][1])
                 constr = fr.constraint(coeff1,coeff2, lamS)
                 constraints.append(constr)
-    bs_solve = fr.solve_ortho_scad_refit_bench(organisms, Gs, TFs, [x1, x2], [y1, y2], constraints, priorset, lamP, lamR, lamS, it, k, s_it, Bs_0=[])
+    #bs_solve = fr.solve_ortho_scad_refit_bench(organisms, Gs, TFs, [x1, x2], [y1, y2], constraints, priorset, lamP, lamR, lamS, it, k, s_it)
+    bs_solve = fr.solve_ortho_scad_refit(organisms, Gs, TFs, [x1, x2], [y1, y2], fusiongroups, priorset, lamP, lamR, lamS, it, k, s_it)
+
     err1 = B_err(bs_solve[0], b1)
     err2 = B_err(bs_solve[1], b2)
     support_score1 = check_support(bs_solve[0], b1)
@@ -381,6 +407,7 @@ def benchmark(lamP, lamR, lamS, b1dim, b2dim, maxgroupsize, pct_fused, minfusest
 #threshit is the number of iterations for computing support
 #k is number of regressors chosen 
 def benchthresh(lamP, lamR, lamS, b1dim, b2dim, maxgroupsize, pct_fused, minfusestd, maxfusestd, xsamples1, xsamples2, noise1, noise2, p_falsep, p_falsen, sparse, it, threshit, k):
+    organisms = [0,1]
     watdict = dict()
     for R in lamR:
         for S in lamS:
@@ -391,9 +418,9 @@ def benchthresh(lamP, lamR, lamS, b1dim, b2dim, maxgroupsize, pct_fused, minfuse
                 prederr1 = []
                 prederr2 = []               
                 for i in range(it):
-                    (b1f, b2f,o) = fuse_bs_orth(b1dim,b2dim, maxgroupsize, pct_fused, minfusestd, maxfusestd, sparse)
+                    (b1f, b2f,o) = fuse_bs_orth(b1dim,b2dim, maxgroupsize, pct_fused, minfusestd, maxfusestd, sparse, organisms)
 
-                    (bs_solve, err1, err2, err1p, err2p, supp1, supp2) = test_linearBs_refit(b1f, b2f, o, xsamples1, xsamples2, noise1, noise2, p_falsep, p_falsen, P, R, S, threshit, k)
+                    (bs_solve, err1, err2, err1p, err2p, supp1, supp2) = test_linearBs_refit(b1f, b2f, o, xsamples1, xsamples2, noise1, noise2, p_falsep, p_falsen, P, R, S, threshit, k, organisms)
                     wat.append(np.mean([err1.mean(), err2.mean()]))                 
                     sup1.append(supp1)
                     sup2.append(supp2) 
@@ -405,6 +432,7 @@ def benchthresh(lamP, lamR, lamS, b1dim, b2dim, maxgroupsize, pct_fused, minfuse
 #right now 'it' is used twice for different purposes; can change
 def benchscad(lamP, lamR, lamS, b1dim, b2dim, maxgroupsize, pct_fused, minfusestd, maxfusestd, xsamples1, xsamples2, noise1, noise2, p_falsep, p_falsen, sparse, it, s_it, k):
     watdict = dict()
+    organisms = [0,1]
     for R in lamR:
         for S in lamS:
             for P in lamP:
@@ -414,7 +442,7 @@ def benchscad(lamP, lamR, lamS, b1dim, b2dim, maxgroupsize, pct_fused, minfusest
                 prederr1 = []
                 prederr2 = []               
                 for i in range(it):
-                    (b1f, b2f,o) = fuse_bs_orth(b1dim,b2dim, maxgroupsize, pct_fused, minfusestd, maxfusestd, sparse)
+                    (b1f, b2f,o) = fuse_bs_orth(b1dim,b2dim, maxgroupsize, pct_fused, minfusestd, maxfusestd, sparse, organisms)
                     (bs_solve, err1, err2, err1p, err2p, supp1, supp2) = test_scadBs_refit(b1f, b2f, o, xsamples1, xsamples2, noise1, noise2, p_falsep, p_falsen, P, R, S, it, k, s_it)
                     wat.append(np.mean([err1.mean(), err2.mean()]))                 
                     sup1.append(supp1)

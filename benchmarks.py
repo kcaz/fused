@@ -2,6 +2,7 @@ import bacteria as ba
 import numpy as np
 import random
 import fused_L2 as fl
+import scipy.optimize
 
 def single_species_benchmarks():
     repeats = 2
@@ -91,10 +92,10 @@ def multi_species_benchmarks():
     outf.close()
 
 def multi_species_benchmarks2(solver):
-    repeats = 20
+    repeats = 50
     lamPs = np.array([1])#np.logspace(0, 3, 10)
-    lamSs = [0.25,0.5,0.75,1,3]#+list(np.logspace(-1.5, 1.5, 3))
-    lamRs = [0.1,0.5,1,3,5]#np.logspace(0, 2, 5)
+    lamSs = [0]#+list(np.logspace(-1.5, 1.5, 3))
+    lamRs = [3]#np.logspace(0, 2, 5)
     iron_conds = range(ba.iron_conds)
     timeseries_conds = range(ba.timeseries_conds)
     subtilis_conds = range(ba.subtilis_conds)
@@ -115,7 +116,7 @@ def multi_species_benchmarks2(solver):
                     random.shuffle(timeseries_conds)
                     random.shuffle(subtilis_conds)
 
-                    sub_s_i = int(len(subtilis_conds)/8)
+                    sub_s_i = int(len(subtilis_conds)/5)
                     sub_i_i = int(len(iron_conds)*0.75)
                     sub_t_i = int(len(timeseries_conds)*0.75)
 
@@ -139,12 +140,13 @@ def multi_species_benchmarks2(solver):
                     (ba_e, ba_t, ba_genes, ba_tfs) = ba.load_B_anthracis(sub_it, sub_tt)
 
                     corr += ba.betas_fused_corr('tmp2_subtilis', 'tmp2_anthracis', orth)
-                    print corr
+                    print corr/rep
                     eval_s = ba.eval_prediction('tmp2_subtilis', bs_e, bs_t, bs_genes, bs_tfs,'R2')
                     eval_a = ba.eval_prediction('tmp2_anthracis', ba_e, ba_t, ba_genes, ba_tfs,'R2')
 
                     (net, bs_genes, bs_tfs) = ba.load_network('tmp2_subtilis')
                     aupr += ba.eval_network_pr(net, bs_genes, bs_tfs, BS_priors)
+                    print aupr/rep
                     acc_s += eval_s
                     acc_a += eval_a
                 writestr = 'lamP=%f\tlamS=%f\tlamR=%f\tsubtilis=%f\tanthracis=%f\taupr=%f\tcorr_bs=%f\n' % (lamP, lamS, lamR, acc_s/repeats, acc_a/repeats, aupr/repeats, corr/repeats)
@@ -154,8 +156,116 @@ def multi_species_benchmarks2(solver):
     outf.close()
 
 
+def multi_species_benchmarks_opt1(lamSR):
+    repeats = 50
+    lamP = 1
+    #lamSs = [0.3,0.5,0.7,1]#+list(np.logspace(-1.5, 1.5, 3))
+    #lamRs = [3,5,7]#np.logspace(0, 2, 5)
+    iron_conds = range(ba.iron_conds)
+    timeseries_conds = range(ba.timeseries_conds)
+    subtilis_conds = range(ba.subtilis_conds)
+    (BS_priors, sign) = ba.load_priors('gsSDnamesWithActivitySign082213','B_subtilis')
+    orth = ba.load_orth('bs_ba_ortho_804',['B_anthracis','B_subtilis']) #TODO make the order impossible to get 
+
+    lamR = lamSR[1]
+    lamS = lamSR[0]
+  
+    acc_s = 0
+    acc_a = 0
+    aupr = 0
+    corr = 0
+    for rep in range(repeats):
+        random.shuffle(iron_conds)
+        random.shuffle(timeseries_conds)
+        random.shuffle(subtilis_conds)
+
+        sub_s_i = int(len(subtilis_conds)/8)
+        sub_i_i = int(len(iron_conds)*0.75)
+        sub_t_i = int(len(timeseries_conds)*0.75)
+
+        sub_s = subtilis_conds[0:sub_s_i]
+        sub_i = iron_conds[0:sub_i_i]
+        sub_t = timeseries_conds[0:sub_t_i]
+        
+        ba.run_both_adjust(lamP=lamP, lamR=lamR, lamS=lamS, outf='tmp2', sub_s=sub_s, sub_i=sub_i, sub_t=sub_t)
+
+        sub_st = subtilis_conds[sub_s_i:]
+        sub_it = iron_conds[sub_i_i:]
+        sub_tt = timeseries_conds[sub_t_i:]                    
+
+        (bs_e, bs_t, bs_genes, bs_tfs) = ba.load_B_subtilis(sub_st)
+        (ba_e, ba_t, ba_genes, ba_tfs) = ba.load_B_anthracis(sub_it, sub_tt)
+
+        corr += ba.betas_fused_corr('tmp2_subtilis', 'tmp2_anthracis', orth)
+        print corr/(rep+1)
+        eval_s = ba.eval_prediction('tmp2_subtilis', bs_e, bs_t, bs_genes, bs_tfs,'R2')
+        eval_a = ba.eval_prediction('tmp2_anthracis', ba_e, ba_t, ba_genes, ba_tfs,'R2')
+
+        (net, bs_genes, bs_tfs) = ba.load_network('tmp2_subtilis')
+        aupr += ba.eval_network_pr(net, bs_genes, bs_tfs, BS_priors)
+        print aupr/(rep+1)
+        acc_s += eval_s
+        acc_a += eval_a
+    return aupr/repeats
 
 
+def multi_species_benchmarks_opt2(lamR):
+    repeats = 50
+    lamP = 1
+    #lamSs = [0.3,0.5,0.7,1]#+list(np.logspace(-1.5, 1.5, 3))
+    #lamRs = [3,5,7]#np.logspace(0, 2, 5)
+    iron_conds = range(ba.iron_conds)
+    timeseries_conds = range(ba.timeseries_conds)
+    subtilis_conds = range(ba.subtilis_conds)
+    (BS_priors, sign) = ba.load_priors('gsSDnamesWithActivitySign082213','B_subtilis')
+    orth = ba.load_orth('bs_ba_ortho_804',['B_anthracis','B_subtilis']) #TODO make the order impossible to get 
+
+    lamR = lamR[0]
+    lamS = 0
+  
+    acc_s = 0
+    acc_a = 0
+    aupr = 0
+    corr = 0
+    for rep in range(repeats):
+        random.shuffle(iron_conds)
+        random.shuffle(timeseries_conds)
+        random.shuffle(subtilis_conds)
+
+        sub_s_i = int(len(subtilis_conds)/8)
+        sub_i_i = int(len(iron_conds)*0.75)
+        sub_t_i = int(len(timeseries_conds)*0.75)
+
+        sub_s = subtilis_conds[0:sub_s_i]
+        sub_i = iron_conds[0:sub_i_i]
+        sub_t = timeseries_conds[0:sub_t_i]
+        
+        ba.run_both_adjust(lamP=lamP, lamR=lamR, lamS=lamS, outf='tmp2', sub_s=sub_s, sub_i=sub_i, sub_t=sub_t)
+
+        sub_st = subtilis_conds[sub_s_i:]
+        sub_it = iron_conds[sub_i_i:]
+        sub_tt = timeseries_conds[sub_t_i:]                    
+
+        (bs_e, bs_t, bs_genes, bs_tfs) = ba.load_B_subtilis(sub_st)
+        (ba_e, ba_t, ba_genes, ba_tfs) = ba.load_B_anthracis(sub_it, sub_tt)
+
+        corr += ba.betas_fused_corr('tmp2_subtilis', 'tmp2_anthracis', orth)
+        print corr/(rep+1)
+        eval_s = ba.eval_prediction('tmp2_subtilis', bs_e, bs_t, bs_genes, bs_tfs,'R2')
+        eval_a = ba.eval_prediction('tmp2_anthracis', ba_e, ba_t, ba_genes, ba_tfs,'R2')
+
+        (net, bs_genes, bs_tfs) = ba.load_network('tmp2_subtilis')
+        aupr += ba.eval_network_pr(net, bs_genes, bs_tfs, BS_priors)
+        print aupr/(rep+1)
+        acc_s += eval_s
+        acc_a += eval_a
+    return aupr/repeats
+
+
+def optimize():
+    res1 = scipy.optimize.minimize(multi_species_benchmarks_opt1, [0.5, 0.5], method='Nelder-Mead', options={'maxiter':40})
+    res2 = scipy.optimize.minimize(multi_species_benchmarks_opt2, [0.5], method='Nelder-Mead', options={'maxiter':40})
+    return (res1, res2)
 
 def test_scad():
     subtilis_conds = range(ba.subtilis_conds)
