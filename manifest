@@ -1,0 +1,29 @@
+TOP LEVEL: 
+
+    fused_reg.py: this file contains core code for fitting fused linear models for gene regulatory networks. Things that should go here are
+    	-code for solving grn
+	-any data structures needed to solve grn
+	-code for generating/manipulating constraints from data. This is a little bit ugly, but some of the solver code needs to generate constraints, so it's best placed here.
+
+		
+    data_sources.py: this file is a list of classes implementing a data_source interface. Also contains code for generating random data, which should be saved to files and then dealt with as data in a standard format. data_sources should
+    	-return organism names
+	-return (ordered) gene names for each organism
+	-return (ordered) tf names for each organism
+	-return expression matrices for each organism
+	-return tf expression matrices for each organism
+	-return orthology lists
+	-return priors
+	
+    fit_grn.py: this file should contain 
+    	-code for fitting various grn models given data sources
+	-code for manipulating data
+	-code for evaluating network performance
+	-code for cross-validation
+	-code for parameter-estimation
+
+
+
+    experiments.py: miscellaneous listing of hopefully documented tests. experiments can contain visualization code, which is likely to be one-off. 
+	     
+     
