@@ -1,0 +1,14 @@
+tfg_count1: (25, 1000)
+tfg_count2	(25, 1000)
+N1	300
+N2	300
+max_grp_size	2
+pct_fused	1.000000
+fuse_std:0.000000
+sparse	0.000000
+organism1	uno
+organism2	dos
+prior_falsepos	0.000000
+prior_falseneg	0.000000
+measure_noise1	0.100000
+measure_noise2	0.100000
