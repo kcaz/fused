@@ -475,28 +475,33 @@ def fuse_bs_orth(tfg_count1, tfg_count2, max_grp_size, pct_fused, fuse_std, spar
     orths = omap_to_orths(omap)
     bs = [b1, b2]
     genes = [genes1, genes2]
+    tfs = [tfs1, tfs2]
     gene_inds = [{genes1[i] : i for i in range(len(genes1))}, {genes2[i] : i for i in range(len(genes2))}]
+    tf_inds = [{tfs1[i] : i for i in range(len(tfs1))}, {tfs2[i] : i for i in range(len(tfs2))}]
 
     orths_query = set(map(tuple, orths))
     
     #recursively fills everything connected to r,c,organism
     #NOTE: we are relying on the fact that transcription factors are also genes
     def fill(r, c, val, std, organism):
+        
         fill_val = val + np.random.randn()*std
         organism_ind = organisms.index(organism) #blegh
+        if not isnan(bs[organism_ind][r,c])): #already filled, return
+            return           
         bs[organism_ind][r,c] = fill_val
         
         for orth1 in orths:
             #find an ortholog for row and an ortholog for column
             #do this in both directions - i don't want to require that orthologies be listed both ways
             for rep in [0,1]:
-                if genes[organism_ind][r] == orth1[0].name and organism == orth1[0].organism:
+                if tfs[organism_ind][r] == orth1[0].name and organism == orth1[0].organism:
                     for orth2 in orths:
                         if genes[organism_ind][c] == orth2[0].name and organism == orth2[0].organism:
                             organism_r_orth_ind = organisms.index(orth1[1].organism)
                             organism_c_orth_ind = organisms.index(orth2[1].organism)
                             if organism_r_orth_ind == organism_c_orth_ind:
-                                r_orth = gene_inds[organism_r_orth_ind][orth1[1].name]
+                                r_orth = tf_inds[organism_r_orth_ind][orth1[1].name]
                                 c_orth = gene_inds[organism_c_orth_ind][orth2[1].name]
                                 fill(r_orth, c_orth, val, std, organisms[organism_r_orth_ind])
                 orth1 = (orth1[1], orth1[0]) #repeat in reverse
@@ -519,16 +524,47 @@ def fuse_bs_orth(tfg_count1, tfg_count2, max_grp_size, pct_fused, fuse_std, spar
 # generates priors from a given beta matrix B, some of which may be wrong or missing
 def generate_faulty_priors(B, genes, tfs, falsepos, falseneg):
     priors = []
+    fakepriors = []
     for r in range(B.shape[0]):
         for c in range(B.shape[1]):
-            if B[r, c] == 0 and np.random.rand() < falsepos:
+            if B[r, c] != 0:
                 priors.append((tfs[r], genes[c]))
-            if B[r, c] != 0 and np.random.rand() > falseneg:
-                priors.append((tfs[r], genes[c]))
-    return priors
+            if B[r, c] == 0:
+                fakepriors.append((tfs[r], genes[c]))
+    num_to_remove = np.round(falseneg * len(priors))
+    num_to_add = np.round((len(priors) - num_to_remove)/(1-falsepos))    
+    random.shuffle(priors)
+    random.shuffle(fakepriors)
+    return priors[0:(len(priors) - num_to_remove)] + fakepriors[0:num_to_add]
 
-def generate_faulty_orth(orth, genes1, tfs1, genes2, tfs2):
-    print 'NOT IMPLEMENTED'
+
+def generate_faulty_orth(orth, genes1, tfs1, genes2, tfs2, falsepos, falseneg):
+    #make a list of sets containing gene fusion groups to prevent from adding false orths that result in unruly large fusion groups
+
+    num_to_remove = np.round(falseneg * len(orth))
+    num_to_add = np.round((len(priors) - num_to_remove)/(1-falsepos))
+
+    orth_genes = set()
+    for orth in orths:
+        if orths[orth][0] not in orth_genes:
+            orth_genes.add(orth[0])
+        if orths[orth][1] not in orth_genes:
+            orth_genes.add(orth[1])
+
+    fakeorths = []
+    random.shuffle(orth)
+    random.shuffle(genes1)
+    random.shuffle(genes2)
+    for i in len(genes1):
+        for j in len(genes2):
+            gene1 = fr.one_gene(genes1[i], organism = organisms[0])
+            gene2 = fr.one_gene(genes2[j], organism = organisms[1])
+            if gene1 not in orth_genes:
+                if gene2 not in orth_genes:
+                    fakeorths.append((gene1, gene2))                        
+
+    return orths[0:(len(orths) - num_to_remove)] + fakeorths[0:num_to_add]
+
 
 
 #writes fake data, assumes some reasonable defaults

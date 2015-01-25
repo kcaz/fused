@@ -477,14 +477,18 @@ def fuse_bs_orth(tfg_count1, tfg_count2, max_grp_size, pct_fused, fuse_std, spar
     genes = [genes1, genes2]
     tfs = [tfs1, tfs2]
     gene_inds = [{genes1[i] : i for i in range(len(genes1))}, {genes2[i] : i for i in range(len(genes2))}]
+    tf_inds = [{tfs1[i] : i for i in range(len(tfs1))}, {tfs2[i] : i for i in range(len(tfs2))}]
 
     orths_query = set(map(tuple, orths))
     
     #recursively fills everything connected to r,c,organism
     #NOTE: we are relying on the fact that transcription factors are also genes
     def fill(r, c, val, std, organism):
+        
         fill_val = val + np.random.randn()*std
         organism_ind = organisms.index(organism) #blegh
+        if not isnan(bs[organism_ind][r,c])): #already filled, return
+            return           
         bs[organism_ind][r,c] = fill_val
         
         for orth1 in orths:
@@ -497,7 +501,7 @@ def fuse_bs_orth(tfg_count1, tfg_count2, max_grp_size, pct_fused, fuse_std, spar
                             organism_r_orth_ind = organisms.index(orth1[1].organism)
                             organism_c_orth_ind = organisms.index(orth2[1].organism)
                             if organism_r_orth_ind == organism_c_orth_ind:
-                                r_orth = gene_inds[organism_r_orth_ind][orth1[1].name]
+                                r_orth = tf_inds[organism_r_orth_ind][orth1[1].name]
                                 c_orth = gene_inds[organism_c_orth_ind][orth2[1].name]
                                 fill(r_orth, c_orth, val, std, organisms[organism_r_orth_ind])
                 orth1 = (orth1[1], orth1[0]) #repeat in reverse
@@ -520,16 +524,54 @@ def fuse_bs_orth(tfg_count1, tfg_count2, max_grp_size, pct_fused, fuse_std, spar
 # generates priors from a given beta matrix B, some of which may be wrong or missing
 def generate_faulty_priors(B, genes, tfs, falsepos, falseneg):
     priors = []
+    fakepriors = []
     for r in range(B.shape[0]):
         for c in range(B.shape[1]):
-            if B[r, c] == 0 and np.random.rand() < falsepos:
+            if B[r, c] != 0:
                 priors.append((tfs[r], genes[c]))
-            if B[r, c] != 0 and np.random.rand() > falseneg:
-                priors.append((tfs[r], genes[c]))
-    return priors
+            if B[r, c] == 0:
+                fakepriors.append((tfs[r], genes[c]))
+    num_to_remove = np.round(falseneg * len(priors))
+    num_to_add = np.round((len(priors) - num_to_remove)/(1-falsepos))    
+    random.shuffle(priors)
+    random.shuffle(fakepriors)
+    return priors[0:(len(priors) - num_to_remove)] + fakepriors[0:num_to_add]
 
-def generate_faulty_orth(orth, genes1, tfs1, genes2, tfs2):
-    print 'NOT IMPLEMENTED'
+
+def generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, falsepos, falseneg):
+    #make a list of sets containing gene fusion groups to prevent from adding false orths that result in unduly large fusion groups
+
+    num_to_remove = np.round(falseneg * len(orth))
+    num_to_add = np.round((len(priors) - num_to_remove)/(1-falsepos))
+
+    orth_genes = set()
+    for orth in orths:
+        orth_genes.add(orths[0])
+        orth_genes.add(orths[1])
+    
+    all_possible_orths = []
+    for gene1 in genes1:
+        for gene2 in genes2:
+            all_possible_orths.append((fr.one_gene(name=gene1, organism = organisms[0]), fr.one_gene(name=gene2, organism = organisms[1])))
+    for tf1 in genes1:
+        for tf2 in genes2:
+            all_possible_orths.append((fr.one_gene(name=tf1, organism = organisms[0]), fr.one_gene(name=tf2, organism = organisms[1])))
+    random.shuffle(all_possible_orths)
+    random.shuffle(orths)
+
+    to_add = []
+    for candidate_orth in all_possible_orths:
+        if candidate_orth[0] in orth_genes or candidate_orth[1] in orth_genes:
+            continue
+        to_add.append(candidate_orth)
+        if len(to_add) == num_to_add:
+            break
+
+    return orth[0:(len(orths) - num_to_remove)] + to_add
+
+
+    
+
 
 
 #writes fake data, assumes some reasonable defaults
