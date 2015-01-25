@@ -475,6 +475,7 @@ def fuse_bs_orth(tfg_count1, tfg_count2, max_grp_size, pct_fused, fuse_std, spar
     orths = omap_to_orths(omap)
     bs = [b1, b2]
     genes = [genes1, genes2]
+    tfs = [tfs1, tfs2]
     gene_inds = [{genes1[i] : i for i in range(len(genes1))}, {genes2[i] : i for i in range(len(genes2))}]
 
     orths_query = set(map(tuple, orths))
@@ -490,7 +491,7 @@ def fuse_bs_orth(tfg_count1, tfg_count2, max_grp_size, pct_fused, fuse_std, spar
             #find an ortholog for row and an ortholog for column
             #do this in both directions - i don't want to require that orthologies be listed both ways
             for rep in [0,1]:
-                if genes[organism_ind][r] == orth1[0].name and organism == orth1[0].organism:
+                if tfs[organism_ind][r] == orth1[0].name and organism == orth1[0].organism:
                     for orth2 in orths:
                         if genes[organism_ind][c] == orth2[0].name and organism == orth2[0].organism:
                             organism_r_orth_ind = organisms.index(orth1[1].organism)

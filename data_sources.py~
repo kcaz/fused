@@ -133,7 +133,7 @@ class standard_source(data_source):
         for row in range(nconds):
             expr = expr_fsnt[row + 1]
             expr_arr = np.array(expr)
-            exp_mat[row] = expr_arr
+            exp_mat[row,:] = expr_arr
         #now get the tf names
         tfs_fs = tfs_f.read()
         tfs_f.close()
@@ -541,8 +541,11 @@ def write_fake_data1(out_dir=None, tfg_count1=(5,10), tfg_count2=(5,10), N1=10, 
     (x1, y1) = generate_from_linear(N1, B1, measure_noise1)
     (x2, y2) = generate_from_linear(N2, B2, measure_noise2)
     #orths = generate_faulty_orth(orth, genes1, tfs1, genes2, tfs2)
+    
     (genes1c, expr1) = concat_tfs_genes(genes1, tfs1, x1, y1)
     (genes2c, expr2) = concat_tfs_genes(genes2, tfs2, x2, y2)
+    #(genes1c, expr1) = (genes1, x1)
+    #(genes2c, expr2) = (genes2, x2)
 
     priors1 = generate_faulty_priors(B1, genes1c, tfs1, prior_falsepos, prior_falseneg)
     priors2 = generate_faulty_priors(B2, genes2c, tfs2, prior_falsepos, prior_falseneg)
@@ -562,8 +565,11 @@ def write_fake_data1(out_dir=None, tfg_count1=(5,10), tfg_count2=(5,10), N1=10, 
     write_priors(out_dir+os.sep+'priors2',priors2)
     write_tfnames(out_dir+os.sep+'tfnames1',tfs1)
     write_tfnames(out_dir+os.sep+'tfnames2',tfs2)
-    write_network(genes1c, tfs1, B1, os.path.join(out_dir, 'beta1'))
-    write_network(genesec, tfs2, B2, os.path.join(out_dir, 'beta2'))
+    #since this is simulated data the first part of B is an identity matrix. That is, the TF expressions appear out of nowhere.
+    #does this make me happy? no it does not.
+    #maybe someday TFs can be some left-eigenvector with eigenvalue 1 of an interesting B, but not today
+    write_network(genes1c, tfs1, np.hstack((np.eye(B1.shape[0]), B1)), os.path.join(out_dir, 'beta1'))
+    write_network(genes2c, tfs2, np.hstack((np.eye(B2.shape[0]), B2)), os.path.join(out_dir, 'beta2'))
 
 
 
@@ -636,6 +642,7 @@ def write_tfnames(outf, tfnames):
 
 #writes a network
 def write_network(genes, tfs, B, outf):
+    
     Bs_str_l = []
     Bs_str_l.append('\t'.join(tfs))
     for gi in range(len(genes)):
