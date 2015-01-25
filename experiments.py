@@ -24,7 +24,7 @@ def sanity1():
         lamR = 0.1
         lamP = 1.0 #priors don't matter
         for j, lamS in enumerate(lamSs):
-            errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, reverse = True)
+            errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = True)
             errors[i, j] = errd['mse'][0]
     plt.plot(errors.T)
     plt.legend(data_amnts)
@@ -33,4 +33,29 @@ def sanity1():
     plt.plot(errors)
     plt.legend(lamSs)
     plt.savefig(os.path.join(os.path.join('data','fake_data','sanity1','fig2')))
+
+
+def test_scad():
+#create simulated data set with false orthology and run fused L2 and fused scad 
+     
+    N_TF = 25
+    N_G = 1000
+    amt_fused = [0, 0.25,0.5,0.75,1]
+    lamSs = [0, 0.25,0.5,0.75,1]
+    if not os.path.exists(os.path.join('data','fake_data','test_scad')):
+        os.mkdir(os.path.join('data','fake_data','test_scad'))
+    #iterate over how much fusion
+    errors = np.zeros((len(amt_fused), len(lamSs)))
+    for i, N in enumerate(amt_fused):
+        out = os.path.join('data','fake_data','test_scad','dat_'+str(N))
+        ds.write_fake_data1(N1 = 30, N2 = 30, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = N, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.1)
+        lamR = 0.1
+        lamP = 1.0 #priors don't matter
+        for j, lamS in enumerate(lamSs):
+            errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct_scad', reverse = True)
+            errors[i,j] = errd['mse'][0]
+
+    plt.matshow(errors.T)
+    plt.savefig(os.path.join(os.path.join('data','fake_data','test_scad','fig1')))
+    plt.figure()
 

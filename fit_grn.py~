@@ -92,6 +92,7 @@ def cv_model1(data_fn, lamP, lamR, lamS, k, reverse=False):
         #solve the model
         Bs = fl.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
         
+        
         mse1 += prediction_error(t1_te, Bs[0], e1_te, 'mse')
         mse2 += prediction_error(t2_te, Bs[1], e2_te, 'mse')
 
@@ -113,7 +114,8 @@ def cv_model1(data_fn, lamP, lamR, lamS, k, reverse=False):
             outf.write('params\tmse1\tmse2\tR21\tR22\taupr1\taupr2\tauroc1\tauroc2\n')
     with open(os.path.join(data_fn, 'results'),'a') as outf:
         outf.write(params_str + '\t' + result_str + '\n')
-
+    ret_dict = {'mse':(mse1/k, mse2/k), 'R2':(R21/k, R22/k), 'aupr':(aupr1/k, aupr2/k),'auroc':(auroc1/k, auroc2/k)}
+    return ret_dict
 #SECTION: -------------------------CODE FOR EVALUATING THE OUTPUT
 
 #model prediction error, using one of several metrics.

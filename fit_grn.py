@@ -39,7 +39,7 @@ def test_bacteria(lamP, lamR, lamS):
 #runs the basic model with specified parameters under k-fold cross-validation, and stores a number of metrics
 #k: the number of cv folds
 #reverse: train on the little dude (reverse train and test)
-def cv_model1(data_fn, lamP, lamR, lamS, k, reverse=False):
+def cv_model1(data_fn, lamP, lamR, lamS, k, solver, reverse=False):
     ds1 = ds.standard_source(data_fn,0)
     ds2 = ds.standard_source(data_fn,1)
     orth_fn = os.path.join(data_fn, 'orth')
@@ -90,7 +90,10 @@ def cv_model1(data_fn, lamP, lamR, lamS, k, reverse=False):
         priors = priors1 + priors2
         
         #solve the model
-        Bs = fl.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
+        if solver == 'solve_ortho_direct':
+            Bs = fl.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
+        if solver == 'solve_ortho_direct_scad':
+            Bs = fl.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, s_it=5)
         
         
         mse1 += prediction_error(t1_te, Bs[0], e1_te, 'mse')
