@@ -487,7 +487,7 @@ def fuse_bs_orth(tfg_count1, tfg_count2, max_grp_size, pct_fused, fuse_std, spar
         
         fill_val = val + np.random.randn()*std
         organism_ind = organisms.index(organism) #blegh
-        if not isnan(bs[organism_ind][r,c])): #already filled, return
+        if not np.isnan(bs[organism_ind][r,c]): #already filled, return
             return           
         bs[organism_ind][r,c] = fill_val
         
@@ -531,39 +531,46 @@ def generate_faulty_priors(B, genes, tfs, falsepos, falseneg):
                 priors.append((tfs[r], genes[c]))
             if B[r, c] == 0:
                 fakepriors.append((tfs[r], genes[c]))
-    num_to_remove = np.round(falseneg * len(priors))
-    num_to_add = np.round((len(priors) - num_to_remove)/(1-falsepos))    
+    num_to_remove = int(falseneg * len(priors))
+    num_to_add = int((len(priors) - num_to_remove)/(1-falsepos))    
     random.shuffle(priors)
     random.shuffle(fakepriors)
     return priors[0:(len(priors) - num_to_remove)] + fakepriors[0:num_to_add]
 
 
-def generate_faulty_orth(orth, genes1, tfs1, genes2, tfs2, falsepos, falseneg):
-    #make a list of sets containing gene fusion groups to prevent from adding false orths that result in unruly large fusion groups
+def generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, falsepos, falseneg):
+    #make a list of sets containing gene fusion groups to prevent from adding false orths that result in unduly large fusion groups
 
     num_to_remove = np.round(falseneg * len(orth))
     num_to_add = np.round((len(priors) - num_to_remove)/(1-falsepos))
 
     orth_genes = set()
     for orth in orths:
-        if orths[orth][0] not in orth_genes:
-            orth_genes.add(orth[0])
-        if orths[orth][1] not in orth_genes:
-            orth_genes.add(orth[1])
+        orth_genes.add(orths[0])
+        orth_genes.add(orths[1])
+    
+    all_possible_orths = []
+    for gene1 in genes1:
+        for gene2 in genes2:
+            all_possible_orths.append((fr.one_gene(name=gene1, organism = organisms[0]), fr.one_gene(name=gene2, organism = organisms[1])))
+    for tf1 in genes1:
+        for tf2 in genes2:
+            all_possible_orths.append((fr.one_gene(name=tf1, organism = organisms[0]), fr.one_gene(name=tf2, organism = organisms[1])))
+    random.shuffle(all_possible_orths)
+    random.shuffle(orths)
 
-    fakeorths = []
-    random.shuffle(orth)
-    random.shuffle(genes1)
-    random.shuffle(genes2)
-    for i in len(genes1):
-        for j in len(genes2):
-            gene1 = fr.one_gene(genes1[i], organism = organisms[0])
-            gene2 = fr.one_gene(genes2[j], organism = organisms[1])
-            if gene1 not in orth_genes:
-                if gene2 not in orth_genes:
-                    fakeorths.append((gene1, gene2))                        
+    to_add = []
+    for candidate_orth in all_possible_orths:
+        if candidate_orth[0] in orth_genes or candidate_orth[1] in orth_genes:
+            continue
+        to_add.append(candidate_orth)
+        if len(to_add) == num_to_add:
+            break
 
-    return orths[0:(len(orths) - num_to_remove)] + fakeorths[0:num_to_add]
+    return orth[0:(len(orths) - num_to_remove)] + to_add
+
+
+    
 
 
 

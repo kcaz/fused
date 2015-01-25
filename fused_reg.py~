@@ -6,6 +6,7 @@ import time
 import scipy.sparse
 import scipy.sparse.linalg
 
+
 #SECTION: -------------------DATA STRUCTURES--------------
 coefficient = collections.namedtuple('coefficient',['sub','r','c'])
 
@@ -57,8 +58,10 @@ def quad(a, b, c):
 #enumerates fusion constraints from orthology
 #args as in solve_ortho_direct
 #returns list of constraints. individual constraints are pairs of coefficients, with an associated weight lamS
+#NOTE!!!! THIS IS FUCKED UP IF THEY HAVE OVERLAPPING GENE NAMES! FIX FIX FIX FIX FIX
 def orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS):
     #build some maps
+    
     org_to_ind = {organisms[x] : x for x in range(len(organisms))}
     gene_to_inds = map(lambda o: {gene_ls[o][x] : x for x in range(len(gene_ls[o]))}, range(len(organisms)))
     tf_to_inds = map(lambda o: {tf_ls[o][x] : x for x in range(len(tf_ls[o]))}, range(len(organisms)))
@@ -107,6 +110,7 @@ def priors_to_constraints(organisms, gene_ls, tf_ls, priors, lam):
     gene_to_inds = map(lambda o: {gene_ls[o][x] : x for x in range(len(gene_ls[o]))}, range(len(organisms)))
     tf_to_inds = map(lambda o: {tf_ls[o][x] : x for x in range(len(tf_ls[o]))}, range(len(organisms)))
     constraints = []
+    
     for prior in priors:
         (gene1, gene2) = prior
         sub1 = org_to_ind[gene1.organism]
@@ -114,12 +118,25 @@ def priors_to_constraints(organisms, gene_ls, tf_ls, priors, lam):
         if not sub1 == sub2:
             print '!?!?!?!?!?'
             continue
+
         tfi = tf_to_inds[sub1][gene1.name]
         gi = gene_to_inds[sub2][gene2.name]
         constr = constraint(coefficient(sub1, tfi, gi), None, lam)
         constraints.append(constr)
     return constraints
 
+#adds a "prior" on transcription factors not self-regulating. This is an attempt to avoid degenerate learning of an identity matrix for that part of B
+def no_self_reg_constraints(organisms, gene_ls, tf_ls, lam):
+    constraints = []
+    gene_to_inds = map(lambda o: {gene_ls[o][x] : x for x in range(len(gene_ls[o]))}, range(len(organisms)))
+    tf_to_inds = map(lambda o: {tf_ls[o][x] : x for x in range(len(tf_ls[o]))}, range(len(organisms)))
+
+    for subi, org in enumerate(organisms):
+        for tfi, tf in enumerate(tf_ls[subi]):
+            gi = gene_to_inds[subi][tf]
+            constr = constraint(coefficient(subi, tfi, gi), None, lam)
+            constraints.append(constr)
+    return constraints
 
 #SECTION: --------CODE FOR ADJUSTING CONSTRAINTS---------
 
@@ -270,10 +287,14 @@ def direct_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, it):
 #YS: list of gene expression matrices
 #Orth: list of lists of one_genes
 #priors: list of lists of one_gene pairs
-def solve_ortho_direct(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors,lamP, lamR, lamS, adjust=False):
+def solve_ortho_direct(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors,lamP, lamR, lamS, adjust=False, self_reg_pen = 0):
+    
+    
     ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
     fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
-    
+    if self_reg_pen:
+        self_con = no_self_reg_constraints(organisms, gene_ls, tf_ls, lamR * self_reg_pen)
+
     Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)    
     return Bs
 
@@ -292,18 +313,18 @@ def solve_ortho_direct_scad(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lam
 #ridge_constraints: ridge regression constraints. constraints not mentioned are assumed to exist with lam=lambdaR
 #it: number of iterations to run
 def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, adjust=False):
-
+    
     (coeff_l, con_l) = factor_constraints_columns(Xs, Ys, fuse_constraints)
     
     Bs = []
-        
+    
     #Initialize matrices to hold solutions
     for i in range(len(Xs)):
         Bs.append(np.zeros((Xs[i].shape[1], Ys[i].shape[1])))
-    print 'starting solver'
+    #print 'starting solver'
     #iterate over constraint sets
     for f in range(len(coeff_l)):
-        print('\r working on subproblem: %d'%f), #!?!?!?!
+        #print('\r working on subproblem: %d'%f), #!?!?!?!
         #get the coefficients and constraints associated with the current problem
         coefficients = coeff_l[f]
         constraints = con_l[f]
@@ -384,6 +405,7 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, ad
         X = np.vstack((diag_concat(X_l), P, I))
         y = np.vstack(Y_l)
         
+        
         Xsp = scipy.sparse.csr_matrix(X)
         
         ysp = scipy.sparse.csr_matrix(y)
@@ -422,55 +444,7 @@ def solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, s_it):
 #ridge_constraints: ridge regression constraints. constraints not mentioned are assumed to exist with lam=lambdaR
 #it: number of iterations to run
 def iter_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, it):
-    Bs = []
-    #set the initial guess (all zero)
-    for j in range(len(Xs)):
-        Bs.append(np.zeros((Xs[j].shape[1], Ys[j].shape[1])))
-    Bss = [Bs, map(lambda x: x.copy(), Bs)]
-        
-    for i in range(it):
-        cB = Bss[np.mod(i, 2)] #current B and other B
-        oB = Bss[np.mod(i+1, 2)]
-        lam_ramp = (1.0+i)/it #constant to multiply by lam
-        for s in range(len(Xs)):
-            X = Xs[s] #X, Y for current subproblem s
-            Y = Ys[s]
-            for c in range(X.shape[1]): #column of B we are solving
-                y = Y[:, [c]]
-                I = np.eye(X.shape[1])*lambdaR*lam_ramp
-                ypad_l = []
-                xpad_l = []
-                
-                
-                #add in the fusion constraints
-                for con in fuse_constraints:
-                    if con.c1.c == c and con.c1.sub == s:
-                        targ = oB[s][con.c2.r,con.c2.c]*con.lam*lam_ramp
-                        xpad_l.append(np.zeros((1,X.shape[1])))
-                        ypad_l.append(targ)
-                        xpad_l[-1][0, con.c1.r] = con.lam*lam_ramp
-                        xpad_l[-1][0, con.c2.r] = -con.lam*lam_ramp
-                if len(xpad_l):
-                    xpad = np.vstack(xpad_l)
-                else:
-                    xpad = np.zeros((0, X.shape[1]))
-                #now we add in zeros for the ridge
-                ypad_l.append(np.zeros((X.shape[1], 1)))
-                ypad = np.vstack(ypad_l)
-                #add in the ridge constraints
-                for con in ridge_constraints:
-                    if con.c1.c == c and con.c1.sub == s:
-                        I[con.r, con.r] = con.lam*lam_ramp
-                    
-                F = np.vstack((X, xpad, I))
-                p = np.vstack((y, ypad))
-                #we solve b that minimizes Fb = p
-                
-                (b, resid, rank, sing) = np.linalg.lstsq(F, p)
-                
-                cB[j][:, [c]] = b
-    return Bss[np.mod(it,2)]
-
+    print 'nope'
 #this code cuts up columns by depth first search
 #returns a list of lists of coefficients associated with each subproblem
 #and a list of lists of constraints associated with each subproblem
@@ -540,5 +514,5 @@ def factor_constraints_columns(Xs, Ys, constraints):
                         cons.append(con)
         coeffs_l.append(coeffs)
         cons_l.append(cons)
-    print '\ndone: %d subproblems, %d columns'%(len(coeffs_l), len(columns))
+    #print '\ndone: %d subproblems, %d columns'%(len(coeffs_l), len(columns))
     return (coeffs_l, cons_l)
