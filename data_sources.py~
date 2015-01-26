@@ -538,11 +538,11 @@ def generate_faulty_priors(B, genes, tfs, falsepos, falseneg):
     return priors[0:(len(priors) - num_to_remove)] + fakepriors[0:num_to_add]
 
 
-def generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, falsepos, falseneg):
+def generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, organisms, falsepos, falseneg):
     #make a list of sets containing gene fusion groups to prevent from adding false orths that result in unduly large fusion groups
 
-    num_to_remove = int(falseneg * len(orth))
-    num_to_add = int((len(priors) - num_to_remove)/(1-falsepos))
+    num_to_remove = int(falseneg * len(orths))
+    num_to_add = int((len(orths) - num_to_remove)/(1-falsepos))
 
     orth_genes = set()
     for orth in orths:
@@ -567,7 +567,7 @@ def generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, falsepos, falseneg):
         if len(to_add) == num_to_add:
             break
 
-    return orth[0:(len(orths) - num_to_remove)] + to_add
+    return orths[0:(len(orths) - num_to_remove)] + to_add
 
 
     
@@ -575,7 +575,7 @@ def generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, falsepos, falseneg):
 
 
 #writes fake data, assumes some reasonable defaults
-def write_fake_data1(out_dir=None, tfg_count1=(5,10), tfg_count2=(5,10), N1=10, N2=10, max_grp_size=2, pct_fused=1.0, fuse_std=0.5, sparse=0.0, organisms = ['uno','dos'], prior_falsepos=0.0, prior_falseneg=0.0, measure_noise1=0.1, measure_noise2=0.1):
+def write_fake_data1(out_dir=None, tfg_count1=(5,10), tfg_count2=(5,10), N1=10, N2=10, max_grp_size=2, pct_fused=1.0, fuse_std=0.5, sparse=0.0, organisms = ['uno','dos'], prior_falsepos=0.0, prior_falseneg=0.0, orth_falsepos=0.0, orth_falseneg=0.0, measure_noise1=0.1, measure_noise2=0.1):
 
     (B1, B2, orths, genes1, tfs1, genes2, tfs2) = fuse_bs_orth(tfg_count1, tfg_count2, max_grp_size, pct_fused, fuse_std, sparse, organisms)
 
@@ -583,7 +583,7 @@ def write_fake_data1(out_dir=None, tfg_count1=(5,10), tfg_count2=(5,10), N1=10, 
     
     (x1, y1) = generate_from_linear(N1, B1, measure_noise1)
     (x2, y2) = generate_from_linear(N2, B2, measure_noise2)
-    #orths = generate_faulty_orth(orth, genes1, tfs1, genes2, tfs2)
+    orths = generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, organisms, orth_falsepos, orth_falseneg)
     
     (genes1c, expr1) = concat_tfs_genes(genes1, tfs1, x1, y1)
     (genes2c, expr2) = concat_tfs_genes(genes2, tfs2, x2, y2)
@@ -712,3 +712,31 @@ def load_network(net_fn):
         net[g, :] = targets
     return (net.T, genes, tfs)
 
+#writes real data to a standard formatted folder. ONLY RUN ONCE!
+#if you need to run again, change f.write('%s\t%s\t%s\n' % (tf, gene, sign)) to f.write('%s\t%s\t%s\n' % (tf.name, gene.name, sign))
+ to write_priors
+def voodoo():
+    sub = subt()
+    anth = anthr()
+    
+    (bs_e, bs_t, bs_genes, bs_tfs) = sub.load_data()
+    (ba_e, ba_t, ba_genes, ba_tfs) = anth.load_data()
+
+    (bs_priors, bs_sign) = sub.get_priors()
+    (ba_priors, ba_sign) = anth.get_priors()
+    orths = ba_bs_orth()
+    
+    out_dir = os.path.join('data','bacteria_standard')
+    os.mkdir(out_dir)
+    write_expr_mat(out_dir+os.sep+'expression1', bs_e, bs_genes)
+    write_expr_mat(out_dir+os.sep+'expression2', ba_e, ba_genes)
+    write_priors(out_dir+os.sep+'priors1',bs_priors)
+    write_priors(out_dir+os.sep+'priors2',ba_priors)
+    write_tfnames(out_dir+os.sep+'tfnames1',bs_tfs)
+    write_tfnames(out_dir+os.sep+'tfnames2',ba_tfs)
+    write_orth(out_dir+os.sep+'orth', orths)
+    f = file(out_dir+os.sep+'description', 'w')
+    f.write('organism1\t%s\norganism2\t%s' % ('B_subtilis','B_anthracis'))
+    f.close()
+
+    

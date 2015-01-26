@@ -102,11 +102,15 @@ def cv_model1(data_fn, lamP, lamR, lamS, k, solver, reverse=False):
         R21 += prediction_error(t1_te, Bs[0], e1_te, 'R2')
         R22 += prediction_error(t2_te, Bs[1], e2_te, 'R2')
 
-        aupr1 += eval_network_pr(Bs[0], genes1, tfs1, priors1)
-        aupr2 += eval_network_pr(Bs[1], genes2, tfs2, priors2)
+        if len(priors1):
+            aupr1 += eval_network_pr(Bs[0], genes1, tfs1, priors1)
+        if len(priors2):
+            aupr2 += eval_network_pr(Bs[1], genes2, tfs2, priors2)
 
-        auroc1 += eval_network_roc(Bs[0], genes1, tfs1, priors1)
-        auroc2 += eval_network_roc(Bs[1], genes2, tfs2, priors2)
+        if len(priors1):
+            auroc1 += eval_network_roc(Bs[0], genes1, tfs1, priors1)
+        if len(priors2):        
+            auroc2 += eval_network_roc(Bs[1], genes2, tfs2, priors2)
 
     params_str = 'simple lamP=%f lamR=%f lamS=%f' % (lamP, lamR, lamS)
     
