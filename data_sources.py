@@ -548,7 +548,7 @@ def generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, organisms, falsepos,
     # f = add / (base + add)
     # f*base + f*add = add
     # f*base = (1+f)*add
-    num_to_add = 5
+    
     orth_genes = set()
     for orth in orths:
         orth_genes.add(orth[0])
@@ -566,8 +566,7 @@ def generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, organisms, falsepos,
 
     to_add = []
     for candidate_orth in all_possible_orths:
-        print candidate_orth
-        print orth_genes
+    
         if len(to_add) == num_to_add:
             break
         if candidate_orth[0] in orth_genes or candidate_orth[1] in orth_genes:
