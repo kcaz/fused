@@ -428,7 +428,7 @@ def build_orth(genes1, genes2, max_grp_size, pct_fused, omap, organisms, shuffle
         random.shuffle(genes1)
         random.shuffle(genes2)
     
-    amt_fused = np.round((len(genes1)+len(genes2))*pct_fused)
+    amt_fused = np.floor((len(genes1)+len(genes2))*pct_fused) #round down
     ind1 = 0
     ind2 = 0
     while ind1 + ind2 < amt_fused:
@@ -551,15 +551,16 @@ def generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, organisms, falsepos,
         orth_genes.add(orth[1])
     
     all_possible_orths = []
+    
     for gene1 in genes1:
         for gene2 in genes2:
             all_possible_orths.append((fr.one_gene(name=gene1, organism = organisms[0]), fr.one_gene(name=gene2, organism = organisms[1])))
-    for tf1 in genes1:
-        for tf2 in genes2:
+    for tf1 in tfs1:
+        for tf2 in tfs2:
             all_possible_orths.append((fr.one_gene(name=tf1, organism = organisms[0]), fr.one_gene(name=tf2, organism = organisms[1])))
     random.shuffle(all_possible_orths)
     random.shuffle(orths)
-
+    
     to_add = []
     for candidate_orth in all_possible_orths:
     
@@ -587,7 +588,7 @@ def write_fake_data1(out_dir=None, tfg_count1=(5,10), tfg_count2=(5,10), N1=10, 
     (x1, y1) = generate_from_linear(N1, B1, measure_noise1)
     (x2, y2) = generate_from_linear(N2, B2, measure_noise2)
     orths = generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, organisms, orth_falsepos, orth_falseneg)
-    
+    print orths
     (genes1c, expr1) = concat_tfs_genes(genes1, tfs1, x1, y1)
     (genes2c, expr2) = concat_tfs_genes(genes2, tfs2, x2, y2)
     #(genes1c, expr1) = (genes1, x1)

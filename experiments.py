@@ -187,18 +187,18 @@ def test_2coeff_fuse_H():
         os.mkdir(out)
 
     N = 10
-    #ds.write_fake_data1(out_dir=out, N1=N,N2=N,tfg_count1=(2,1),tfg_count2=(2,1),sparse=0.0,fuse_std=0.0,measure_noise1=0.3,measure_noise2=0.3)
+    ds.write_fake_data1(out_dir=out, N1=N,N2=N,tfg_count1=(2,1),tfg_count2=(2,1),sparse=0.0,fuse_std=0.0,measure_noise1=0.3,measure_noise2=0.3, pct_fused=0.5, orth_falsepos=0.99)#think there are orths that are not
     
 
     (br1, genes1, tfs1) = ds.load_network(os.path.join(out, 'beta1'))
     (br2, genes2, tfs2) = ds.load_network(os.path.join(out, 'beta2'))
-    plt.plot(br1[0,2], br1[1,2], '*',c=[0.5,0,0.5],markersize=30)
+    plt.plot(br1[0,2], br1[1,2], '*',c='r',markersize=30)
     
-    plt.plot(br2[0,2], br2[1,2], '*',c=[0.5,0,0.5],markersize=30)
+    plt.plot(br2[0,2], br2[1,2], '*',c='b',markersize=30)
     
     for lamS in lamSs:
     
-    fg.cv_model1(data_fn = out, lamP=lamPs[0], lamR=lamRs[0], lamS=lamSs[i], k= 10)
+        #fg.cv_model1(data_fn = out, lamP=lamPs[0], lamR=lamRs[0], lamS=lamSs[i], k= 10)
         (b1, b2) = fg.fit_model(out, lamPs[0], lamRs[0], lamS)
         plt.plot(b1[0,2], b1[1,2], 'or',markersize=20)
         plt.plot(b2[0,2], b2[1,2], 'ob',markersize=20)
