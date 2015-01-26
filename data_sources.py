@@ -459,7 +459,8 @@ def build_orth(genes1, genes2, max_grp_size, pct_fused, omap, organisms, shuffle
 
 #TO THE BEST OF MY KNOWLEDGE THIS IS WHAT HAPPENS. this function builds two bata matrices, with dims specified by b1/tfg_count2. pct_fused percent of genes and TFs are (separately) assigned to orthology groups of size 2-max_grp_size (sampled uniformly). Coefficientsa are assigned value from standard normal distributions. Coefficients that are fused (that is, both gene and tf are fused) are assigned to the same value, perturbed by fuse_std. Sparse specifies the proportion of fused groups of coefficients (including groups of size 1) that are set to 0
 #NOTE: tfg_count1 is the number of tfs and non-tf genes in a tuple
-def fuse_bs_orth(tfg_count1, tfg_count2, max_grp_size, pct_fused, fuse_std, sparse, organisms):
+#shuffle - do you shuffle the order of genes??
+def fuse_bs_orth(tfg_count1, tfg_count2, max_grp_size, pct_fused, fuse_std, sparse, organisms,shuffle=False):
     #create empty expression matrices
     b1 = np.nan * np.ones(tfg_count1)
     b2 = np.nan * np.ones(tfg_count2)
@@ -470,8 +471,8 @@ def fuse_bs_orth(tfg_count1, tfg_count2, max_grp_size, pct_fused, fuse_std, spar
     genes1 = map(lambda x: organisms[0]+'g'+str(x), range(b1.shape[0], b1.shape[0]+b1.shape[1]))
     genes2 = map(lambda x: organisms[1]+'g'+str(x), range(b2.shape[0], b2.shape[0]+b2.shape[1]))
     omap = dict()
-    build_orth(tfs1, tfs2, max_grp_size, pct_fused, omap, organisms,shuffle=False)
-    build_orth(genes1, genes2, max_grp_size, pct_fused, omap, organisms,shuffle=False)
+    build_orth(tfs1, tfs2, max_grp_size, pct_fused, omap, organisms,shuffle=shuffle)
+    build_orth(genes1, genes2, max_grp_size, pct_fused, omap, organisms,shuffle=shuffle)
     orths = omap_to_orths(omap)
     bs = [b1, b2]
     genes = [genes1, genes2]
@@ -543,11 +544,6 @@ def generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, organisms, falsepos,
 
     num_to_remove = int(falseneg * len(orths))
     num_to_add = int(falsepos*(len(orths) - num_to_remove)/(1-falsepos))
-    #print falsepos
-    #print num_to_add
-    # f = add / (base + add)
-    # f*base + f*add = add
-    # f*base = (1+f)*add
     
     orth_genes = set()
     for orth in orths:
@@ -581,12 +577,12 @@ def generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, organisms, falsepos,
 
 
 
+
+
 #writes fake data, assumes some reasonable defaults
 def write_fake_data1(out_dir=None, tfg_count1=(5,10), tfg_count2=(5,10), N1=10, N2=10, max_grp_size=2, pct_fused=1.0, fuse_std=0.5, sparse=0.0, organisms = ['uno','dos'], prior_falsepos=0.0, prior_falseneg=0.0, orth_falsepos=0.0, orth_falseneg=0.0, measure_noise1=0.1, measure_noise2=0.1):
 
     (B1, B2, orths, genes1, tfs1, genes2, tfs2) = fuse_bs_orth(tfg_count1, tfg_count2, max_grp_size, pct_fused, fuse_std, sparse, organisms)
-
-
     
     (x1, y1) = generate_from_linear(N1, B1, measure_noise1)
     (x2, y2) = generate_from_linear(N2, B2, measure_noise2)
@@ -634,7 +630,7 @@ def write_fake_data1(out_dir=None, tfg_count1=(5,10), tfg_count2=(5,10), N1=10, 
 #NOTE: this requires that genes and tfs have disjoint names.
 def concat_tfs_genes(genes, tfs, x, y):
     
-    expr_mat = np.hstack((y, x))
+    expr_mat = np.hstack((x,y))
     #check if they have disjoint names
     if len(set(genes).intersection(set(tfs))):
         print 'WAKA WAKA WAKA ALERT YOU HAVE GENES AND TFS WITH THE SAME NAMES'

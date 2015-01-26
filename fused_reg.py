@@ -447,7 +447,7 @@ def scad(Bs_init, fuse_constraints, lamS, a):
         b_init_2 = Bs_init[con.c2.sub][con.c2.r, con.c2.c]
         theta_init = np.abs(b_init_1 - b_init_2)
         olamS = con.lam
-        if theta_init < 0.00001 or lamS < 0.00001:#avoid numerical problems?
+        if theta_init < 0.000001 or lamS < 0.000001:#avoid numerical problems?
             nlamS = 0
         elif theta_init <= lamS:
             nlamS = lamS/(2*theta_init)

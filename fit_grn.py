@@ -36,6 +36,34 @@ def test_bacteria(lamP, lamR, lamS):
     return Bs
 
 
+def fit_model(data_fn, lamP, lamR, lamS, solver='solve_ortho_direct',special_args=None):
+    ds1 = ds.standard_source(data_fn,0)
+    ds2 = ds.standard_source(data_fn,1)
+    orth_fn = os.path.join(data_fn, 'orth')
+
+    organisms = [ds1.name, ds2.name]
+    orth = ds.load_orth(orth_fn, organisms)
+    (priors1, signs1) = ds1.get_priors()
+    (priors2, signs2) = ds2.get_priors()
+
+    (e1_tr, t1_tr, genes1, tfs1) = ds1.load_data()
+    (e2_tr, t2_tr, genes2, tfs2) = ds2.load_data()
+
+        # jam things together
+    Xs = [t1_tr, t2_tr]
+    Ys = [e1_tr, e2_tr]
+    
+    genes = [genes1, genes2]
+    tfs = [tfs1, tfs2]
+    priors = priors1 + priors2
+
+    if solver == 'solve_ortho_direct':
+        Bs = fl.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
+    if solver == 'solve_ortho_direct_scad':
+        Bs = fl.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, s_it = special_args['s_it'])
+    
+    return Bs
+
 #runs the basic model with specified parameters under k-fold cross-validation, and stores a number of metrics
 #k: the number of cv folds
 #reverse: train on the little dude (reverse train and test)
@@ -95,7 +123,7 @@ def cv_model1(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_
         if solver == 'solve_ortho_direct_scad':
             Bs = fl.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, s_it = special_args['s_it'])
         
-        
+
         mse1 += prediction_error(t1_te, Bs[0], e1_te, 'mse')
         mse2 += prediction_error(t2_te, Bs[1], e2_te, 'mse')
 

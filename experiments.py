@@ -117,3 +117,98 @@ def studentseminar():
     plt.plot(lamSs, errors, 'ro')
     plt.savefig(os.path.join(os.path.join('data','bacteria_standard','studentseminar','fig1')))
     plt.figure()
+
+
+#generates two fused beta vectors, with a fusion constraint on each pair.
+#plots constraints after scad adjustment
+def test_scad1(lamS=1, a=3.7):
+    b1 = np.linspace(0,5,100)[:, None] 
+    b2 = np.zeros(b1.shape)
+
+    #(Bs_init, fuse_constraints, lamS, a):
+    
+    constraints = []
+    for i in range(b1.shape[0]):
+        con = fr.constraint(fr.coefficient(0,i,0), fr.coefficient(1,i,0), lamS)
+        constraints.append(con)
+    new_cons = fr.scad([b1, b2], constraints, lamS, a)
+    new_con_val = np.array(map(lambda x: x.lam, new_cons))
+    plt.plot(b1, new_con_val)
+    plt.show()
+
+
+
+#tests fusion visually using a pair of similar two-coefficient networks
+def test_2coeff_fuse():
+    lamPs = np.array([1])
+    lamRs = np.array([0.1])
+    lamSs = np.linspace(0,2,10)
+    
+    out = os.path.join('data','fake_data','2coeff_fuse')
+    if not os.path.exists(out):
+        os.mkdir(out)
+
+    N = 10
+    #ds.write_fake_data1(out_dir=out, N1=N,N2=N,tfg_count1=(2,1),tfg_count2=(2,1),sparse=0.0,fuse_std=0.0,measure_noise1=0.3,measure_noise2=0.3)
+    
+
+    (br1, genes1, tfs1) = ds.load_network(os.path.join(out, 'beta1'))
+    (br2, genes2, tfs2) = ds.load_network(os.path.join(out, 'beta2'))
+    plt.plot(br1[0,2], br1[1,2], '*',c=[0.5,0,0.5],markersize=30)
+    
+    plt.plot(br2[0,2], br2[1,2], '*',c=[0.5,0,0.5],markersize=30)
+    
+    for lamS in lamSs:
+    
+    #fg.cv_model1(data_fn = out, lamP=lamPs[0], lamR=lamRs[0], lamS=lamSs[i], k= 10)
+        (b1, b2) = fg.fit_model(out, lamPs[0], lamRs[0], lamS)
+        plt.plot(b1[0,2], b1[1,2], 'or',markersize=20)
+        plt.plot(b2[0,2], b2[1,2], 'ob',markersize=20)
+        #print b1
+        #print br1
+
+    
+    plt.rcParams.update({'font.size': 18})
+    
+    plt.xlabel('coefficient1')
+    plt.ylabel('coefficient2')
+    plt.show()
+
+
+#tests fusion visually using a pair of similar two-coefficient networks
+#this network only has 50% ortho coverage
+def test_2coeff_fuse_H():
+    lamPs = np.array([1])
+    lamRs = np.array([0.1])
+    lamSs = np.linspace(0,2,10)
+    
+    out = os.path.join('data','fake_data','2coeff_fuse_H')
+    if not os.path.exists(out):
+        os.mkdir(out)
+
+    N = 10
+    #ds.write_fake_data1(out_dir=out, N1=N,N2=N,tfg_count1=(2,1),tfg_count2=(2,1),sparse=0.0,fuse_std=0.0,measure_noise1=0.3,measure_noise2=0.3)
+    
+
+    (br1, genes1, tfs1) = ds.load_network(os.path.join(out, 'beta1'))
+    (br2, genes2, tfs2) = ds.load_network(os.path.join(out, 'beta2'))
+    plt.plot(br1[0,2], br1[1,2], '*',c=[0.5,0,0.5],markersize=30)
+    
+    plt.plot(br2[0,2], br2[1,2], '*',c=[0.5,0,0.5],markersize=30)
+    
+    for lamS in lamSs:
+    
+    fg.cv_model1(data_fn = out, lamP=lamPs[0], lamR=lamRs[0], lamS=lamSs[i], k= 10)
+        (b1, b2) = fg.fit_model(out, lamPs[0], lamRs[0], lamS)
+        plt.plot(b1[0,2], b1[1,2], 'or',markersize=20)
+        plt.plot(b2[0,2], b2[1,2], 'ob',markersize=20)
+        #print b1
+        #print br1
+
+    
+    plt.rcParams.update({'font.size': 18})
+    
+    plt.xlabel('coefficient1')
+    plt.ylabel('coefficient2')
+    plt.show()
+    
