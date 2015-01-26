@@ -532,7 +532,7 @@ def generate_faulty_priors(B, genes, tfs, falsepos, falseneg):
             if B[r, c] == 0:
                 fakepriors.append((tfs[r], genes[c]))
     num_to_remove = int(falseneg * len(priors))
-    num_to_add = int((len(priors) - num_to_remove)/(1-falsepos))    
+    num_to_add = int(falsepos*(len(priors) - num_to_remove)/(1-falsepos))    
     random.shuffle(priors)
     random.shuffle(fakepriors)
     return priors[0:(len(priors) - num_to_remove)] + fakepriors[0:num_to_add]
@@ -542,12 +542,17 @@ def generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, organisms, falsepos,
     #make a list of sets containing gene fusion groups to prevent from adding false orths that result in unduly large fusion groups
 
     num_to_remove = int(falseneg * len(orths))
-    num_to_add = int((len(orths) - num_to_remove)/(1-falsepos))
-
+    num_to_add = int(falsepos*(len(orths) - num_to_remove)/(1-falsepos))
+    #print falsepos
+    #print num_to_add
+    # f = add / (base + add)
+    # f*base + f*add = add
+    # f*base = (1+f)*add
+    num_to_add = 5
     orth_genes = set()
     for orth in orths:
-        orth_genes.add(orths[0])
-        orth_genes.add(orths[1])
+        orth_genes.add(orth[0])
+        orth_genes.add(orth[1])
     
     all_possible_orths = []
     for gene1 in genes1:
@@ -561,11 +566,14 @@ def generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, organisms, falsepos,
 
     to_add = []
     for candidate_orth in all_possible_orths:
+        print candidate_orth
+        print orth_genes
+        if len(to_add) == num_to_add:
+            break
         if candidate_orth[0] in orth_genes or candidate_orth[1] in orth_genes:
             continue
         to_add.append(candidate_orth)
-        if len(to_add) == num_to_add:
-            break
+        
 
     return orths[0:(len(orths) - num_to_remove)] + to_add
 
@@ -663,6 +671,7 @@ def write_priors(outf, priors, signs=None):
         else:
             sign = signs[i]
         f.write('%s\t%s\t%s\n' % (tf, gene, sign))
+        #f.write('%s\t%s\t%s\n' % (tf.name, gene.name, sign))
     f.close()
 
 #write orth.

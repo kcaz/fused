@@ -40,8 +40,8 @@ def sanity1():
 
 def increase_data():
     repeats = 10
-    N_TF = 25
-    N_G = 1000
+    N_TF = 5
+    N_G = 20
     fixed_data_amt = 20
     data_amnts = [10, 20,30,40]
     lamSs = [0, 0.25,0.5,0.75,1]

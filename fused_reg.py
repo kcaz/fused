@@ -329,7 +329,7 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, ad
         coefficients = coeff_l[f]
         constraints = con_l[f]
         ridge_cons = []
-        
+        print 'subproblem with %d constraints' % len(constraints)
         coefficients_set = set(coefficients)
 
         for con in ridge_constraints:
@@ -405,7 +405,7 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, ad
         X = np.vstack((diag_concat(X_l), P, I))
         y = np.vstack(Y_l)
         
-        
+        print X.shape
         Xsp = scipy.sparse.csr_matrix(X)
         
         ysp = scipy.sparse.csr_matrix(y)
