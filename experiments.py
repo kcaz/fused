@@ -25,7 +25,7 @@ def sanity1():
             lamR = 0.1
             lamP = 1.0 #priors don't matter
             for j, lamS in enumerate(lamSs):
-                errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = True)
+                errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
                 errors[i, j] += errd['mse'][0]
     for i in range(len(len(data_amnts))):
         for j in range(len(lamSs)):
@@ -56,7 +56,7 @@ def increase_data():
             lamR = 0.1
             lamP = 1.0 #priors don't matter
             for j, lamS in enumerate(lamSs):
-                errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = True)
+                errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
                 errors[i, j] += errd['mse'][0]
     for i in range(len(data_amnts)):
         for j in range(len(lamSs)):
@@ -90,8 +90,12 @@ def test_scad():
         lamR = 0.1
         lamP = 1.0 #priors don't matter
         for j, lamS in enumerate(lamSs):
+<<<<<<< Updated upstream
             errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct_scad', reverse = True, special_args = {'s_it':1})
             #errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = True)
+=======
+            errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct_scad', reverse = True, cv_both = (True, True))
+>>>>>>> Stashed changes
             errors[i,j] = errd['mse'][0]
 
     for r, amnt in enumerate(amt_fused):
@@ -111,7 +115,7 @@ def studentseminar():
         out = os.path.join('data','bacteria_standard')
         lamR = 0.1
         lamP = 1.0 #priors don't matter
-        errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=N, k=10, solver='solve_ortho_direct', reverse = True)
+        errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=N, k=10, solver='solve_ortho_direct', reverse = True, cv_both = (True, False))
         errors[i] = errd['aupr'][0]
     
     plt.plot(lamSs, errors, 'ro')
