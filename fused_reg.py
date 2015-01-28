@@ -423,13 +423,51 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, ad
             end_ind = cums[co_i+1]
             
             Bs[co.sub][:, [co.c]] = b[start_ind:end_ind]
-        
-        
+                
     return Bs
 
-#iteratively adjusts fusion constraint weight to approximate saturating penalty
-def solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, s_it, special_args=None):
+
+def solve_mcp(Xs, Ys, fuse_con, ridge_con, lamR, lamS, s_it, special_args=None):    
+    if special_args and 'a' in special_args:
+        a = special_args['a']
+    else:   
+        a = 3.7
     
+    Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
+    for i in range(s_it-1):
+        Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
+        fuse_con = mcp(Bs, fuse_con, lamS, a=a)
+    
+    #plot_scad(Bs, fuse_con2)
+    
+    if special_args and 'orths' in special_args:
+        special_args['orths'] = fuse_con #backdoor!
+    return Bs
+
+#returns a new set of fusion constraints corresponding to a saturating penalty
+def mcp(Bs_init, fuse_constraints, lamS, lamW=None, a=0.5):
+    new_fuse_constraints = []
+    
+    for i in range(len(fuse_constraints)):
+        con = fuse_constraints[i]
+        b_init_1 = Bs_init[con.c1.sub][con.c1.r, con.c1.c]
+        b_init_2 = Bs_init[con.c2.sub][con.c2.r, con.c2.c]
+        theta_init = np.abs(b_init_1 - b_init_2)
+
+        if np.abs(theta_init) <= lamS*a:
+            nlamS = lamS - (np.abs(theta_init)/a)
+
+        else:
+            nlamS = 0
+
+        new_con = constraint(con.c1, con.c2, nlamS)
+        new_fuse_constraints.append(new_con)
+    return new_fuse_constraints
+
+
+
+#iteratively adjusts fusion constraint weight to approximate saturating penalty
+def solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, s_it, special_args=None):    
     if special_args and 'a' in special_args:
         a = special_args['a']
     else:
