@@ -169,14 +169,14 @@ def test_2coeff_fuse():
     
     #fg.cv_model1(data_fn = out, lamP=lamPs[0], lamR=lamRs[0], lamS=lamSs[i], k= 10)
         (b1, b2) = fg.fit_model(out, lamPs[0], lamRs[0], lamS)
-        plt.plot(b1[0,2], b1[1,2], 'or',markersize=20*lamS)
-        plt.plot(b2[0,2], b2[1,2], 'ob',markersize=20*lamS)
+        plt.plot(b1[0,2], b1[1,2], 'or',markersize=5+10*lamS)
+        plt.plot(b2[0,2], b2[1,2], 'ob',markersize=5+10*lamS)
         #print b1
         #print br1
 
     
     plt.rcParams.update({'font.size': 18})
-    
+    plt.axis('equal')
     plt.xlabel('coefficient1')
     plt.ylabel('coefficient2')
     plt.show()
@@ -207,14 +207,14 @@ def test_2coeff_fuse_H():
     
         #fg.cv_model1(data_fn = out, lamP=lamPs[0], lamR=lamRs[0], lamS=lamSs[i], k= 10)
         (b1, b2) = fg.fit_model(out, lamPs[0], lamRs[0], lamS)
-        plt.plot(b1[0,2], b1[1,2], 'or',markersize=20*lamS)
-        plt.plot(b2[0,2], b2[1,2], 'ob',markersize=20*lamS)
+        plt.plot(b1[0,2], b1[1,2], 'or',markersize=5+10*lamS)
+        plt.plot(b2[0,2], b2[1,2], 'ob',markersize=5+10*lamS)
         #print b1
         #print br1
 
     
     plt.rcParams.update({'font.size': 18})
-    
+    plt.axis('equal')
     plt.xlabel('coefficient1')
     plt.ylabel('coefficient2')
     plt.show()
@@ -245,14 +245,14 @@ def test_2coeff_fuse1B():
     
     #fg.cv_model1(data_fn = out, lamP=lamPs[0], lamR=lamRs[0], lamS=lamSs[i], k= 10)
         (b1, b2) = fg.fit_model(out, lamPs[0], lamRs[0], lamS)
-        plt.plot(b1[0,2], b1[1,2], 'or',markersize=20*lamS)
-        plt.plot(b2[0,2], b2[1,2], 'ob',markersize=20*lamS)
+        plt.plot(b1[0,2], b1[1,2], 'or',markersize=5+10*lamS)
+        plt.plot(b2[0,2], b2[1,2], 'ob',markersize=5+10*lamS)
         #print b1
         #print br1
 
     
     plt.rcParams.update({'font.size': 18})
-    
+    plt.axis('equal')
     plt.xlabel('coefficient1')
     plt.ylabel('coefficient2')
     plt.show()
@@ -264,7 +264,7 @@ def test_2coeff_fuse1B():
 def test_2coeff_fuse_HS():
     lamPs = np.array([1])
     lamRs = np.array([0.1])
-    lamSs = np.linspace(0,1,10)
+    lamSs = 1.0-np.linspace(0,1,10)
     
     out = os.path.join('data','fake_data','2coeff_fuse_HS')
     if not os.path.exists(out):
@@ -276,20 +276,25 @@ def test_2coeff_fuse_HS():
 
     (br1, genes1, tfs1) = ds.load_network(os.path.join(out, 'beta1'))
     (br2, genes2, tfs2) = ds.load_network(os.path.join(out, 'beta2'))
-    plt.plot(br1[0,2], br1[1,2], '*',c='r',markersize=30)
+    plt.plot(br1[0,2], br1[1,2], '*',c=[1.0,0,0],markersize=30)
     
-    plt.plot(br2[0,2], br2[1,2], '*',c='b',markersize=30)
+    plt.plot(br2[0,2], br2[1,2], '*',c=[0,0,1.0],markersize=30)
     #we want to grab the fusion constraints that affect the coefficients we care about, specifically 0->2 <--> 0'->2', 1->2 <--> 1' -> 2'
     def assemble_orths(orths):
+        fusemat = np.zeros((2,1))
+        
         for orth in orths:
-            print '%d, %d fused to %d, %d - lamS = %f' %(orth.c1.r, orth.c1.c, orth.c2.r, orth.c2.c, orth.lam)
+            if orth.c1.sub == 1 and orth.c1.c == 2:
+                fusemat[orth.c1.r, 0] = orth.lam
+                #print '%d, %d fused to %d, %d - lamS = %f' %(orth.c1.r, orth.c1.c, orth.c2.r, orth.c2.c, orth.lam)
+        print fusemat
     for lamS in lamSs:
         print 'SOLVING'
         #fg.cv_model1(data_fn = out, lamP=lamPs[0], lamR=lamRs[0], lamS=lamSs[i], k= 10)
         special_args = {'s_it':5, 'orths':None, 'a':1.50}
         (b1, b2) = fg.fit_model(out, lamPs[0], lamRs[0], lamS, solver='solve_ortho_direct_scad',special_args = special_args)
-        plt.plot(b1[0,2], b1[1,2], 'or',markersize=10*lamS)
-        plt.plot(b2[0,2], b2[1,2], 'ob',markersize=10*lamS)
+        plt.plot(b1[0,2], b1[1,2], 'or',markersize=0.5*(10+20*lamS))
+        plt.plot(b2[0,2], b2[1,2], 'ob',markersize=0.5*(10+20*lamS))
         
         assemble_orths(special_args['orths'])
         #print b1
@@ -300,4 +305,56 @@ def test_2coeff_fuse_HS():
     plt.axis('equal')
     plt.xlabel('coefficient1')
     plt.ylabel('coefficient2')
-    plt.show()
+    plt.savefig(os.path.join(out,'fig1'))
+    #plt.show()
+
+
+#tests fusion visually using a pair of similar two-coefficient networks
+#this network only has 50% ortho coverage
+#NOW USES SCAD!
+def test_2coeff_fuse_HS2():
+    lamPs = np.array([1])
+    lamRs = np.array([0.1])
+    lamSs = 1.0-np.linspace(0,1,10)
+    n_tfs = 10
+    out = os.path.join('data','fake_data','2coeff_fuse_HS2')
+    if not os.path.exists(out):
+        os.mkdir(out)
+
+    N = 30
+    ds.write_fake_data1(out_dir=out, N1=N,N2=N,tfg_count1=(n_tfs,1),tfg_count2=(n_tfs,1),sparse=0.0,fuse_std=0.0,measure_noise1=0.0,measure_noise2=0.0, pct_fused=0.5, orth_falsepos=0.99)#think there are orths that are not
+    
+
+    (br1, genes1, tfs1) = ds.load_network(os.path.join(out, 'beta1'))
+    (br2, genes2, tfs2) = ds.load_network(os.path.join(out, 'beta2'))
+    plt.plot(br1[0,2], br1[1,2], '*',c=[1.0,0,0],markersize=30)
+    
+    plt.plot(br2[0,2], br2[1,2], '*',c=[0,0,1.0],markersize=30)
+    #we want to grab the fusion constraints that affect the coefficients we care about, specifically 0->2 <--> 0'->2', 1->2 <--> 1' -> 2'
+    def assemble_orths(orths):
+        fusemat = np.zeros((2,1))
+        
+        for orth in orths:
+            if orth.c1.sub == 1 and orth.c1.c == 2:
+                fusemat[orth.c1.r, 0] = orth.lam
+                #print '%d, %d fused to %d, %d - lamS = %f' %(orth.c1.r, orth.c1.c, orth.c2.r, orth.c2.c, orth.lam)
+        print fusemat
+    for lamS in lamSs:
+        print 'SOLVING'
+        #fg.cv_model1(data_fn = out, lamP=lamPs[0], lamR=lamRs[0], lamS=lamSs[i], k= 10)
+        special_args = {'s_it':5, 'orths':None, 'a':1.50}
+        (b1, b2) = fg.fit_model(out, lamPs[0], lamRs[0], lamS, solver='solve_ortho_direct_scad',special_args = special_args)
+        plt.plot(b1[0,n_tfs], b1[1,n_tfs], 'or',markersize=0.5*(10+20*lamS))
+        plt.plot(b2[0,n_tfs], b2[1,n_tfs], 'ob',markersize=0.5*(10+20*lamS))
+        
+        #assemble_orths(special_args['orths'])
+        #print b1
+        #print br1
+        
+    
+    plt.rcParams.update({'font.size': 18})
+    plt.axis('equal')
+    plt.xlabel('coefficient1')
+    plt.ylabel('coefficient2')
+    plt.savefig(os.path.join(out,'fig1'))
+    #plt.show()
