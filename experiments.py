@@ -169,7 +169,7 @@ def test_scad2():
         priors = priors1 + priors2
 
         Bs_unfused = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP=1.0, lamR=0.1, lamS=0)
-        new_fuse_constraints = fr.scad(Bs_unfused, fuse_constraints, lamS, lamW=None, a=3.7)
+        new_fuse_constraints = fr.scad(Bs_unfused, fuse_constraints, lamS, lamW=None, a=0.5)
 
         #get delta beta for each fusion constraint pair
         for pair in new_fuse_constraints:

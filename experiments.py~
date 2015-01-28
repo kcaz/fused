@@ -189,7 +189,7 @@ def test_scad2():
             c2 = pair.c2.c
             B1f = Bs_unfused[0][r1][c1]
             B2f = Bs_unfused[1][r2][c2]
-            fusionpenalty.append(lam*(B1f-B2f)**2)
+            fusionpenalty.append(s*(B1f-B2f)**2)
 
         plt.scatter(deltabeta, fusionpenalty)
         plt.xlabel('delta beta')
