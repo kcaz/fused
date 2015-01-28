@@ -25,7 +25,7 @@ def sanity1():
             lamR = 0.1
             lamP = 1.0 #priors don't matter
             for j, lamS in enumerate(lamSs):
-                errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = True)
+                errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
                 errors[i, j] += errd['mse'][0]
     for i in range(len(len(data_amnts))):
         for j in range(len(lamSs)):
@@ -56,7 +56,7 @@ def increase_data():
             lamR = 0.1
             lamP = 1.0 #priors don't matter
             for j, lamS in enumerate(lamSs):
-                errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = True)
+                errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
                 errors[i, j] += errd['mse'][0]
     for i in range(len(data_amnts)):
         for j in range(len(lamSs)):
@@ -78,25 +78,30 @@ def test_scad():
      
     N_TF = 10
     N_G = 200
-    amt_fused = [0, 0.5, 1.0]
+    amt_fused = 1.0
+    orth_err = [0,0.3,0.5,1.0]
     lamSs = [0, 0.5, 1]
     if not os.path.exists(os.path.join('data','fake_data','test_scad')):
         os.mkdir(os.path.join('data','fake_data','test_scad'))
     #iterate over how much fusion
-    errors = np.zeros((len(amt_fused), len(lamSs)))
-    for i, N in enumerate(amt_fused):
+    errors_scad = np.zeros((len(orth_err), len(lamSs)))
+    errors_l2 = np.zeros((len(orth_err), len(lamSs)))
+    for i, N in enumerate(orth_err):
         out = os.path.join('data','fake_data','test_scad','dat_'+str(N))
-        ds.write_fake_data1(N1 = 10*10, N2 = 10*10, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = N, orth_falsepos = 0.3, orth_falseneg = 0.3, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.1)
+        ds.write_fake_data1(N1 = 10*10, N2 = 10*10, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = N, orth_falseneg = N, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.1)
         lamR = 0.1
         lamP = 1.0 #priors don't matter
         for j, lamS in enumerate(lamSs):
-            errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct_scad', reverse = True, special_args = {'s_it':1})
-            #errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = True)
-            errors[i,j] = errd['mse'][0]
+            errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct_scad', reverse = True, special_args = {'s_it':20}, cv_both = (True, True))
+            errl = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
+            errors_scad[i,j] = errd['mse'][0]
+            errors_l2[i,j] = errl['mse'][0]
 
-    for r, amnt in enumerate(amt_fused):
-        plt.plot(lamSs, errors[r])
-    plt.legend(amt_fused)
+    for r, amnt in enumerate(orth_err):
+        plt.plot(lamSs, errors_scad[r,:])
+    for r, amnt in enumerate(orth_err):
+        plt.plot(lamSs, errors_l2[r,:],'--')
+    plt.legend(orth_err+orth_err)
     plt.savefig(os.path.join(os.path.join('data','fake_data','test_scad','fig1')))
     plt.figure()
 
@@ -111,7 +116,7 @@ def studentseminar():
         out = os.path.join('data','bacteria_standard')
         lamR = 0.1
         lamP = 1.0 #priors don't matter
-        errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=N, k=10, solver='solve_ortho_direct', reverse = True)
+        errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=N, k=10, solver='solve_ortho_direct', reverse = True, cv_both = (True, False))
         errors[i] = errd['aupr'][0]
     
     plt.plot(lamSs, errors, 'ro')

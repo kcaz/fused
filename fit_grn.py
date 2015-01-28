@@ -67,7 +67,7 @@ def fit_model(data_fn, lamP, lamR, lamS, solver='solve_ortho_direct',special_arg
 #runs the basic model with specified parameters under k-fold cross-validation, and stores a number of metrics
 #k: the number of cv folds
 #reverse: train on the little dude (reverse train and test)
-def cv_model1(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_args=None, reverse=False):
+def cv_model1(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_args=None, reverse=False, cv_both=(True,True)):
     ds1 = ds.standard_source(data_fn,0)
     ds2 = ds.standard_source(data_fn,1)
     orth_fn = os.path.join(data_fn, 'orth')
@@ -76,7 +76,7 @@ def cv_model1(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_
     orth = ds.load_orth(orth_fn, organisms)
     (mse1, mse2, R21, R22, aupr1, aupr2, auroc1, auroc2) = list(np.zeros(8))
 
-
+    
     folds1 = ds1.partition_data(k)
     folds2 = ds2.partition_data(k)
 
@@ -104,11 +104,18 @@ def cv_model1(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_
         
         
         #load train and test data
-        (e1_tr, t1_tr, genes1, tfs1) = ds1.load_data(f1_tr_c)
-        (e1_te, t1_te, genes1, tfs1) = ds1.load_data(f1_te_c)
-
-        (e2_tr, t2_tr, genes2, tfs2) = ds2.load_data(f2_tr_c)
-        (e2_te, t2_te, genes2, tfs2) = ds2.load_data(f2_te_c)
+        if cv_both[0]:
+            (e1_tr, t1_tr, genes1, tfs1) = ds1.load_data(f1_tr_c)
+            (e1_te, t1_te, genes1, tfs1) = ds1.load_data(f1_te_c)
+        else:
+            (e1_tr, t1_tr, genes1, tfs1) = ds1.load_data()
+            (e1_te, t1_te, genes1, tfs1) = ds1.load_data()
+        if cv_both[1]:
+            (e2_tr, t2_tr, genes2, tfs2) = ds2.load_data(f2_tr_c)
+            (e2_te, t2_te, genes2, tfs2) = ds2.load_data(f2_te_c)
+        else:
+            (e2_tr, t2_tr, genes2, tfs2) = ds2.load_data()
+            (e2_te, t2_te, genes2, tfs2) = ds2.load_data()
 
         # jam things together
         Xs = [t1_tr, t2_tr]
