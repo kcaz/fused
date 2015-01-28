@@ -4,6 +4,7 @@ import data_sources as ds
 import random
 from sklearn.metrics import roc_curve, auc, precision_recall_curve
 import os
+import collections
 #SECTION: ------------------UTILITY FUNCTIONS-----------------
 
 
@@ -84,7 +85,10 @@ def cv_model1(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_
     (priors1, signs1) = ds1.get_priors()
     (priors2, signs2) = ds2.get_priors()
     #initialize a bunch of things to accumulate over
+    
 
+    #clear the last_results output 
+    file(os.path.join(data_fn, 'last_results'),'w').close()
     for fold in range(k):
         #get conditions for current cross-validation fold
         f1_te_c = folds1[fold]
@@ -151,11 +155,16 @@ def cv_model1(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_
     
     result_str = '\t'.join(8*['%f']) % (mse1/k, mse2/k, R21/k, R22/k, aupr1/k, aupr2/k, auroc1/k, auroc2/k)
     print params_str + '\t' + result_str + '\n'
+
     if not os.path.exists(os.path.join(data_fn, 'results')):
         with open(os.path.join(data_fn, 'results'),'w') as outf:
             outf.write('params\tmse1\tmse2\tR21\tR22\taupr1\taupr2\tauroc1\tauroc2\n')
     with open(os.path.join(data_fn, 'results'),'a') as outf:
         outf.write(params_str + '\t' + result_str + '\n')
+    with open(os.path.join(data_fn, 'last_results'),'a') as outf:
+        outf.write('params\tmse1\tmse2\tR21\tR22\taupr1\taupr2\tauroc1\tauroc2\n')
+        outf.write(params_str + '\t' + result_str + '\n')
+
     ret_dict = {'mse':(mse1/k, mse2/k), 'R2':(R21/k, R22/k), 'aupr':(aupr1/k, aupr2/k),'auroc':(auroc1/k, auroc2/k)}
     return ret_dict
 #SECTION: -------------------------CODE FOR EVALUATING THE OUTPUT
@@ -262,3 +271,6 @@ def eval_network_roc(net, genes, tfs, priors):
     #   plt.show()
 
     return auroc
+
+
+            

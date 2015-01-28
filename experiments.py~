@@ -9,11 +9,11 @@ from matplotlib import pyplot as plt
 
 #In this experiment, we generate several data sets with a moderate number of TFs and genes. Fusion is total and noiseless. Measure performance as a function of lamS, and performance as a function of the amount of data. Plot both. This is a basic sanity check for fusion helping
 def sanity1():
-    repeats = 10
-    N_TF = 25
-    N_G = 1000
-    data_amnts = [10, 20,30,40]
-    lamSs = [0, 0.25,0.5,0.75,1]
+    repeats = 1
+    N_TF = 15
+    N_G = 100
+    data_amnts = [10, 20,30]
+    lamSs = [0, 0.5,1]
     if not os.path.exists(os.path.join('data','fake_data','sanity1')):
         os.mkdir(os.path.join('data','fake_data','sanity1'))
     #iterate over how much data to use
@@ -27,9 +27,9 @@ def sanity1():
             for j, lamS in enumerate(lamSs):
                 errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
                 errors[i, j] += errd['mse'][0]
-    for i in range(len(len(data_amnts))):
+    for i in range(len(data_amnts)):
         for j in range(len(lamSs)):
-            errors[i,j] == errors[i,j]/k
+            errors[i,j] == errors[i,j]/10
     plt.plot(errors.T)
     plt.legend(data_amnts)
     plt.savefig(os.path.join(os.path.join('data','fake_data','sanity1','fig1')))
@@ -38,13 +38,14 @@ def sanity1():
     plt.legend(lamSs)
     plt.savefig(os.path.join(os.path.join('data','fake_data','sanity1','fig2')))
 
+#shows performance as a function of the amount of  data in a secondary network for several values of lamS
 def increase_data():
     repeats = 10
     N_TF = 25
     N_G = 200
     fixed_data_amt = 20
     data_amnts = [10, 20,30,40]
-    lamSs = [0, 0.25,0.5,0.75,1]
+    lamSs = [0,1.0]#[0, 0.25,0.5,0.75,1]
     if not os.path.exists(os.path.join('data','fake_data','increasedata')):
         os.mkdir(os.path.join('data','fake_data','increasedata'))
     #iterate over how much data to use
@@ -71,6 +72,7 @@ def increase_data():
         plt.plot(lamSs, errors[:, c])
     plt.legend(lamSs)
     plt.savefig(os.path.join(os.path.join('data','fake_data','increasedata','fig2')))
+
 
 
 def test_scad():
@@ -167,22 +169,27 @@ def test_scad2():
         priors = priors1 + priors2
 
         Bs_unfused = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP=1.0, lamR=0.1, lamS=0)
-        Bs_fused = fr.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, orth, priors, s_it=5, lamP, lamR, lamS)
+        new_fuse_constraints = fr.scad(Bs_unfused, fuse_constraints, lamS, lamW=None, a=3.7)
 
         #get delta beta for each fusion constraint pair
-        for pair in fuse_constraints:
+        for pair in new_fuse_constraints:
             r1 = pair.c1.r
             c1 = pair.c1.c
             r2 = pair.c2.r
             c2 = pair.c2.c
-            B1 = Bs_unfused[0][r1][c1]
-            B2 = Bs_unfused[1][r2][c2]
-            deltabeta.append(B1-B2)
+            B1u = Bs_unfused[0][r1][c1]
+            B2u = Bs_unfused[1][r2][c2]
+            deltabeta.append(B1u-B2u)
             
-            
-            B1 = Bs_fused[0][r1][c1]
-            B2 = Bs_fused[1][r2][c2]
-            fusionpenalty.append(lamS*(B1-B2)**2)
+        for pair in new_fuse_constraints:
+            r1 = pair.c1.r
+            c1 = pair.c1.c
+            s = pair.lam
+            r2 = pair.c2.r
+            c2 = pair.c2.c
+            B1f = Bs_unfused[0][r1][c1]
+            B2f = Bs_unfused[1][r2][c2]
+            fusionpenalty.append(lam*(B1f-B2f)**2)
 
         plt.scatter(deltabeta, fusionpenalty)
         plt.xlabel('delta beta')
@@ -361,21 +368,25 @@ def test_2coeff_fuse_HS():
     plt.plot(br1[0,2], br1[1,2], '*',c='r',markersize=30)
     
     plt.plot(br2[0,2], br2[1,2], '*',c='b',markersize=30)
-    
+    #we want to grab the fusion constraints that affect the coefficients we care about, specifically 0->2 <--> 0'->2', 1->2 <--> 1' -> 2'
+    def assemble_orths(orths):
+        for orth in orths:
+            print '%d, %d fused to %d, %d - lamS = %f' %(orth.c1.r, orth.c1.c, orth.c2.r, orth.c2.c, orth.lam)
     for lamS in lamSs:
-    
+        print 'SOLVING'
         #fg.cv_model1(data_fn = out, lamP=lamPs[0], lamR=lamRs[0], lamS=lamSs[i], k= 10)
-        special_args = {'s_it':1, 'orths':None}
+        special_args = {'s_it':5, 'orths':None, 'a':1.50}
         (b1, b2) = fg.fit_model(out, lamPs[0], lamRs[0], lamS, solver='solve_ortho_direct_scad',special_args = special_args)
         plt.plot(b1[0,2], b1[1,2], 'or',markersize=10*lamS)
         plt.plot(b2[0,2], b2[1,2], 'ob',markersize=10*lamS)
-        print special_args['orths']
+        
+        assemble_orths(special_args['orths'])
         #print b1
         #print br1
-
+        
     
     plt.rcParams.update({'font.size': 18})
-    
+    plt.axis('equal')
     plt.xlabel('coefficient1')
     plt.ylabel('coefficient2')
     plt.show()

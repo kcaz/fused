@@ -423,41 +423,97 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, ad
             end_ind = cums[co_i+1]
             
             Bs[co.sub][:, [co.c]] = b[start_ind:end_ind]
-        
-        
+                
     return Bs
 
-#iteratively adjusts fusion constraint weight to approximate saturating penalty
-def solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, s_it, special_args=None):
-    fuse_con2 = fuse_con    
-    a = 1.0#1.5 #3.7 #!?
-    for i in range(s_it):
-        Bs = direct_solve_factor(Xs, Ys, fuse_con2, ridge_con, lamR)
-        
-        fuse_con2 = scad(Bs, fuse_con, lamS, a)
+
+def solve_mcp(Xs, Ys, fuse_con, ridge_con, lamR, lamS, s_it, special_args=None):    
+    if special_args and 'a' in special_args:
+        a = special_args['a']
+    else:   
+        a = 3.7
+    
+    Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
+    for i in range(s_it-1):
+        Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
+        fuse_con = mcp(Bs, fuse_con, lamS, a=a)
     
     #plot_scad(Bs, fuse_con2)
     
     if special_args and 'orths' in special_args:
-        special_args['orths'] = fuse_con2 #backdoor!
+        special_args['orths'] = fuse_con #backdoor!
     return Bs
 
-
 #returns a new set of fusion constraints corresponding to a saturating penalty
-def scad(Bs_init, fuse_constraints, lamS, a):
+def mcp(Bs_init, fuse_constraints, lamS, lamW=None, a=0.5):
     new_fuse_constraints = []
+    
     for i in range(len(fuse_constraints)):
         con = fuse_constraints[i]
         b_init_1 = Bs_init[con.c1.sub][con.c1.r, con.c1.c]
         b_init_2 = Bs_init[con.c2.sub][con.c2.r, con.c2.c]
         theta_init = np.abs(b_init_1 - b_init_2)
-        olamS = con.lam
-        if theta_init < 0.000001 or lamS < 0.000001:#avoid numerical problems?
-            nlamS = 0
-        elif theta_init <= lamS:
-            nlamS = lamS/(2*theta_init)
+
+        if np.abs(theta_init) <= lamS*a:
+            nlamS = lamS - (np.abs(theta_init)/a)
+
         else:
-            nlamS = lamS* max(0, ((a*lamS - theta_init)/((a-1)*lamS)))/(2*theta_init)
+            nlamS = 0
+
+        new_con = constraint(con.c1, con.c2, nlamS)
+        new_fuse_constraints.append(new_con)
+    return new_fuse_constraints
+
+
+
+#iteratively adjusts fusion constraint weight to approximate saturating penalty
+def solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, s_it, special_args=None):    
+    if special_args and 'a' in special_args:
+        a = special_args['a']
+    else:
+        a = 3.7
+    
+    Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
+    for i in range(s_it-1):
+        Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
+        fuse_con = scad(Bs, fuse_con, lamS, a=a)
+    
+    #plot_scad(Bs, fuse_con2)
+    
+    if special_args and 'orths' in special_args:
+        special_args['orths'] = fuse_con #backdoor!
+    return Bs
+
+def scad_prime(theta, lamS, a):
+    if theta < lamS:
+        return 1.0
+    else:
+        return max(0, (a*lamS - theta) / ((a-1)*theta))
+    
+def scad2_prime(theta, lamS, a):
+    
+    if theta < a/2:
+        return theta * lamS
+    if theta > a/2:
+        return max(0, lamS * (a/2 - theta))
+
+#returns a new set of fusion constraints corresponding to a saturating penalty
+def scad(Bs_init, fuse_constraints, lamS, lamW=None, a=3.7):
+    new_fuse_constraints = []
+    
+    for i in range(len(fuse_constraints)):
+        con = fuse_constraints[i]
+        b_init_1 = Bs_init[con.c1.sub][con.c1.r, con.c1.c]
+        b_init_2 = Bs_init[con.c2.sub][con.c2.r, con.c2.c]
+        theta_init = np.abs(b_init_1 - b_init_2)
+        #if theta_init is too small, don't want to cause numerical problems
+        if theta_init < 0.001 * (np.abs(b_init_1) + np.abs(b_init_2)):
+            nlamS = lamS
+        else:
+            nlamS = scad2_prime(theta_init, lamS, a) / theta_init
+        
+        
+        
         new_con = constraint(con.c1, con.c2, nlamS)
         new_fuse_constraints.append(new_con)
     return new_fuse_constraints
