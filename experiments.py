@@ -80,7 +80,7 @@ def test_scad():
     N_G = 200
     amt_fused = 1.0
     orth_err = [0,0.3,0.5,1.0]
-    lamSs = [0, 0.5, 1]
+    lamSs = [0, 0.5, 0.5, 1, 5]
     if not os.path.exists(os.path.join('data','fake_data','test_scad')):
         os.mkdir(os.path.join('data','fake_data','test_scad'))
     #iterate over how much fusion
@@ -92,19 +92,103 @@ def test_scad():
         lamR = 0.1
         lamP = 1.0 #priors don't matter
         for j, lamS in enumerate(lamSs):
-            errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct_scad', reverse = True, special_args = {'s_it':20}, cv_both = (True, True))
+            errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct_scad', reverse = True, special_args = {'s_it':50}, cv_both = (True, True))
             errl = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
             errors_scad[i,j] = errd['mse'][0]
             errors_l2[i,j] = errl['mse'][0]
 
+    colorlist = [[0,0,1],[0,1,0],[1,0,0],[0.5,0,0.5]]
     for r, amnt in enumerate(orth_err):
-        plt.plot(lamSs, errors_scad[r,:])
+        plt.plot(orth_err, errors_scad[r,:], color = colorlist[r])
     for r, amnt in enumerate(orth_err):
-        plt.plot(lamSs, errors_l2[r,:],'--')
-    plt.legend(orth_err+orth_err)
-    plt.savefig(os.path.join(os.path.join('data','fake_data','test_scad','fig1')))
+        plt.plot(orth_err, errors_l2[r,:], '--', color = colorlist[r])
+    plt.legend(lamSs+lamSs)
+    plt.xlabel('orth error')
+    plt.ylabel('mean squared error')
+    plt.savefig(os.path.join(os.path.join('data','fake_data','test_scad','fig2')))
     plt.figure()
 
+
+def test_scad2():
+#create simulated data set with false orthology and run fused scad + visualize scad penalty at each s_it
+     
+    N_TF = 10
+    N_G = 200
+    amt_fused = 1.0
+    orth_err = 0.3
+    lamS = 0.5
+
+    if not os.path.exists(os.path.join('data','fake_data','test_scad')):
+        os.mkdir(os.path.join('data','fake_data','test_scad'))
+
+    out = os.path.join('data','fake_data','test_scad','ortherr'+str(orth_err))
+    ds.write_fake_data1(N1 = 10*10, N2 = 10*10, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = orth_err, orth_falseneg = orth_err, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.1)
+    lamR = 0.1
+    lamP = 1.0 #priors don't matter
+
+    k = 10
+    ds1 = ds.standard_source(out,0)
+    ds2 = ds.standard_source(out,1)
+    organisms = [ds1.name, ds2.name]
+    orth_fn = os.path.join(out, 'orth')
+    orth = ds.load_orth(orth_fn, organisms)
+
+    folds1 = ds1.partition_data(10)
+    folds2 = ds2.partition_data(10)
+    excl = lambda x,i: x[0:i]+x[(i+1):]
+    (priors1, signs1) = ds1.get_priors()
+    (priors2, signs2) = ds2.get_priors()
+
+    (e1, t1, genes1, tfs1) = ds1.load_data()
+    (e2, t2, genes2, tfs2) = ds2.load_data()
+    fuse_constraints = fr.orth_to_constraints(organisms, [genes1, genes2], [tfs1, tfs2], orth, lamS)
+
+    for fold in range(k):
+        deltabeta = []
+        fusionpenalty = []
+
+        #get conditions for current cross-validation fold
+        f1_te_c = folds1[fold]
+        f1_tr_c = np.hstack(excl(folds1, fold))
+
+        f2_te_c = folds2[fold]
+        f2_tr_c = np.hstack(excl(folds2, fold))
+
+        (e1_tr, t1_tr, genes1, tfs1) = ds1.load_data(f1_tr_c)
+        (e1_te, t1_te, genes1, tfs1) = ds1.load_data(f1_te_c)
+
+        (e2_tr, t2_tr, genes2, tfs2) = ds2.load_data(f2_tr_c)
+        (e2_te, t2_te, genes2, tfs2) = ds2.load_data(f2_te_c)
+
+        Xs = [t1_tr, t2_tr]
+        Ys = [e1_tr, e2_tr]
+        genes = [genes1, genes2]
+        tfs = [tfs1, tfs2]
+        priors = priors1 + priors2
+
+        Bs_unfused = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP=1.0, lamR=0.1, lamS=0)
+        Bs_fused = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
+
+        #get delta beta for each fusion constraint pair
+        for pair in fuse_constraints:
+            r1 = pair.c1.r
+            c1 = pair.c1.c
+            r2 = pair.c2.r
+            c2 = pair.c2.c
+            B1 = Bs_unfused[0][r1][c1]
+            B2 = Bs_unfused[1][r2][c2]
+            deltabeta.append(B1-B2)
+            
+            
+            B1 = Bs_fused[0][r1][c1]
+            B2 = Bs_fused[1][r2][c2]
+            fusionpenalty.append(lamS*(B1-B2)**2)
+
+        plt.scatter(deltabeta, fusionpenalty)
+        plt.xlabel('delta beta')
+        plt.ylabel('penalty')
+        plt.savefig(os.path.join(os.path.join('data','fake_data','test_scad',str(fold))))
+        plt.figure()
 
 
 def studentseminar():

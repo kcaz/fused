@@ -438,6 +438,26 @@ def solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, s_it):
     return Bs
 
 
+#returns a new set of fusion constraints corresponding to a saturating penalty
+def scad(Bs_init, fuse_constraints, lamS, a):
+    new_fuse_constraints = []
+    for i in range(len(fuse_constraints)):
+        con = fuse_constraints[i]
+        b_init_1 = Bs_init[con.c1.sub][con.c1.r, con.c1.c]
+        b_init_2 = Bs_init[con.c2.sub][con.c2.r, con.c2.c]
+        theta_init = np.abs(b_init_1 - b_init_2)
+        olamS = con.lam
+        if theta_init < 0.000001 or lamS < 0.000001:#avoid numerical problems?
+            nlamS = 0
+        elif theta_init <= lamS:
+            nlamS = lamS/(2*theta_init)
+        else:
+            nlamS = lamS* max(0, ((a*lamS - theta_init)/((a-1)*lamS)))/(2*theta_init)
+        new_con = constraint(con.c1, con.c2, nlamS)
+        new_fuse_constraints.append(new_con)
+    return new_fuse_constraints
+
+
 #solves W = argmin_W ((XW - Y)**2).sum() + constraint related terms iteratively
 #Xs, Ys: X and Y for each subproblem
 #fuse_constraints: fusion constraints

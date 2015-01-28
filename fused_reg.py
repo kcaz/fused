@@ -429,7 +429,7 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, ad
 #iteratively adjusts fusion constraint weight to approximate saturating penalty
 def solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, s_it):
     fuse_con2 = fuse_con    
-    a = 3.7#1.5 #3.7 #!?
+    a = 1.0#1.5 #3.7 #!?
     for i in range(s_it):
         Bs = direct_solve_factor(Xs, Ys, fuse_con2, ridge_con, lamR)
         
