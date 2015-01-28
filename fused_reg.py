@@ -287,7 +287,7 @@ def direct_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, it):
 #YS: list of gene expression matrices
 #Orth: list of lists of one_genes
 #priors: list of lists of one_gene pairs
-def solve_ortho_direct(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors,lamP, lamR, lamS, adjust=False, self_reg_pen = 0):
+def solve_ortho_direct(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors,lamP, lamR, lamS, adjust=False, self_reg_pen = 0, special_args=None):
     
     
     ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
@@ -300,10 +300,11 @@ def solve_ortho_direct(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors,lamP, lam
 
 #parameters as solve_ortho_direct. 
 #s_it defines the number of scad-like iterations to do
-def solve_ortho_direct_scad(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS, s_it):
+def solve_ortho_direct_scad(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS, s_it, special_args=None):
     ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
+    
     fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
-    Bs = solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, s_it=s_it)
+    Bs = solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, s_it=s_it,special_args=special_args)
     return Bs
 
 #this is like direct solve, but it brakes up unrelated columns
@@ -427,14 +428,18 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, ad
     return Bs
 
 #iteratively adjusts fusion constraint weight to approximate saturating penalty
-def solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, s_it):
+def solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, s_it, special_args=None):
     fuse_con2 = fuse_con    
     a = 1.0#1.5 #3.7 #!?
     for i in range(s_it):
         Bs = direct_solve_factor(Xs, Ys, fuse_con2, ridge_con, lamR)
         
         fuse_con2 = scad(Bs, fuse_con, lamS, a)
-        #plot_scad(Bs, fuse_con2)
+    
+    #plot_scad(Bs, fuse_con2)
+    
+    if special_args and 'orths' in special_args:
+        special_args['orths'] = fuse_con2 #backdoor!
     return Bs
 
 

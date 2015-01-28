@@ -167,7 +167,7 @@ def test_scad2():
         priors = priors1 + priors2
 
         Bs_unfused = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP=1.0, lamR=0.1, lamS=0)
-        Bs_fused = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
+        Bs_fused = fr.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS,s_it=5)
 
         #get delta beta for each fusion constraint pair
         for pair in fuse_constraints:
@@ -251,8 +251,8 @@ def test_2coeff_fuse():
     
     #fg.cv_model1(data_fn = out, lamP=lamPs[0], lamR=lamRs[0], lamS=lamSs[i], k= 10)
         (b1, b2) = fg.fit_model(out, lamPs[0], lamRs[0], lamS)
-        plt.plot(b1[0,2], b1[1,2], 'or',markersize=20)
-        plt.plot(b2[0,2], b2[1,2], 'ob',markersize=20)
+        plt.plot(b1[0,2], b1[1,2], 'or',markersize=20*lamS)
+        plt.plot(b2[0,2], b2[1,2], 'ob',markersize=20*lamS)
         #print b1
         #print br1
 
@@ -276,7 +276,7 @@ def test_2coeff_fuse_H():
         os.mkdir(out)
 
     N = 10
-    ds.write_fake_data1(out_dir=out, N1=N,N2=N,tfg_count1=(2,1),tfg_count2=(2,1),sparse=0.0,fuse_std=0.0,measure_noise1=0.3,measure_noise2=0.3, pct_fused=0.5, orth_falsepos=0.99)#think there are orths that are not
+    #ds.write_fake_data1(out_dir=out, N1=N,N2=N,tfg_count1=(2,1),tfg_count2=(2,1),sparse=0.0,fuse_std=0.0,measure_noise1=0.3,measure_noise2=0.3, pct_fused=0.5, orth_falsepos=0.99)#think there are orths that are not
     
 
     (br1, genes1, tfs1) = ds.load_network(os.path.join(out, 'beta1'))
@@ -289,8 +289,8 @@ def test_2coeff_fuse_H():
     
         #fg.cv_model1(data_fn = out, lamP=lamPs[0], lamR=lamRs[0], lamS=lamSs[i], k= 10)
         (b1, b2) = fg.fit_model(out, lamPs[0], lamRs[0], lamS)
-        plt.plot(b1[0,2], b1[1,2], 'or',markersize=20)
-        plt.plot(b2[0,2], b2[1,2], 'ob',markersize=20)
+        plt.plot(b1[0,2], b1[1,2], 'or',markersize=20*lamS)
+        plt.plot(b2[0,2], b2[1,2], 'ob',markersize=20*lamS)
         #print b1
         #print br1
 
@@ -301,3 +301,81 @@ def test_2coeff_fuse_H():
     plt.ylabel('coefficient2')
     plt.show()
     
+#tests fusion visually using a pair of similar two-coefficient networks
+#one network has a lot more data
+def test_2coeff_fuse1B():
+    lamPs = np.array([1])
+    lamRs = np.array([0.1])
+    lamSs = np.linspace(0,2,10)
+    
+    out = os.path.join('data','fake_data','2coeff_fuse1B')
+    if not os.path.exists(out):
+        os.mkdir(out)
+
+    N1 = 10
+    N2 = 1000
+    #ds.write_fake_data1(out_dir=out, N1=N1,N2=N2,tfg_count1=(2,1),tfg_count2=(2,1),sparse=0.0,fuse_std=0.0,measure_noise1=0.3,measure_noise2=0.3)
+    
+
+    (br1, genes1, tfs1) = ds.load_network(os.path.join(out, 'beta1'))
+    (br2, genes2, tfs2) = ds.load_network(os.path.join(out, 'beta2'))
+    plt.plot(br1[0,2], br1[1,2], '*',c=[0.5,0,0.5],markersize=30)
+    
+    plt.plot(br2[0,2], br2[1,2], '*',c=[0.5,0,0.5],markersize=30)
+    
+    for lamS in lamSs:
+    
+    #fg.cv_model1(data_fn = out, lamP=lamPs[0], lamR=lamRs[0], lamS=lamSs[i], k= 10)
+        (b1, b2) = fg.fit_model(out, lamPs[0], lamRs[0], lamS)
+        plt.plot(b1[0,2], b1[1,2], 'or',markersize=20*lamS)
+        plt.plot(b2[0,2], b2[1,2], 'ob',markersize=20*lamS)
+        #print b1
+        #print br1
+
+    
+    plt.rcParams.update({'font.size': 18})
+    
+    plt.xlabel('coefficient1')
+    plt.ylabel('coefficient2')
+    plt.show()
+
+
+#tests fusion visually using a pair of similar two-coefficient networks
+#this network only has 50% ortho coverage
+#NOW USES SCAD!
+def test_2coeff_fuse_HS():
+    lamPs = np.array([1])
+    lamRs = np.array([0.1])
+    lamSs = np.linspace(0,1,10)
+    
+    out = os.path.join('data','fake_data','2coeff_fuse_HS')
+    if not os.path.exists(out):
+        os.mkdir(out)
+
+    N = 30
+    ds.write_fake_data1(out_dir=out, N1=N,N2=N,tfg_count1=(2,1),tfg_count2=(2,1),sparse=0.0,fuse_std=0.0,measure_noise1=0.0,measure_noise2=0.0, pct_fused=0.5, orth_falsepos=0.99)#think there are orths that are not
+    
+
+    (br1, genes1, tfs1) = ds.load_network(os.path.join(out, 'beta1'))
+    (br2, genes2, tfs2) = ds.load_network(os.path.join(out, 'beta2'))
+    plt.plot(br1[0,2], br1[1,2], '*',c='r',markersize=30)
+    
+    plt.plot(br2[0,2], br2[1,2], '*',c='b',markersize=30)
+    
+    for lamS in lamSs:
+    
+        #fg.cv_model1(data_fn = out, lamP=lamPs[0], lamR=lamRs[0], lamS=lamSs[i], k= 10)
+        special_args = {'s_it':1, 'orths':None}
+        (b1, b2) = fg.fit_model(out, lamPs[0], lamRs[0], lamS, solver='solve_ortho_direct_scad',special_args = special_args)
+        plt.plot(b1[0,2], b1[1,2], 'or',markersize=10*lamS)
+        plt.plot(b2[0,2], b2[1,2], 'ob',markersize=10*lamS)
+        print special_args['orths']
+        #print b1
+        #print br1
+
+    
+    plt.rcParams.update({'font.size': 18})
+    
+    plt.xlabel('coefficient1')
+    plt.ylabel('coefficient2')
+    plt.show()

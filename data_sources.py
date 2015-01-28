@@ -591,7 +591,11 @@ def write_fake_data1(out_dir=None, tfg_count1=(5,10), tfg_count2=(5,10), N1=10, 
     (x1, y1) = generate_from_linear(N1, B1, measure_noise1)
     (x2, y2) = generate_from_linear(N2, B2, measure_noise2)
     orths = generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, organisms, orth_falsepos, orth_falseneg)
+<<<<<<< HEAD
+    
+=======
     #print orths
+>>>>>>> 33f2645483afc2d639c8650ada072634e8ab5dc0
     (genes1c, expr1) = concat_tfs_genes(genes1, tfs1, x1, y1)
     (genes2c, expr2) = concat_tfs_genes(genes2, tfs2, x2, y2)
     #(genes1c, expr1) = (genes1, x1)

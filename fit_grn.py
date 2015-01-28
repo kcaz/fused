@@ -60,7 +60,7 @@ def fit_model(data_fn, lamP, lamR, lamS, solver='solve_ortho_direct',special_arg
     if solver == 'solve_ortho_direct':
         Bs = fl.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
     if solver == 'solve_ortho_direct_scad':
-        Bs = fl.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, s_it = special_args['s_it'])
+        Bs = fl.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, s_it = special_args['s_it'], special_args = special_args)
     
     return Bs
 
