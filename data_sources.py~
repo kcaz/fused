@@ -428,7 +428,7 @@ def build_orth(genes1, genes2, max_grp_size, pct_fused, omap, organisms, shuffle
         random.shuffle(genes1)
         random.shuffle(genes2)
     
-    amt_fused = np.round((len(genes1)+len(genes2))*pct_fused)
+    amt_fused = np.floor((len(genes1)+len(genes2))*pct_fused) #round down
     ind1 = 0
     ind2 = 0
     while ind1 + ind2 < amt_fused:
@@ -459,7 +459,8 @@ def build_orth(genes1, genes2, max_grp_size, pct_fused, omap, organisms, shuffle
 
 #TO THE BEST OF MY KNOWLEDGE THIS IS WHAT HAPPENS. this function builds two bata matrices, with dims specified by b1/tfg_count2. pct_fused percent of genes and TFs are (separately) assigned to orthology groups of size 2-max_grp_size (sampled uniformly). Coefficientsa are assigned value from standard normal distributions. Coefficients that are fused (that is, both gene and tf are fused) are assigned to the same value, perturbed by fuse_std. Sparse specifies the proportion of fused groups of coefficients (including groups of size 1) that are set to 0
 #NOTE: tfg_count1 is the number of tfs and non-tf genes in a tuple
-def fuse_bs_orth(tfg_count1, tfg_count2, max_grp_size, pct_fused, fuse_std, sparse, organisms):
+#shuffle - do you shuffle the order of genes??
+def fuse_bs_orth(tfg_count1, tfg_count2, max_grp_size, pct_fused, fuse_std, sparse, organisms,shuffle=False):
     #create empty expression matrices
     b1 = np.nan * np.ones(tfg_count1)
     b2 = np.nan * np.ones(tfg_count2)
@@ -470,8 +471,8 @@ def fuse_bs_orth(tfg_count1, tfg_count2, max_grp_size, pct_fused, fuse_std, spar
     genes1 = map(lambda x: organisms[0]+'g'+str(x), range(b1.shape[0], b1.shape[0]+b1.shape[1]))
     genes2 = map(lambda x: organisms[1]+'g'+str(x), range(b2.shape[0], b2.shape[0]+b2.shape[1]))
     omap = dict()
-    build_orth(tfs1, tfs2, max_grp_size, pct_fused, omap, organisms,shuffle=False)
-    build_orth(genes1, genes2, max_grp_size, pct_fused, omap, organisms,shuffle=False)
+    build_orth(tfs1, tfs2, max_grp_size, pct_fused, omap, organisms,shuffle=shuffle)
+    build_orth(genes1, genes2, max_grp_size, pct_fused, omap, organisms,shuffle=shuffle)
     orths = omap_to_orths(omap)
     bs = [b1, b2]
     genes = [genes1, genes2]
@@ -532,7 +533,7 @@ def generate_faulty_priors(B, genes, tfs, falsepos, falseneg):
             if B[r, c] == 0:
                 fakepriors.append((tfs[r], genes[c]))
     num_to_remove = int(falseneg * len(priors))
-    num_to_add = int((len(priors) - num_to_remove)/(1-falsepos))    
+    num_to_add = int(falsepos*(len(priors) - num_to_remove)/(1-falsepos))    
     random.shuffle(priors)
     random.shuffle(fakepriors)
     return priors[0:(len(priors) - num_to_remove)] + fakepriors[0:num_to_add]
@@ -542,30 +543,33 @@ def generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, organisms, falsepos,
     #make a list of sets containing gene fusion groups to prevent from adding false orths that result in unduly large fusion groups
 
     num_to_remove = int(falseneg * len(orths))
-    num_to_add = int((len(orths) - num_to_remove)/(1-falsepos))
-
+    num_to_add = int(falsepos*(len(orths) - num_to_remove)/(1-falsepos))
+    
     orth_genes = set()
     for orth in orths:
-        orth_genes.add(orths[0])
-        orth_genes.add(orths[1])
+        orth_genes.add(orth[0])
+        orth_genes.add(orth[1])
     
     all_possible_orths = []
+    
     for gene1 in genes1:
         for gene2 in genes2:
             all_possible_orths.append((fr.one_gene(name=gene1, organism = organisms[0]), fr.one_gene(name=gene2, organism = organisms[1])))
-    for tf1 in genes1:
-        for tf2 in genes2:
+    for tf1 in tfs1:
+        for tf2 in tfs2:
             all_possible_orths.append((fr.one_gene(name=tf1, organism = organisms[0]), fr.one_gene(name=tf2, organism = organisms[1])))
     random.shuffle(all_possible_orths)
     random.shuffle(orths)
-
+    
     to_add = []
     for candidate_orth in all_possible_orths:
+    
+        if len(to_add) == num_to_add:
+            break
         if candidate_orth[0] in orth_genes or candidate_orth[1] in orth_genes:
             continue
         to_add.append(candidate_orth)
-        if len(to_add) == num_to_add:
-            break
+        
 
     return orths[0:(len(orths) - num_to_remove)] + to_add
 
@@ -574,17 +578,17 @@ def generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, organisms, falsepos,
 
 
 
+
+
 #writes fake data, assumes some reasonable defaults
 def write_fake_data1(out_dir=None, tfg_count1=(5,10), tfg_count2=(5,10), N1=10, N2=10, max_grp_size=2, pct_fused=1.0, fuse_std=0.5, sparse=0.0, organisms = ['uno','dos'], prior_falsepos=0.0, prior_falseneg=0.0, orth_falsepos=0.0, orth_falseneg=0.0, measure_noise1=0.1, measure_noise2=0.1):
 
     (B1, B2, orths, genes1, tfs1, genes2, tfs2) = fuse_bs_orth(tfg_count1, tfg_count2, max_grp_size, pct_fused, fuse_std, sparse, organisms)
-
-
     
     (x1, y1) = generate_from_linear(N1, B1, measure_noise1)
     (x2, y2) = generate_from_linear(N2, B2, measure_noise2)
     orths = generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, organisms, orth_falsepos, orth_falseneg)
-    
+    #print orths
     (genes1c, expr1) = concat_tfs_genes(genes1, tfs1, x1, y1)
     (genes2c, expr2) = concat_tfs_genes(genes2, tfs2, x2, y2)
     #(genes1c, expr1) = (genes1, x1)
@@ -627,7 +631,7 @@ def write_fake_data1(out_dir=None, tfg_count1=(5,10), tfg_count2=(5,10), N1=10, 
 #NOTE: this requires that genes and tfs have disjoint names.
 def concat_tfs_genes(genes, tfs, x, y):
     
-    expr_mat = np.hstack((y, x))
+    expr_mat = np.hstack((x,y))
     #check if they have disjoint names
     if len(set(genes).intersection(set(tfs))):
         print 'WAKA WAKA WAKA ALERT YOU HAVE GENES AND TFS WITH THE SAME NAMES'
@@ -663,6 +667,7 @@ def write_priors(outf, priors, signs=None):
         else:
             sign = signs[i]
         f.write('%s\t%s\t%s\n' % (tf, gene, sign))
+        #f.write('%s\t%s\t%s\n' % (tf.name, gene.name, sign))
     f.close()
 
 #write orth.
@@ -714,7 +719,7 @@ def load_network(net_fn):
 
 #writes real data to a standard formatted folder. ONLY RUN ONCE!
 #if you need to run again, change f.write('%s\t%s\t%s\n' % (tf, gene, sign)) to f.write('%s\t%s\t%s\n' % (tf.name, gene.name, sign))
- to write_priors
+
 def voodoo():
     sub = subt()
     anth = anthr()

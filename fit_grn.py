@@ -67,7 +67,6 @@ def fit_model(data_fn, lamP, lamR, lamS, solver='solve_ortho_direct',special_arg
 #runs the basic model with specified parameters under k-fold cross-validation, and stores a number of metrics
 #k: the number of cv folds
 #reverse: train on the little dude (reverse train and test)
-<<<<<<< Updated upstream
 def cv_model1(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_args=None, reverse=False, cv_both=(True,True)):
     ds1 = ds.standard_source(data_fn,0)
     ds2 = ds.standard_source(data_fn,1)
