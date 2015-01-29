@@ -390,9 +390,26 @@ def load_orth(orth_fn, organisms):
     
     orths = []
     for o in fsnt:
-    
-        orths.append([fr.one_gene(name=o[0],organism=organisms[0]), fr.one_gene(name=o[1], organism=organisms[1])])
+        real = o[2] == 'True'
+        orth = fr.orthology(genes = (fr.one_gene(name=o[0],organism=organisms[0]), fr.one_gene(name=o[1], organism=organisms[1])), real = real)
+        orths.append(orth)
+        
     return orths
+
+#returns the MARKED constraints associated with a particular data directory, in standard format
+
+def load_constraints(data_fn):
+    ds1 = standard_source(data_fn,0)
+    ds2 = standard_source(data_fn,1)
+    orth_fn = os.path.join(data_fn, 'orth')
+    organisms = [ds1.name, ds2.name]
+    orth = load_orth(orth_fn, organisms)
+
+    gene_ls = [ds1.genes, ds2.genes]
+    tf_ls = [ds1.tfs, ds2.tfs]
+    
+    (constraints, marks) = fr.orth_to_constraints_marked(organisms, gene_ls, tf_ls, orth, 1.0)
+    return (constraints, marks, orth)
 
 ba_bs_orth = lambda: load_orth('data/bacteria1/bs_ba_ortho_804',['B_anthracis','B_subtilis'])
 
@@ -409,13 +426,13 @@ def generate_from_linear(N, B, noise_std):
     Y = np.dot(X,B) + noise_std*np.random.randn(N, B.shape[1])
     return (X, Y)    
 
-#This function just corrects the strange decision i made to not use one_gene objects. I don't think there's anything more to it than this?
-#NOTE: this function appeared to throw away all of the mappings but the first... I've corrected this here
-def omap_to_orths(omap):
+#turns a dictionary mapping genes to lists of orthologs into a list of orthology objects, marked as real
+ 
+def omap_to_orths(omap, real):
     orths = []
     for gene1 in omap.keys():       
         for gene2 in omap[gene1]:
-            orths.append( (gene1, gene2) )
+            orths.append( fr.orthology(genes=(gene1, gene2),real=real))
     return orths
 
 #this functions somehow generates orthology mappings, and adds them to omap
@@ -473,14 +490,15 @@ def fuse_bs_orth(tfg_count1, tfg_count2, max_grp_size, pct_fused, fuse_std, spar
     omap = dict()
     build_orth(tfs1, tfs2, max_grp_size, pct_fused, omap, organisms,shuffle=shuffle)
     build_orth(genes1, genes2, max_grp_size, pct_fused, omap, organisms,shuffle=shuffle)
-    orths = omap_to_orths(omap)
+    orths = omap_to_orths(omap, True)
+    
     bs = [b1, b2]
     genes = [genes1, genes2]
     tfs = [tfs1, tfs2]
     gene_inds = [{genes1[i] : i for i in range(len(genes1))}, {genes2[i] : i for i in range(len(genes2))}]
     tf_inds = [{tfs1[i] : i for i in range(len(tfs1))}, {tfs2[i] : i for i in range(len(tfs2))}]
 
-    orths_query = set(map(tuple, orths))
+    orths_query = set(orths)
     
     #recursively fills everything connected to r,c,organism
     #NOTE: we are relying on the fact that transcription factors are also genes
@@ -495,17 +513,20 @@ def fuse_bs_orth(tfg_count1, tfg_count2, max_grp_size, pct_fused, fuse_std, spar
         for orth1 in orths:
             #find an ortholog for row and an ortholog for column
             #do this in both directions - i don't want to require that orthologies be listed both ways
+            
             for rep in [0,1]:
-                if tfs[organism_ind][r] == orth1[0].name and organism == orth1[0].organism:
+                
+                if tfs[organism_ind][r] == orth1.genes[0].name and organism == orth1.genes[0].organism:
                     for orth2 in orths:
-                        if genes[organism_ind][c] == orth2[0].name and organism == orth2[0].organism:
-                            organism_r_orth_ind = organisms.index(orth1[1].organism)
-                            organism_c_orth_ind = organisms.index(orth2[1].organism)
+                        
+                        if genes[organism_ind][c] == orth2.genes[0].name and organism == orth2.genes[0].organism:
+                            organism_r_orth_ind = organisms.index(orth1.genes[1].organism)
+                            organism_c_orth_ind = organisms.index(orth2.genes[1].organism)
                             if organism_r_orth_ind == organism_c_orth_ind:
-                                r_orth = tf_inds[organism_r_orth_ind][orth1[1].name]
-                                c_orth = gene_inds[organism_c_orth_ind][orth2[1].name]
+                                r_orth = tf_inds[organism_r_orth_ind][orth1.genes[1].name]
+                                c_orth = gene_inds[organism_c_orth_ind][orth2.genes[1].name]
                                 fill(r_orth, c_orth, val, std, organisms[organism_r_orth_ind])
-                orth1 = (orth1[1], orth1[0]) #repeat in reverse
+                orth1 = fr.orthology(genes=(orth1.genes[1], orth1.genes[0]), real = orth1.real) #repeat in reverse
     #go through each value in each beta matrix and, if not yet filled, fill it in along with all of its linked values
     for organism_ind, b in enumerate(bs):
         for r in range(b.shape[0]):
@@ -539,9 +560,10 @@ def generate_faulty_priors(B, genes, tfs, falsepos, falseneg):
     return priors[0:(len(priors) - num_to_remove)] + fakepriors[0:num_to_add]
 
 
+#now also marks orths as real or fake
 def generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, organisms, falsepos, falseneg):
     #make a list of sets containing gene fusion groups to prevent from adding false orths that result in unduly large fusion groups
-
+        
     num_to_remove = int(falseneg * len(orths))
     if falsepos == 1:
         num_to_add = len(orths)
@@ -550,17 +572,21 @@ def generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, organisms, falsepos,
     
     orth_genes = set()
     for orth in orths:
-        orth_genes.add(orth[0])
-        orth_genes.add(orth[1])
+        orth_genes.add(orth.genes[0])
+        orth_genes.add(orth.genes[1])
     
     all_possible_orths = []
     
     for gene1 in genes1:
         for gene2 in genes2:
-            all_possible_orths.append((fr.one_gene(name=gene1, organism = organisms[0]), fr.one_gene(name=gene2, organism = organisms[1])))
+            possible_orth = fr.orthology(genes = (fr.one_gene(name=gene1, organism = organisms[0]), fr.one_gene(name=gene2, organism = organisms[1])), real = False)
+            all_possible_orths.append(possible_orth)
+
     for tf1 in tfs1:
         for tf2 in tfs2:
-            all_possible_orths.append((fr.one_gene(name=tf1, organism = organisms[0]), fr.one_gene(name=tf2, organism = organisms[1])))
+            possible_orth = fr.orthology(genes = (fr.one_gene(name=tf1, organism = organisms[0]), fr.one_gene(name=tf2, organism = organisms[1])), real = False)
+            all_possible_orths.append(possible_orth)
+            
     random.shuffle(all_possible_orths)
     random.shuffle(orths)
     
@@ -569,7 +595,7 @@ def generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, organisms, falsepos,
     
         if len(to_add) == num_to_add:
             break
-        if candidate_orth[0] in orth_genes or candidate_orth[1] in orth_genes:
+        if candidate_orth.genes[0] in orth_genes or candidate_orth.genes[1] in orth_genes:
             continue
         to_add.append(candidate_orth)
         
@@ -678,9 +704,12 @@ def write_priors(outf, priors, signs=None):
 def write_orth(outf, orth):
     f = file(outf, 'w')
     for o in orth:
-        gene1 = o[0].name
-        gene2 = o[1].name
-        f.write('%s\t%s\n' % (gene1, gene2))
+        if len(o.genes) > 2:
+            print 'WARNING TRYING TO WRITE NON 1-1 ORTHOLOGY'
+        gene1 = o.genes[0].name
+        gene2 = o.genes[1].name
+        real = o.real
+        f.write('%s\t%s\t%s\n' % (gene1, gene2,real))
 
     f.close()
 
@@ -723,6 +752,22 @@ def load_network(net_fn):
 #if you need to run again, change f.write('%s\t%s\t%s\n' % (tf, gene, sign)) to f.write('%s\t%s\t%s\n' % (tf.name, gene.name, sign))
 
 def voodoo():
+#writes priors
+#format is: lines 1-N: tf gene sign
+#signs are 'activation' 'repression' 'dunno'
+#priors as input is a list of tuples containing gene/tf names
+    def write_priors_voodoo(outf, priors, signs=None):
+        f = file(outf, 'w')
+        for i, prior in enumerate(priors):
+            (tf, gene) = prior
+            if signs == None:
+                sign = 'dunno'
+            else:
+                sign = signs[i]
+            f.write('%s\t%s\t%s\n' % (tf.name, gene.name, sign))
+        f.close()
+
+
     sub = subt()
     anth = anthr()
     
@@ -732,13 +777,14 @@ def voodoo():
     (bs_priors, bs_sign) = sub.get_priors()
     (ba_priors, ba_sign) = anth.get_priors()
     orths = ba_bs_orth()
-    
+    orths = map(lambda x: (x[0], x[1], True), orths)
     out_dir = os.path.join('data','bacteria_standard')
-    os.mkdir(out_dir)
+    if not os.path.exists(out_dir):
+        os.mkdir(out_dir)
     write_expr_mat(out_dir+os.sep+'expression1', bs_e, bs_genes)
     write_expr_mat(out_dir+os.sep+'expression2', ba_e, ba_genes)
-    write_priors(out_dir+os.sep+'priors1',bs_priors)
-    write_priors(out_dir+os.sep+'priors2',ba_priors)
+    write_priors_voodoo(out_dir+os.sep+'priors1',bs_priors)
+    write_priors_voodoo(out_dir+os.sep+'priors2',ba_priors)
     write_tfnames(out_dir+os.sep+'tfnames1',bs_tfs)
     write_tfnames(out_dir+os.sep+'tfnames2',ba_tfs)
     write_orth(out_dir+os.sep+'orth', orths)

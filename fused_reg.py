@@ -14,6 +14,8 @@ coefficient = collections.namedtuple('coefficient',['sub','r','c'])
 constraint = collections.namedtuple('constraint',['c1','c2','lam'])
 
 one_gene = collections.namedtuple('gene',['name','organism'])
+
+orthology = collections.namedtuple('orthology',['genes','real'])
 class dictl(dict):
     def __getitem__(self, i):
         if not i in self:
@@ -45,6 +47,7 @@ def all_pairs(l):
            pl.append([l[li1], l[li2]])
     return pl
 
+
 #solves a quadratic equation, returning both solutions
 def quad(a, b, c):
     x1 = 0.5*(-b + (b**2 - 4*a*c)**0.5)/a
@@ -53,7 +56,80 @@ def quad(a, b, c):
     return (x1, x2)
 
 
+
 #SECTION: --------CODE FOR GENERATING CONSTRAINTS---------
+
+#given a list of orthology objects, returns a (larger) list of one-to-one orthologies. that is, orthologies with only two genes, consisting of all pairings within each orth
+def orth_to_one_one_orth(orths):
+    orths2 = []
+    for orth in orths:
+        gene_pairs = all_pairs(orth.genes)
+        for gene_pair in gene_pairs:
+            new_orth = orthology(genes=(gene_pair[0], gene_pair[1]), real=orth.real)
+            orths2.append(new_orth)
+    return orths2
+#enumerates fusion constraints from orthology
+#args as in solve_ortho_direct
+#returns list of constraints. individual constraints are pairs of coefficients, with an associated weight lamS
+#also returns a list of True/False for real or fake orthologies
+def orth_to_constraints_marked(organisms, gene_ls, tf_ls, orth, lamS):
+    #build some maps
+    
+    org_to_ind = {organisms[x] : x for x in range(len(organisms))}
+    gene_to_inds = map(lambda o: {gene_ls[o][x] : x for x in range(len(gene_ls[o]))}, range(len(organisms)))
+    tf_to_inds = map(lambda o: {tf_ls[o][x] : x for x in range(len(tf_ls[o]))}, range(len(organisms)))
+    
+    #turn orth into a list of all pairs of coefficients
+    #orth_pairs = reduce(lambda x,y: x+y, map(all_pairs, orth),[])
+    orth_pairs = orth_to_one_one_orth(orth)
+    
+
+    #build a set to use for checking on the realness of an orthology
+    real_orths = set()
+    for orth in orth_pairs:
+        if orth.real:
+            real_orths.add((orth.genes[0], orth.genes[1]))
+            real_orths.add((orth.genes[1], orth.genes[0]))
+
+    #build a dictionary mapping each gene to all of its orthologs
+    ortho_dict = dictl()
+    for op in orth_pairs:
+        (gene1, gene2) = op.genes
+        ortho_dict[gene1].append(gene2)
+        ortho_dict[gene2].append(gene1)
+
+    
+    constraints = []
+    marks = []
+    for org_i in range(len(organisms)):
+        for tf_i in range(len(tf_ls[org_i])):
+            for g_i in range(len(gene_ls[org_i])):
+                tf = one_gene(tf_ls[org_i][tf_i], organisms[org_i])
+                g = one_gene(gene_ls[org_i][g_i], organisms[org_i])
+                
+                for tf_orth in ortho_dict[tf]:
+                    for g_orth in ortho_dict[g]:
+                        
+                        sub1 = org_i
+                        sub2 = org_to_ind[tf_orth.organism]
+                        sub3 = org_to_ind[g_orth.organism]
+                        
+                        if not sub2 == sub3:
+                            continue
+                        if not tf_orth.name in tf_to_inds[sub2]:
+                            continue #if a tf is orthologous to a non-tf
+                        
+                        #now check if it's real
+                        real = (g, g_orth) in real_orths and (tf, tf_orth) in real_orths
+
+                        coeff1 = coefficient(sub1, tf_to_inds[sub1][tf.name], gene_to_inds[sub1][g.name])
+                        coeff2 = coefficient(sub2, tf_to_inds[sub2][tf_orth.name], gene_to_inds[sub2][g_orth.name])
+                        
+
+                        constr = constraint(coeff1, coeff2, lamS)
+                        constraints.append(constr)
+                        marks.append(real)
+    return (constraints, marks)
 
 #enumerates fusion constraints from orthology
 #args as in solve_ortho_direct
@@ -67,14 +143,16 @@ def orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS):
     tf_to_inds = map(lambda o: {tf_ls[o][x] : x for x in range(len(tf_ls[o]))}, range(len(organisms)))
     
     #turn orth into a list of all pairs of coefficients
-    orth_pairs = reduce(lambda x,y: x+y, map(all_pairs, orth),[])
+    #orth_pairs = reduce(lambda x,y: x+y, map(all_pairs, orth),[])
+    orth_pairs = reduce(lambda x,y: x+y, map(all_pairs, map(lambda z: z.genes, orth)),[]) #we just want the genes that are in the orthology groups
     
     ortho_dict = dictl()
     for op in orth_pairs:
+    
         (gene1, gene2) = op
         ortho_dict[gene1].append(gene2)
         ortho_dict[gene2].append(gene1)
-
+    
     
     constraints = []
     for org_i in range(len(organisms)):
