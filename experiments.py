@@ -120,10 +120,10 @@ def test_scad2():
     orth_err = 0.3
     lamS = 0.5
 
-    if not os.path.exists(os.path.join('data','fake_data','test_scad')):
-        os.mkdir(os.path.join('data','fake_data','test_scad'))
+    if not os.path.exists(os.path.join('data','fake_data','test_scad2')):
+        os.mkdir(os.path.join('data','fake_data','test_scad2'))
 
-    out = os.path.join('data','fake_data','test_scad','ortherr'+str(orth_err))
+    out = os.path.join('data','fake_data','test_scad2','ortherr'+str(orth_err))
     ds.write_fake_data1(N1 = 10*10, N2 = 10*10, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = orth_err, orth_falseneg = orth_err, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.1)
     lamR = 0.1
     lamP = 1.0 #priors don't matter
@@ -194,7 +194,7 @@ def test_scad2():
         plt.scatter(deltabeta, fusionpenalty)
         plt.xlabel('delta beta')
         plt.ylabel('penalty')
-        plt.savefig(os.path.join(os.path.join('data','fake_data','test_scad',str(fold))))
+        plt.savefig(os.path.join(os.path.join('data','fake_data','test_scad2',str(fold))))
         plt.figure()
 
 
@@ -245,7 +245,7 @@ def test_2coeff_fuse():
         os.mkdir(out)
 
     N = 10
-    #ds.write_fake_data1(out_dir=out, N1=N,N2=N,tfg_count1=(2,1),tfg_count2=(2,1),sparse=0.0,fuse_std=0.0,measure_noise1=0.3,measure_noise2=0.3)
+    ds.write_fake_data1(out_dir=out, N1=N,N2=N,tfg_count1=(2,1),tfg_count2=(2,1),sparse=0.0,fuse_std=0.0,measure_noise1=0.3,measure_noise2=0.3)
     
 
     (br1, genes1, tfs1) = ds.load_network(os.path.join(out, 'beta1'))
@@ -283,7 +283,7 @@ def test_2coeff_fuse_H():
         os.mkdir(out)
 
     N = 10
-    #ds.write_fake_data1(out_dir=out, N1=N,N2=N,tfg_count1=(2,1),tfg_count2=(2,1),sparse=0.0,fuse_std=0.0,measure_noise1=0.3,measure_noise2=0.3, pct_fused=0.5, orth_falsepos=0.99)#think there are orths that are not
+    ds.write_fake_data1(out_dir=out, N1=N,N2=N,tfg_count1=(2,1),tfg_count2=(2,1),sparse=0.0,fuse_std=0.0,measure_noise1=0.3,measure_noise2=0.3, pct_fused=0.5, orth_falsepos=0.99)#think there are orths that are not
     
 
     (br1, genes1, tfs1) = ds.load_network(os.path.join(out, 'beta1'))
@@ -321,7 +321,7 @@ def test_2coeff_fuse1B():
 
     N1 = 10
     N2 = 1000
-    #ds.write_fake_data1(out_dir=out, N1=N1,N2=N2,tfg_count1=(2,1),tfg_count2=(2,1),sparse=0.0,fuse_std=0.0,measure_noise1=0.3,measure_noise2=0.3)
+    ds.write_fake_data1(out_dir=out, N1=N1,N2=N2,tfg_count1=(2,1),tfg_count2=(2,1),sparse=0.0,fuse_std=0.0,measure_noise1=0.3,measure_noise2=0.3)
     
 
     (br1, genes1, tfs1) = ds.load_network(os.path.join(out, 'beta1'))
@@ -389,13 +389,19 @@ def test_2coeff_fuse_HS():
         #print b1
         #print br1
         
+        (constraints, marks, orths) = ds.load_constraints(out)
+    for i, orth in enumerate(orths):
+        print orth
+    for i, con in enumerate(constraints):
+        print '%s    %s' % (str(con), str(marks[i]))
     
+
     plt.rcParams.update({'font.size': 18})
     plt.axis('equal')
     plt.xlabel('coefficient1')
     plt.ylabel('coefficient2')
     plt.savefig(os.path.join(out,'fig1'))
-    #plt.show()
+    plt.show()
 
 
 #tests fusion visually using a pair of similar two-coefficient networks
@@ -405,7 +411,7 @@ def test_2coeff_fuse_HS2():
     lamPs = np.array([1])
     lamRs = np.array([0.1])
     lamSs = 1.0-np.linspace(0,1,10)
-    n_tfs = 10
+    n_tfs = 4
     out = os.path.join('data','fake_data','2coeff_fuse_HS2')
     if not os.path.exists(out):
         os.mkdir(out)
@@ -416,26 +422,28 @@ def test_2coeff_fuse_HS2():
 
     (br1, genes1, tfs1) = ds.load_network(os.path.join(out, 'beta1'))
     (br2, genes2, tfs2) = ds.load_network(os.path.join(out, 'beta2'))
-    plt.plot(br1[0,2], br1[1,2], '*',c=[1.0,0,0],markersize=30)
+
+
+    plt.close()
+    plt.plot(br1[n_tfs-1,n_tfs], br1[n_tfs-2,n_tfs], '*',c=[1.0,0,0],markersize=30)
     
-    plt.plot(br2[0,2], br2[1,2], '*',c=[0,0,1.0],markersize=30)
+    plt.plot(br2[n_tfs-1,n_tfs], br2[n_tfs-2,n_tfs], '*',c=[0,0,1.0],markersize=30)
     #we want to grab the fusion constraints that affect the coefficients we care about, specifically 0->2 <--> 0'->2', 1->2 <--> 1' -> 2'
-    def assemble_orths(orths):
-        fusemat = np.zeros((2,1))
-        
-        for orth in orths:
-            if orth.c1.sub == 1 and orth.c1.c == 2:
-                fusemat[orth.c1.r, 0] = orth.lam
-                #print '%d, %d fused to %d, %d - lamS = %f' %(orth.c1.r, orth.c1.c, orth.c2.r, orth.c2.c, orth.lam)
-        print fusemat
+
+
+    (constraints, marks) = ds.load_constraints(out)
+    print constraints
+    print marks
+
     for lamS in lamSs:
         print 'SOLVING'
         #fg.cv_model1(data_fn = out, lamP=lamPs[0], lamR=lamRs[0], lamS=lamSs[i], k= 10)
         special_args = {'s_it':5, 'orths':None, 'a':1.50}
         (b1, b2) = fg.fit_model(out, lamPs[0], lamRs[0], lamS, solver='solve_ortho_direct_scad',special_args = special_args)
-        plt.plot(b1[0,n_tfs], b1[1,n_tfs], 'or',markersize=0.5*(10+20*lamS))
-        plt.plot(b2[0,n_tfs], b2[1,n_tfs], 'ob',markersize=0.5*(10+20*lamS))
-        
+        plt.plot(b1[n_tfs-1,n_tfs], b1[n_tfs-2,n_tfs], 'or',markersize=0.5*(10+20*lamS))
+        plt.plot(b2[n_tfs-1,n_tfs], b2[n_tfs-2,n_tfs], 'ob',markersize=0.5*(10+20*lamS))
+    print br1
+    print br2
         #assemble_orths(special_args['orths'])
         #print b1
         #print br1
@@ -445,5 +453,5 @@ def test_2coeff_fuse_HS2():
     plt.axis('equal')
     plt.xlabel('coefficient1')
     plt.ylabel('coefficient2')
-    plt.savefig(os.path.join(out,'fig1'))
-    #plt.show()
+    #plt.savefig(os.path.join(out,'fig1'))
+    plt.show()

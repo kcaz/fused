@@ -44,6 +44,8 @@ def fit_model(data_fn, lamP, lamR, lamS, solver='solve_ortho_direct',special_arg
 
     organisms = [ds1.name, ds2.name]
     orth = ds.load_orth(orth_fn, organisms)
+
+    
     (priors1, signs1) = ds1.get_priors()
     (priors2, signs2) = ds2.get_priors()
 
