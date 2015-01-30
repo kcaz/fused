@@ -16,6 +16,8 @@ constraint = collections.namedtuple('constraint',['c1','c2','lam'])
 one_gene = collections.namedtuple('gene',['name','organism'])
 
 orthology = collections.namedtuple('orthology',['genes','real'])
+
+column = collections.namedtuple('column',['sub','c'])
 class dictl(dict):
     def __getitem__(self, i):
         if not i in self:
@@ -436,7 +438,6 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, ad
             if not (co.sub, co.c) in sub_map:
                 sub_map[(sub, co.c)] = counter
                 counter += 1
-                
         #make X
         X_l = []
         for co in columns:
@@ -503,7 +504,7 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, ad
             end_ind = cums[co_i+1]
             
             Bs[co.sub][:, [co.c]] = b[start_ind:end_ind]
-                
+    print ' done solving'
     return Bs
 
 
@@ -606,11 +607,109 @@ def scad(Bs_init, fuse_constraints, lamS, lamW=None, a=3.7):
 #it: number of iterations to run
 def iter_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, it):
     print 'nope'
+
+
+#this code cuts up columns by depth first search
+#returns a list of lists of columns associated with each subproblem
+#and a list of lists of constraints associated with each subproblem
+
+def factor_constraints_columns(Xs, Ys, constraints):
+    columns = []
+    
+    for sub in range(len(Xs)):
+        for c in range(Ys[sub].shape[1]):
+            columns.append(column(sub=sub, c=c))
+            
+    #first we construct an adjacency map on columns
+    col_adj = collections.defaultdict(lambda: [])
+    
+    for con in constraints:
+        col_adj[column(sub = con.c1.sub, c=con.c1.c)].append(column(sub = con.c2.sub, c=con.c2.c))
+        col_adj[column(sub = con.c2.sub, c=con.c2.c)].append(column(sub = con.c1.sub, c=con.c1.c))
+
+    constraints_c = set()
+    for con in constraints:
+        constraints_c.add(constraint(coefficient(con.c1.sub, None, con.c1.c), coefficient(con.c2.sub, None, con.c2.c), None))
+        constraints_c.add(constraint( coefficient(con.c2.sub, None, con.c2.c), coefficient(con.c1.sub, None, con.c1.c), None))
+    #start with a set of all unvisited columns
+    not_visited = set(columns)
+    
+    #this function recursively enumerates all of the columns linked col
+    #for speed reasons, i'll start with an empty list and append to it
+    def enumerate_linked_columns(start_col):
+        linked_cols = []
+        
+        def elc_inner(col):
+            linked_cols.append(col)
+            for adj in col_adj[col]:        
+                if adj in not_visited:
+                    not_visited.remove(adj)
+                    elc_inner(adj)
+        
+        elc_inner(start_col)
+        return linked_cols
+    
+    col_subls = []
+    while len(not_visited):
+        print('\r factoring: %d remaining' % len(not_visited))
+        col_fr = not_visited.pop()
+        linked_cols = enumerate_linked_columns(col_fr)
+        col_subls.append(linked_cols)
+        
+    #now we look at the linked columns and break up constraints by subproblems, and coefficients
+    cols_l = []
+    cons_l = []
+    #we know exactly how many subproblems there are, so initialize coeffs_l and cons_l
+    for i in range(len(col_subls)):
+        cols_l.append([])
+        cons_l.append([])
+    
+    #build a map from column to subproblem number
+    col_to_sub = dict()
+    for sub, cols in enumerate(cols_l):
+        for col in cols:
+            col_to_sub[col] = sub
+
+    #now add columns and constraints to the right sub lists
+    for col in columns:
+        sub = col_to_sub[col]
+        cols_l[sub].append(col)
+    for con in constraints:
+        col = column(sub = con.c1.sub, c = con.c1.c)
+        sub = cols_l[sub]
+        cons_l[sub].append(con)
+
+    for i, linked_cols in enumerate(col_subls):
+        #add in all the constraints that mention these columns
+        
+        #this checks if a constraint mentions any of the linked columns.
+        #for now we will assume that the number of linked columns is small, and just scan through them
+        
+        def check_relevance(con):
+            
+            for col in linked_cols:
+                if con.c1.sub == col.sub and con.c1.c == col.c:
+                    return True #if this constraint is relevant, then both ends must be in the linked columns. no need to check c2
+            return False
+        relevant_constraints = filter(check_relevance, constraints)
+        cons_l[i] = relevant_constraints
+
+        #scan down the rows and add all of the relevant coefficients. THIS IS STUPID. THERE IS NO REASON TO DO THIS
+        relevant_coefficients = []
+        for col in linked_cols:
+            for r in range(Xs[col.sub].shape[1]):
+                coeff = coefficient(sub=col.sub, r=r, c=col.c)
+                relevant_coefficients.append(coeff)
+        coeffs_l[i] = relevant_coefficients
+    print ' done factoring'
+    return (coeffs_l, cons_l)
+
+
 #this code cuts up columns by depth first search
 #returns a list of lists of coefficients associated with each subproblem
 #and a list of lists of constraints associated with each subproblem
 #NOTE: this is pretty horribly written and should be redone at some point
-def factor_constraints_columns(Xs, Ys, constraints):
+def factor_constraints_columns_old(Xs, Ys, constraints):
     columns = []
     for sub in range(len(Xs)):
         for c in range(Ys[sub].shape[1]):
@@ -623,7 +722,7 @@ def factor_constraints_columns(Xs, Ys, constraints):
 
     
     not_visited = set(columns)
-    
+    print len(constraints_c)
     def factor_helper(col_fr, col_l):
         for col_to in columns:
             if not col_to in not_visited:
@@ -637,7 +736,7 @@ def factor_constraints_columns(Xs, Ys, constraints):
                 factor_helper(col_to, col_l)
     col_subls = []
     while len(not_visited):
-        
+        print('factoring: \r %d remaining' % len(not_visited))
         col_fr = not_visited.pop()
         
         col_l = [col_fr]

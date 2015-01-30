@@ -7,6 +7,32 @@ from matplotlib import pyplot as plt
 import random
 #This file is just a list of experiments. Only code that is used nowhere else is appropriate (ie general plotting code should go somewhere else
 
+#this is basic - loads all the data, fits the basic model, and returns B
+def test_bacteria(lamP, lamR, lamS):
+    subt = ds.standard_source('data/bacteria_standard',0)
+    anthr = ds.standard_source('data/bacteria_standard',1)
+
+    
+    (bs_e, bs_t, bs_genes, bs_tfs) = subt.load_data()
+    (ba_e, ba_t, ba_genes, ba_tfs) = anthr.load_data()
+
+    (bs_priors, bs_sign) = subt.get_priors()
+    (ba_priors, ba_sign) = anthr.get_priors()
+
+
+    Xs = [bs_t, ba_t]
+    Ys = [bs_e, ba_e]
+    genes = [bs_genes, ba_genes]
+    tfs = [bs_tfs, ba_tfs]
+    priors = bs_priors + ba_priors
+    orth = ds.load_orth('data/bacteria_standard/orth',[anthr.name, subt.name])
+    organisms = [subt.name, anthr.name]
+
+    Bs = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
+
+    return Bs
+
+
 
 #In this experiment, we generate several data sets with a moderate number of TFs and genes. Fusion is total and noiseless. Measure performance as a function of lamS, and performance as a function of the amount of data. Plot both. This is a basic sanity check for fusion helping
 def sanity1():
@@ -551,7 +577,7 @@ def increase_data2():
     N_TF = 25
     N_G = 50
     N_fixed = 10
-    N_varies = [10,20,30,40]
+    N_varies = np.arange(10,41,2)#[10,20,30,40]
 
 
     lamR = 0.1

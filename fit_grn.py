@@ -12,29 +12,6 @@ import collections
 
 #SECTION: ------------------FOR RUNNING BACTERIAL DATA
 
-#this is basic - loads all the data, fits the basic model, and returns B
-def test_bacteria(lamP, lamR, lamS):
-    subt = ds.subt()
-    anthr = ds.anthr()
-    
-    (bs_e, bs_t, bs_genes, bs_tfs) = subt.load_data()
-    (ba_e, ba_t, ba_genes, ba_tfs) = anthr.load_data()
-
-    (bs_priors, bs_sign) = subt.get_priors()
-    (ba_priors, ba_sign) = anthr.get_priors()
-
-
-    Xs = [bs_t, ba_t]
-    Ys = [bs_e, ba_e]
-    genes = [bs_genes, ba_genes]
-    tfs = [bs_tfs, ba_tfs]
-    priors = bs_priors + ba_priors
-    orth = ds.ba_bs_orth()
-    organisms = [subt.name, anthr.name]
-
-    Bs = fl.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
-
-    return Bs
 
 
 def fit_model(data_fn, lamP, lamR, lamS, solver='solve_ortho_direct',special_args=None):
