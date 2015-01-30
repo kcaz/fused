@@ -101,10 +101,10 @@ def test_scad():
             errors_l2[i,j] = errl['mse'][0]
 
     colorlist = [[0,0,1],[0,1,0],[1,0,0],[0.5,0,0.5]]
-    for r, amnt in enumerate(orth_err):
-        plt.plot(orth_err, errors_scad[r,:], color = colorlist[r])
-    for r, amnt in enumerate(orth_err):
-        plt.plot(orth_err, errors_l2[r,:], '--', color = colorlist[r])
+    for c, amnt in enumerate(orth_err):
+        plt.plot(orth_err, errors_scad[:,c], color = colorlist[c])
+    for c, amnt in enumerate(orth_err):
+        plt.plot(orth_err, errors_l2[:,c], '--', color = colorlist[c])
     plt.legend(lamSs+lamSs)
     plt.xlabel('orth error')
     plt.ylabel('mean squared error')
@@ -113,7 +113,7 @@ def test_scad():
 
 
 def test_scad2():
-#create simulated data set with false orthology and run fused scad + visualize scad penalty at each s_it
+#create simulated data set with false orthology and run fused scad + visualize scad penalty at each cv
      
     N_TF = 10
     N_G = 200
