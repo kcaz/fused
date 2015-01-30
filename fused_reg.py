@@ -403,7 +403,7 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, ad
     #print 'starting solver'
     #iterate over constraint sets
     for f in range(len(coeff_l)):
-        #print('\r working on subproblem: %d'%f), #!?!?!?!
+        print('\r working on subproblem: %d'%f), #!?!?!?!
         #get the coefficients and constraints associated with the current problem
         coefficients = coeff_l[f]
         constraints = con_l[f]
@@ -484,7 +484,9 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, ad
         X = np.vstack((diag_concat(X_l), P, I))
         y = np.vstack(Y_l)
         
-        
+        #from matplotlib import pyplot as plt
+        #plt.matshow(X.T)
+        #plt.show()
         Xsp = scipy.sparse.csr_matrix(X)
         
         ysp = scipy.sparse.csr_matrix(y)

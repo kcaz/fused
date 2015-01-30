@@ -4,6 +4,7 @@ import fit_grn as fg
 import numpy as np
 import os
 from matplotlib import pyplot as plt
+import random
 #This file is just a list of experiments. Only code that is used nowhere else is appropriate (ie general plotting code should go somewhere else
 
 
@@ -72,7 +73,7 @@ def increase_data():
         plt.plot(lamSs, errors[:, c])
     plt.legend(lamSs)
     plt.savefig(os.path.join(os.path.join('data','fake_data','increasedata','fig2')))
-
+    plt.show()
 
 
 def test_scad():
@@ -245,14 +246,11 @@ def test_2coeff_fuse():
         os.mkdir(out)
 
     N = 10
-    ds.write_fake_data1(out_dir=out, N1=N,N2=N,tfg_count1=(2,1),tfg_count2=(2,1),sparse=0.0,fuse_std=0.0,measure_noise1=0.3,measure_noise2=0.3)
+    #ds.write_fake_data1(out_dir=out, N1=N,N2=N,tfg_count1=(2,1),tfg_count2=(2,1),sparse=0.0,fuse_std=0.0,measure_noise1=0.3,measure_noise2=0.3)
     
 
     (br1, genes1, tfs1) = ds.load_network(os.path.join(out, 'beta1'))
     (br2, genes2, tfs2) = ds.load_network(os.path.join(out, 'beta2'))
-    plt.plot(br1[0,2], br1[1,2], '*',c=[0.5,0,0.5],markersize=30)
-    
-    plt.plot(br2[0,2], br2[1,2], '*',c=[0.5,0,0.5],markersize=30)
     
     for lamS in lamSs:
     
@@ -263,6 +261,9 @@ def test_2coeff_fuse():
         #print b1
         #print br1
 
+    plt.plot(br1[0,2], br1[1,2], '*',c=[0.5,0,0.5],markersize=30)
+    
+    plt.plot(br2[0,2], br2[1,2], '*',c=[0.5,0,0.5],markersize=30)
     
     plt.rcParams.update({'font.size': 18})
     plt.axis('equal')
@@ -283,7 +284,7 @@ def test_2coeff_fuse_H():
         os.mkdir(out)
 
     N = 10
-    ds.write_fake_data1(out_dir=out, N1=N,N2=N,tfg_count1=(2,1),tfg_count2=(2,1),sparse=0.0,fuse_std=0.0,measure_noise1=0.3,measure_noise2=0.3, pct_fused=0.5, orth_falsepos=0.99)#think there are orths that are not
+    ds.write_fake_data1(out_dir=out, N1=N,N2=N,tfg_count1=(2,1),tfg_count2=(2,1),sparse=0.0,fuse_std=0.1,measure_noise1=0.3,measure_noise2=0.3, pct_fused=0.5, orth_falsepos=0.99)#think there are orths that are not
     
 
     (br1, genes1, tfs1) = ds.load_network(os.path.join(out, 'beta1'))
@@ -359,8 +360,8 @@ def test_2coeff_fuse_HS():
     if not os.path.exists(out):
         os.mkdir(out)
 
-    N = 30
-    ds.write_fake_data1(out_dir=out, N1=N,N2=N,tfg_count1=(2,1),tfg_count2=(2,1),sparse=0.0,fuse_std=0.0,measure_noise1=0.0,measure_noise2=0.0, pct_fused=0.5, orth_falsepos=0.99)#think there are orths that are not
+    N = 3
+    ds.write_fake_data1(out_dir=out, N1=N,N2=N,tfg_count1=(2,1),tfg_count2=(2,1),sparse=0.0,fuse_std=0.1,measure_noise1=0.1,measure_noise2=0.1, pct_fused=0.5, orth_falsepos=0.99)#think there are orths that are not
     
 
     (br1, genes1, tfs1) = ds.load_network(os.path.join(out, 'beta1'))
@@ -380,7 +381,7 @@ def test_2coeff_fuse_HS():
     for lamS in lamSs:
         print 'SOLVING'
         #fg.cv_model1(data_fn = out, lamP=lamPs[0], lamR=lamRs[0], lamS=lamSs[i], k= 10)
-        special_args = {'s_it':5, 'orths':None, 'a':1.50}
+        special_args = {'s_it':5, 'orths':None, 'a':1.0}
         (b1, b2) = fg.fit_model(out, lamPs[0], lamRs[0], lamS, solver='solve_ortho_direct_scad',special_args = special_args)
         plt.plot(b1[0,2], b1[1,2], 'or',markersize=0.5*(10+20*lamS))
         plt.plot(b2[0,2], b2[1,2], 'ob',markersize=0.5*(10+20*lamS))
@@ -389,7 +390,7 @@ def test_2coeff_fuse_HS():
         #print b1
         #print br1
         
-        (constraints, marks, orths) = ds.load_constraints(out)
+    (constraints, marks, orths) = ds.load_constraints(out)
     for i, orth in enumerate(orths):
         print orth
     for i, con in enumerate(constraints):
@@ -415,43 +416,176 @@ def test_2coeff_fuse_HS2():
     out = os.path.join('data','fake_data','2coeff_fuse_HS2')
     if not os.path.exists(out):
         os.mkdir(out)
-
+    
     N = 30
     ds.write_fake_data1(out_dir=out, N1=N,N2=N,tfg_count1=(n_tfs,1),tfg_count2=(n_tfs,1),sparse=0.0,fuse_std=0.0,measure_noise1=0.0,measure_noise2=0.0, pct_fused=0.5, orth_falsepos=0.99)#think there are orths that are not
     
 
     (br1, genes1, tfs1) = ds.load_network(os.path.join(out, 'beta1'))
     (br2, genes2, tfs2) = ds.load_network(os.path.join(out, 'beta2'))
+    (constraints, marks, orths) = ds.load_constraints(out)
+    
+    #now we want a True gene targeting constraint to be axis1, and a false gene targeting constraint to be axis2
+    inds = np.arange(len(marks))
 
+
+    con_true = set(inds[np.array(marks) == True])
+    con_false = set(inds[np.array(marks) == False])
+
+
+    con_gene_targ1 = set(inds[np.array(map(lambda x: x.c1.c >= br1.shape[0] and x.c1.sub == 0, constraints))]) #genes come after tfs
+    con_gene_targ2 = set(inds[np.array(map(lambda x: x.c1.c >= br2.shape[0] and x.c1.sub == 1, constraints))]) #genes come after tfs
+    con_gene_target = con_gene_targ1.union(con_gene_targ2)
+    
+
+    true_gene_targets = list(con_true.intersection(con_gene_target))
+    false_gene_targets = list(con_false.intersection(con_gene_target))
+    
+    axis1con = constraints[random.choice(true_gene_targets)]
+    axis2con = constraints[random.choice(false_gene_targets)]
+
+    #for b1
+    ax1r1 = axis1con.c1.r
+    ax1c1 = axis1con.c1.c
+    ax2r1 = axis2con.c1.r
+    ax2c1 = axis2con.c1.c
+
+    #for b2
+    ax1r2 = axis1con.c2.r
+    ax1c2 = axis1con.c2.c
+    ax2r2 = axis2con.c2.r
+    ax2c2 = axis2con.c2.c
+    
+#we want to grab the fusion constraints that affect the coefficients we care about, specifically 0->2 <--> 0'->2', 1->2 <--> 1' -> 2'
+
+
+
+
+    if False:
+        for i, orth in enumerate(orths):
+            print orth
+        for i, con in enumerate(constraints):
+            print '%s    %s' % (str(con), str(marks[i]))
 
     plt.close()
-    plt.plot(br1[n_tfs-1,n_tfs], br1[n_tfs-2,n_tfs], '*',c=[1.0,0,0],markersize=30)
+    plt.plot(br1[ax1r1,ax1c1], br1[ax2r1,ax2c1], '*',c=[1.0,0,0],markersize=30)
     
-    plt.plot(br2[n_tfs-1,n_tfs], br2[n_tfs-2,n_tfs], '*',c=[0,0,1.0],markersize=30)
-    #we want to grab the fusion constraints that affect the coefficients we care about, specifically 0->2 <--> 0'->2', 1->2 <--> 1' -> 2'
-
-
-    (constraints, marks) = ds.load_constraints(out)
-    print constraints
-    print marks
-
+    plt.plot(br2[ax1r2,ax1c2], br2[ax2r2,ax2c2], '*',c=[0,0,1.0],markersize=30)
     for lamS in lamSs:
         print 'SOLVING'
         #fg.cv_model1(data_fn = out, lamP=lamPs[0], lamR=lamRs[0], lamS=lamSs[i], k= 10)
         special_args = {'s_it':5, 'orths':None, 'a':1.50}
         (b1, b2) = fg.fit_model(out, lamPs[0], lamRs[0], lamS, solver='solve_ortho_direct_scad',special_args = special_args)
-        plt.plot(b1[n_tfs-1,n_tfs], b1[n_tfs-2,n_tfs], 'or',markersize=0.5*(10+20*lamS))
-        plt.plot(b2[n_tfs-1,n_tfs], b2[n_tfs-2,n_tfs], 'ob',markersize=0.5*(10+20*lamS))
-    print br1
-    print br2
-        #assemble_orths(special_args['orths'])
-        #print b1
-        #print br1
+        plt.plot(b1[ax1r1,ax1c1], b1[ax2r1,ax2c1], 'or',markersize=0.5*(10+20*lamS))
+        plt.plot(b2[ax1r2,ax1c2], b2[ax2r2,ax2c2], 'ob',markersize=0.5*(10+20*lamS))
+    
         
     
     plt.rcParams.update({'font.size': 18})
-    plt.axis('equal')
+    plt.axis([-3, 3, -3, 3])
+    #plt.axis('equal')
     plt.xlabel('coefficient1')
     plt.ylabel('coefficient2')
     #plt.savefig(os.path.join(out,'fig1'))
+    plt.show()
+
+#constructs small, 100% fused, models and profiles the solver
+def bench1():
+    N_TF = 50
+    N_G = 100
+    N1 = 100
+    N2 = 100
+    out = os.path.join('data','fake_data','bench1')
+    def waka():    
+        ds.write_fake_data1(N1 = N1, N2 = N2, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.0)
+
+    
+        (b1, b2) = fg.fit_model(out, 1.0, 0.1, 0.5, solver='solve_ortho_direct')
+    import profile
+    profile.runctx("waka()",globals(),locals(),sort='cumulative')
+    
+
+
+    
+#look at unfused performance varying with lamR
+def vary_lamR():
+    repeats = 5
+    N_TF = 25
+    N_G = 50
+    
+    N = 100
+    lamRs = np.linspace(0.00001,10,7)
+    lamSs = [0,0.5]
+    out1 = os.path.join('data','fake_data','vary_lamR')
+    k = 5#cv folds
+    if not os.path.exists(out1):
+        os.mkdir(out1)
+    #iterate over how much data to use
+    errors = np.zeros((2, len(lamRs)))
+    for r in range(repeats):
+        
+        out2 = os.path.join(out1,'dat_'+str(N))
+        ds.write_fake_data1(N1 = k*N, N2 = k*N, out_dir = out2, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.0)
+            
+        lamP = 1.0 #priors don't matter
+        for j, lamR in enumerate(lamRs):
+            for i, lamS in enumerate(lamSs):
+                errd = fg.cv_model1(out2, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
+                errors[i, j] += errd['mse'][0]
+    
+    errors = errors / k
+    
+    plt.close()
+    
+    plt.plot(lamRs, errors[0,:])
+    plt.plot(lamRs, errors[1,:])
+    
+    plt.savefig(os.path.join(out2, 'fig'))
+    plt.show()
+
+#we want to show performance as a function of data amount for lamS=0, lamS=1
+#we are going to try and set lamR to its optimum
+# one network has a fixed number of conditions (20) the other network varies
+def increase_data2():
+    repeats = 5
+    N_TF = 25
+    N_G = 50
+    N_fixed = 10
+    N_varies = [10,20,30,40]
+
+
+    lamR = 0.1
+    lamSs = [0,0.5]
+    out1 = os.path.join('data','fake_data','increase_data2')
+    k = 5#cv folds
+    if not os.path.exists(out1):
+        os.mkdir(out1)
+    #iterate over how much data to use
+    errors = np.zeros((2, len(N_varies)))
+    for r in range(repeats):
+        for j, N in enumerate(N_varies):
+            out2 = os.path.join(out1,'dat_'+str(N))
+            ds.write_fake_data1(N1 = k*N, N2 = k*N_fixed, out_dir = out2, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.1, pct_fused=0.75)
+            
+            lamP = 1.0 #priors don't matter
+            for i, lamS in enumerate(lamSs):
+                errd = fg.cv_model1(out2, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
+                errors[i, j] += errd['R2'][0]
+    
+    errors = errors / k
+    
+    plt.close()
+    
+    plt.plot(N_varies, errors[0,:])
+    plt.plot(N_varies, errors[1,:])
+    plt.legend(lamSs)
+    plt.savefig(os.path.join(out2, 'fig'))
+
+    plt.rcParams.update({'font.size': 18})
+
+    #plt.axis('equal')
+    plt.xlabel('conditions')
+    plt.ylabel('R2')
+    plt.savefig(os.path.join(out1,'fig'))
+
     plt.show()

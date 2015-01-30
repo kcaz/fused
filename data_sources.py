@@ -704,7 +704,9 @@ def write_priors(outf, priors, signs=None):
 def write_orth(outf, orth):
     f = file(outf, 'w')
     for o in orth:
+        
         if len(o.genes) > 2:
+            
             print 'WARNING TRYING TO WRITE NON 1-1 ORTHOLOGY'
         gene1 = o.genes[0].name
         gene2 = o.genes[1].name
@@ -766,6 +768,18 @@ def voodoo():
                 sign = signs[i]
             f.write('%s\t%s\t%s\n' % (tf.name, gene.name, sign))
         f.close()
+    def load_orth_voodoo(orth_fn, organisms):
+        f = file(orth_fn)
+        fs = f.read()
+        fsn = filter(len, fs.split('\n'))
+        fsnt = map(lambda x: x.split('\t'), fsn)
+    
+        orths = []
+        for o in fsnt:
+            real = True
+            orth = fr.orthology(genes = (fr.one_gene(name=o[0],organism=organisms[0]), fr.one_gene(name=o[1], organism=organisms[1])), real = real)
+            orths.append(orth)
+        return orths
 
 
     sub = subt()
@@ -776,8 +790,8 @@ def voodoo():
 
     (bs_priors, bs_sign) = sub.get_priors()
     (ba_priors, ba_sign) = anth.get_priors()
-    orths = ba_bs_orth()
-    orths = map(lambda x: (x[0], x[1], True), orths)
+    orths = load_orth_voodoo('data/bacteria1/bs_ba_ortho_804',['B_anthracis','B_subtilis'])
+    
     out_dir = os.path.join('data','bacteria_standard')
     if not os.path.exists(out_dir):
         os.mkdir(out_dir)

@@ -70,7 +70,9 @@ def fit_model(data_fn, lamP, lamR, lamS, solver='solve_ortho_direct',special_arg
 #runs the basic model with specified parameters under k-fold cross-validation, and stores a number of metrics
 #k: the number of cv folds
 #reverse: train on the little dude (reverse train and test)
-def cv_model1(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_args=None, reverse=False, cv_both=(True,True)):
+#cv_both: if false, always use all the data for the corresponding species
+#exclude_tfs: don't evaluate on transcription factors. this is useful for generated data, where you can't hope to get them right
+def cv_model1(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_args=None, reverse=False, cv_both=(True,True), exclude_tfs=True):
     ds1 = ds.standard_source(data_fn,0)
     ds2 = ds.standard_source(data_fn,1)
     orth_fn = os.path.join(data_fn, 'orth')
@@ -123,6 +125,7 @@ def cv_model1(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_
             (e2_tr, t2_tr, genes2, tfs2) = ds2.load_data()
             (e2_te, t2_te, genes2, tfs2) = ds2.load_data()
 
+        
         # jam things together
         Xs = [t1_tr, t2_tr]
         Ys = [e1_tr, e2_tr]
@@ -136,22 +139,26 @@ def cv_model1(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_
         if solver == 'solve_ortho_direct_scad':
             Bs = fl.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, s_it = special_args['s_it'])
         
+#        from matplotlib import pyplot as plt
+#        if fold==0:
+#            plt.matshow(Bs[0])
+#            plt.show()
 
-        mse1 += prediction_error(t1_te, Bs[0], e1_te, 'mse')
-        mse2 += prediction_error(t2_te, Bs[1], e2_te, 'mse')
+        mse1 += prediction_error(t1_te, Bs[0], e1_te, 'mse', exclude_tfs=exclude_tfs)
+        mse2 += prediction_error(t2_te, Bs[1], e2_te, 'mse', exclude_tfs=exclude_tfs)
 
-        R21 += prediction_error(t1_te, Bs[0], e1_te, 'R2')
-        R22 += prediction_error(t2_te, Bs[1], e2_te, 'R2')
+        R21 += prediction_error(t1_te, Bs[0], e1_te, 'R2', exclude_tfs=exclude_tfs)
+        R22 += prediction_error(t2_te, Bs[1], e2_te, 'R2', exclude_tfs=exclude_tfs)
 
         if len(priors1):
-            aupr1 += eval_network_pr(Bs[0], genes1, tfs1, priors1)
+            aupr1 += eval_network_pr(Bs[0], genes1, tfs1, priors1, exclude_tfs=exclude_tfs)
         if len(priors2):
-            aupr2 += eval_network_pr(Bs[1], genes2, tfs2, priors2)
+            aupr2 += eval_network_pr(Bs[1], genes2, tfs2, priors2, exclude_tfs=exclude_tfs)
 
         if len(priors1):
-            auroc1 += eval_network_roc(Bs[0], genes1, tfs1, priors1)
+            auroc1 += eval_network_roc(Bs[0], genes1, tfs1, priors1, exclude_tfs=exclude_tfs)
         if len(priors2):        
-            auroc2 += eval_network_roc(Bs[1], genes2, tfs2, priors2)
+            auroc2 += eval_network_roc(Bs[1], genes2, tfs2, priors2, exclude_tfs=exclude_tfs)
 
     params_str = 'simple lamP=%f lamR=%f lamS=%f' % (lamP, lamR, lamS)
     
@@ -171,15 +178,21 @@ def cv_model1(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_
     return ret_dict
 #SECTION: -------------------------CODE FOR EVALUATING THE OUTPUT
 
-#model prediction error, using one of several metrics.
-def prediction_error(X, B, Y, metric):
+#model prediction error, using one of several metrics
+#exclude_tfs doesn't evaluate predictions of the tfs, and assumes that TFs come before all other genes.
+def prediction_error(X, B, Y, metric, exclude_tfs = True):
     Ypred = np.dot(X, B)
     y = Y[:,0]
     yp = Ypred[:,0]
-
+    num_tfs = B.shape[0]
+    if exclude_tfs:
+        start_ind = num_tfs
+    else:
+        start_ind = 0
+    
     if metric == 'R2':
         r2a = 0.0
-        for c in range(Ypred.shape[1]):
+        for c in range(start_ind, Ypred.shape[1]):
             y = Y[:, c]
             yp = Ypred[:, c]
             r2 = 1 - ((y-yp)**2).sum()/ ((y-y.mean())**2).sum()
@@ -188,7 +201,7 @@ def prediction_error(X, B, Y, metric):
         return r2a/Ypred.shape[1]
     if metric == 'mse':
         msea = 0.0
-        for c in range(Ypred.shape[1]):
+        for c in range(start_ind, Ypred.shape[1]):
             y = Y[:, c]
             yp = Ypred[:, c]
             mse = ((y-yp)**2).mean()
@@ -197,7 +210,7 @@ def prediction_error(X, B, Y, metric):
         return msea / Ypred.shape[1]
     if metric == 'corr':
         corra = 0.0
-        for c in range(Ypred.shape[1]):
+        for c in range(start_ind, Ypred.shape[1]):
             y = Y[:, c]
             yp = Ypred[:, c]
             corr = np.corrcoef(y, yp)[0,1]
@@ -205,7 +218,8 @@ def prediction_error(X, B, Y, metric):
         return corra / Ypred.shape[1]
 
 #evaluates the area under the precision recall curve, with respect to some given priors
-def eval_network_pr(net, genes, tfs, priors):
+# NOTE: exclude_tfs currently not implemented
+def eval_network_pr(net, genes, tfs, priors, exclude_tfs = False):
     #from matplotlib import pyplot as plt
     org = priors[0][0].organism
     priors_set = set(priors)
@@ -247,7 +261,8 @@ def eval_network_pr(net, genes, tfs, priors):
     return aupr
 
 #evaluates the area under the roc, with respect to some given priors
-def eval_network_roc(net, genes, tfs, priors):
+# NOTE: exclude_tfs currently not implemented
+def eval_network_roc(net, genes, tfs, priors, exclude_tfs = True):
     #from matplotlib import pyplot as plt
     org = priors[0][0].organism
     priors_set = set(priors)
