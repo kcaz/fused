@@ -41,6 +41,8 @@ def fit_model(data_fn, lamP, lamR, lamS, solver='solve_ortho_direct',special_arg
         Bs = fl.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
     if solver == 'solve_ortho_direct_scad':
         Bs = fl.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, s_it = special_args['s_it'], special_args = special_args)
+    if solver == 'solve_ortho_ref':
+        Bs = fl.solve_ortho_ref(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
     
     return Bs
 
@@ -169,13 +171,18 @@ def prediction_error(X, B, Y, metric, exclude_tfs = True):
     
     if metric == 'R2':
         r2a = 0.0
+        from matplotlib import pyplot as plt
         for c in range(start_ind, Ypred.shape[1]):
             y = Y[:, c]
             yp = Ypred[:, c]
             r2 = 1 - ((y-yp)**2).sum()/ ((y-y.mean())**2).sum()
             r2a += r2
             
-        return r2a/Ypred.shape[1]
+            #if c == start_ind:
+            #    plt.plot(y)
+            #    plt.plot(yp)
+            #    plt.show()
+        return r2a/(Ypred.shape[1]-start_ind)
     if metric == 'mse':
         msea = 0.0
         for c in range(start_ind, Ypred.shape[1]):
@@ -184,7 +191,7 @@ def prediction_error(X, B, Y, metric, exclude_tfs = True):
             mse = ((y-yp)**2).mean()
             msea += mse
 
-        return msea / Ypred.shape[1]
+        return msea / (Ypred.shape[1]-start_ind)
     if metric == 'corr':
         corra = 0.0
         for c in range(start_ind, Ypred.shape[1]):
@@ -192,7 +199,7 @@ def prediction_error(X, B, Y, metric, exclude_tfs = True):
             yp = Ypred[:, c]
             corr = np.corrcoef(y, yp)[0,1]
             corra += corr
-        return corra / Ypred.shape[1]
+        return corra / (Ypred.shape[1] - start_ind)
 
 #evaluates the area under the precision recall curve, with respect to some given priors
 # NOTE: exclude_tfs currently not implemented
@@ -216,11 +223,13 @@ def eval_network_pr(net, genes, tfs, priors, exclude_tfs = False):
     tfs = np.array(tfs)[tf_marked]
     net = net[:, gene_marked]
     net = net[tf_marked, :]
-    scores = np.zeros(len(genes)*len(tfs))
-    labels = np.zeros(len(genes)*len(tfs))
+    scores = []#np.zeros(len(genes)*len(tfs))
+    labels = []#np.zeros(len(genes)*len(tfs))
     i=0
     for tfi in range(len(tfs)):
         for gi in range(len(genes)):
+            if exclude_tfs and gi < len(tfs):
+                continue
             tf = tfs[tfi]
             g = genes[gi]
             score = np.abs(net[tfi, gi])
@@ -229,42 +238,50 @@ def eval_network_pr(net, genes, tfs, priors, exclude_tfs = False):
                 label = 1
             if (fl.one_gene(g, org), fl.one_gene(tf, org)) in priors_set:
                 label = 1
-            scores[i] = score
-            labels[i] = label
-            i += 1
+            
+            
+            scores.append(score)#scores[i] = score
+            labels.append(label)#labels[i] = label
+            
     (precision, recall,t) = precision_recall_curve(labels, scores)#prc(scores, labels)
     aupr = auc(recall, precision)
     
     return aupr
 
 #evaluates the area under the roc, with respect to some given priors
-# NOTE: exclude_tfs currently not implemented
+
 def eval_network_roc(net, genes, tfs, priors, exclude_tfs = True):
-    #from matplotlib import pyplot as plt
+    
     org = priors[0][0].organism
     priors_set = set(priors)
-    scores = np.zeros(len(genes)*len(tfs))
-    labels = np.zeros(len(genes)*len(tfs))
+    scores = []#np.zeros(len(genes)*len(tfs))
+    labels = []#np.zeros(len(genes)*len(tfs))
     i=0
+    
     for tfi in range(len(tfs)):
         for gi in range(len(genes)):
+            if exclude_tfs and gi < len(tfs):
+                continue
             tf = tfs[tfi]
             g = genes[gi]
             score = np.abs(net[tfi, gi])
             label = 0
+            
+            
             if (fl.one_gene(tf, org), fl.one_gene(g, org)) in priors_set:
                 label = 1
             if (fl.one_gene(g, org), fl.one_gene(tf, org)) in priors_set:
                 label = 1
-            scores[i] = score
-            labels[i] = label
+            scores.append(score)
+            labels.append(label)
+            
+            #scores[i] = score
+            #labels[i] = label
             i += 1
     (fpr, tpr, t) = roc_curve(labels, scores)
     auroc = auc(fpr, tpr)
-    #    plt.plot(fpr, tpr)
-    #   plt.show()
-
     return auroc
 
-
+def eval_network_beta(net1, net2):
+    return ((net1 - net2)**2).mean()
             

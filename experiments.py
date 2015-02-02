@@ -519,20 +519,130 @@ def test_2coeff_fuse_HS2():
 def bench1():
     N_TF = 50
     N_G = 100
-    N1 = 100
-    N2 = 100
+    N1 = 40
+    N2 = 40
     out = os.path.join('data','fake_data','bench1')
-    def waka():    
-        ds.write_fake_data1(N1 = N1, N2 = N2, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.0)
-
-    
+    #ds.write_fake_data1(N1 = N1, N2 = N2, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.0)
+    def waka():        
         (b1, b2) = fg.fit_model(out, 1.0, 0.1, 0.5, solver='solve_ortho_direct')
     import profile
-    profile.runctx("waka()",globals(),locals(),sort='cumulative')
+    profile.runctx("waka()",globals(),locals(),sort='cumulative',filename=os.path.join(out,'stats'))
+    import pstats
+    p = pstats.Stats(os.path.join(out,'stats'))
+    p.sort_stats('cumulative').print_stats(20)
+
+#solves a small problem and compares to reference (slow) solver
+def ref1():
+    N_TF = 10
+    N_G = 2
+    N1 = 6
+    N2 = 6
+    out = os.path.join('data','fake_data','ref1')
+    ds.write_fake_data1(N1 = N1, N2 = N2, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.0)
     
+    (b1, b2) = fg.fit_model(out, 1.0, 0.1, 0.5, solver='solve_ortho_direct')
+    (n11,g,t) = ds.load_network(os.path.join(out,'beta1'))
+    (n12,g,t) = ds.load_network(os.path.join(out,'beta2'))
+    
+    (b1r, b2r) = fg.fit_model(out, 1.0, 0.1, 0.5, solver='solve_ortho_ref')
+    (n21,g,t) = ds.load_network(os.path.join(out,'beta1'))
+    (n22,g,t) = ds.load_network(os.path.join(out,'beta2'))
+    #from matplotlib import pyplot as plt
+    #plt.matshow(n11)
+    #plt.matshow(n22)
+    print 'error1 %f' % ((n11-n21)**2).sum()
+    print 'error2 %f' % ((n12-n22)**2).sum()
+
+#solves a simple model and computes aupr, then does it again with priors turned on
+#NOTE: it seems like adding priors always hurts network recovery. why might this be? 
+def check_structure1():
+    N_TF = 20
+    N_G = 50
+    N1 = 20
+    N2 = 20
+    sparse = 0.5
+    out = os.path.join('data','fake_data','struct1')
+    ds.write_fake_data1(N1 = N1, N2 = N2, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=sparse, fuse_std = 0.0)
+    
+    lamP = 1.0
+    lamR = 100
+    lamS = 0.0001
+    k=5
+    solver='solve_ortho_direct'
+    reverse=False
+    cv_both = (True, True)
+    errd1 = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = False, cv_both = (True, True))
+    lamP = 0.01
+    errd2 = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = False, cv_both = (True, True))
+    print errd1
+    print errd2
+    (b1, b2) = fg.fit_model(out, lamP, lamR, lamS, solver='solve_ortho_direct')
+    (b1r, g, t) = ds.load_network(os.path.join(out, 'beta1'))
+    return (b1, b2)
+
+#solves a simple model and computes aupr, then does it again with fusion turned on
+#also looks at the beta error
+def check_structure2():
+    N_TF = 20
+    N_G = 50
+    N1 = 10
+    N2 = 10
+    sparse = 0.5
+    out = os.path.join('data','fake_data','struct2')
+    ds.write_fake_data1(N1 = N1, N2 = N2, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=sparse, fuse_std = 0.0)
+    
+    lamP = 1.0
+    lamR = 1
+    lamS = 0.0
+    k=5
+    solver='solve_ortho_direct'
+    reverse=False
+    cv_both = (True, True)
+    errd1 = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = False, cv_both = (True, True))
+    lamS = 1
+    
+    errd2 = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = False, cv_both = (True, True))
+    print errd1
+    print errd2
+    (b1, b2) = fg.fit_model(out, lamP, lamR, lamS=0, solver='solve_ortho_direct')
+    (b1S, b2S) = fg.fit_model(out, lamP, lamR, lamS=lamS, solver='solve_ortho_direct')
+    (b1r, g, t) = ds.load_network(os.path.join(out, 'beta1'))
+    print 'beta error 1 %f'% fg.eval_network_beta(b1, b1r)
+    print 'beta error 2 %f'% fg.eval_network_beta(b1S, b1r)
+#return (b1, b2)
+
+#generates simple model, then inspects priors
+def make_sure_priors_are_right():
+    N_TF = 3
+    N_G = 3
+    N1 = 15
+    N2 = 15
+    sparse = 0.5
+    out = os.path.join('data','fake_data','check_priors')
+    ds.write_fake_data1(N1 = N1, N2 = N2, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=sparse, fuse_std = 0.0)
+    
+    d1 = ds.standard_source(out,0)
+    d2 = ds.standard_source(out,1)
+    
+    (p1,s1) = d1.get_priors()
+    (p2,s2) = d2.get_priors()
+    
+    p1c = fr.priors_to_constraints([d1.name],[d1.genes],[d1.tfs],p1,0.5)
+    p2c = fr.priors_to_constraints([d2.name],[d2.genes],[d2.tfs],p2,0.5)
+
+    (b1r, g, t) = ds.load_network(os.path.join(out, 'beta1'))
+    (b2r, g, t) = ds.load_network(os.path.join(out, 'beta2'))
 
 
-    
+    print '\n'.join(map(str, p1))
+
+    print '\n'.join(map(str, p1c))
+    print b1r
+    print '\n'.join(map(str, p2c))
+    print b2r
+    r_roc = fg.eval_network_roc(b1r, d1.genes, d1.tfs, p1, exclude_tfs=True)
+    print 'roc is %f' % r_roc
+
 #look at unfused performance varying with lamR
 def vary_lamR():
     repeats = 5
@@ -568,6 +678,7 @@ def vary_lamR():
     
     plt.savefig(os.path.join(out2, 'fig'))
     plt.show()
+
 
 #we want to show performance as a function of data amount for lamS=0, lamS=1
 #we are going to try and set lamR to its optimum
@@ -615,3 +726,4 @@ def increase_data2():
     plt.savefig(os.path.join(out1,'fig'))
 
     plt.show()
+
