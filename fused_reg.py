@@ -5,7 +5,7 @@ import collections
 import time
 import scipy.sparse
 import scipy.sparse.linalg
-
+from sklearn import mixture
 
 #SECTION: -------------------DATA STRUCTURES--------------
 coefficient = collections.namedtuple('coefficient',['sub','r','c'])
@@ -528,7 +528,7 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, ad
         
         
         X = diag_concat_sparse(X_l)        
-        if P and len(P.keys()):
+        if len(constraints) and len(P.keys()):
             P = P.asformat('csr')
             Y_l.append(np.zeros((cums[-1] + len(constraints), 1)))
             F = scipy.sparse.vstack((X, P, I))#F is the penalized design matrix
@@ -672,6 +672,53 @@ def direct_solve_factor_o(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, 
             Bs[co.sub][:, [co.c]] = b[start_ind:end_ind]
     print ' done solving'
     return Bs
+
+def solve_em(Xs, Ys, fuse_con, ridge_con, lamR, lamS, em_it, special_args=None):
+    #special_args is a dictionary where 'f': constant to multiply 1/covar_fused by to get lamS; 'uf' is unfused and 'f' is fused
+    f = special_args['f']
+    uf = special_args['uf']
+
+    Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
+    for i in range(em_it-1):
+        fuse_con = em(Bs, fuse_con, lamS, f, uf)
+        Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
+    return Bs
+
+def em(Bs, fuse_con, lamS, f, uf):
+    g = mixture.GMM(n_components=2)
+
+    theta_inits = []
+    for i in range(len(fuse_constraints)):
+        con = fuse_constraints[i]
+        b_init_1 = Bs_init[con.c1.sub][con.c1.r, con.c1.c]
+        b_init_2 = Bs_init[con.c2.sub][con.c2.r, con.c2.c]
+        theta_inits.append([np.abs(b_init_1 - b_init_2)])
+    thetas = np.array(theta_inits)
+    g.fit(thetas)
+
+    constants = []
+    m1 = np.round(g.means_, 2)[0]
+    m2 = np.round(g.means_, 2)[1]
+    if abs(m1) >= abs(m2):
+        constants[0] = f
+        constants[1] = uf
+    else:
+        constants[0] = uf
+        constants[1] = f
+
+    new_fuse_constraints = []
+
+    for i in range(len(fuse_constraints)):
+        con = fuse_constraints[i]
+        b_init_1 = Bs_init[con.c1.sub][con.c1.r, con.c1.c]
+        b_init_2 = Bs_inits[con.c2.sub][con.c2.r, con.c2.c]
+        theta_init = np.abs(b_init_1 - b_init_2)
+        gauss = g.predict([theta_init])
+        newlamS = constant[gauss] * (1/(g.covars_[gauss]))
+        new_con = constraint(con.c1, con.c2, nlamS)
+        new_fuse_constraints.append(new_con)
+
+    return new_fuse_constraints
 
 
 def solve_mcp(Xs, Ys, fuse_con, ridge_con, lamR, lamS, m_it, special_args=None):    
