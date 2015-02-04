@@ -279,6 +279,9 @@ def eval_network_roc(net, genes, tfs, priors, exclude_tfs = True):
             #labels[i] = label
             i += 1
     (fpr, tpr, t) = roc_curve(labels, scores)
+    if any(np.isnan(fpr)) or any(np.isnan(tpr)):
+        return 0.0 #no false positives
+    
     auroc = auc(fpr, tpr)
     return auroc
 

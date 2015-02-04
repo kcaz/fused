@@ -491,7 +491,10 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, ad
         cums = [0]+list(np.cumsum(map(lambda x: x.shape[1], X_l)))
         
         #initialize P. we know it has as many rows as constraints
-        P = scipy.sparse.dok_matrix((len(constraints), cums[-1]))#np.zeros((len(constraints), cums[-1]))
+        if len(constraints):
+            P = scipy.sparse.dok_matrix((len(constraints), cums[-1]))#np.zeros((len(constraints), cums[-1]))
+        else:
+            P = None
         I_vals = np.ones(cums[-1]) * lambdaR
         #now we go through the ridge constraints and set entries of I
         for con in ridge_cons:
@@ -500,7 +503,7 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, ad
             I_vals[pc1] = con.lam
                 
         I = scipy.sparse.csr_matrix((I_vals, np.vstack((np.arange(cums[-1]), np.arange(cums[-1])))), shape=(cums[-1],cums[-1]))
-        #print P[0,0]
+        
         for P_r, con in enumerate(constraints):
             #get the indices of the diagonal blocks in X corresponding to the coefficients in this constraint
             ind1 = col_order[(con.c1.sub, con.c1.c)]
@@ -516,7 +519,7 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, ad
         
         
         X = diag_concat_sparse(X_l)        
-        if len(P.keys()):
+        if P and len(P.keys()):
             P = P.asformat('csr')
             Y_l.append(np.zeros((cums[-1] + len(constraints), 1)))
             F = scipy.sparse.vstack((X, P, I))#F is the penalized design matrix
