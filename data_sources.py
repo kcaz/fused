@@ -551,13 +551,18 @@ def generate_faulty_priors(B, genes, tfs, falsepos, falseneg):
         for c in range(B.shape[1]):
             if B[r, c] != 0:
                 priors.append((tfs[r], genes[c]))
+                
             if B[r, c] == 0:
                 fakepriors.append((tfs[r], genes[c]))
     num_to_remove = int(falseneg * len(priors))
     num_to_add = int(falsepos*(len(priors) - num_to_remove)/(1-falsepos))    
+    
     random.shuffle(priors)
     random.shuffle(fakepriors)
-    return priors[0:(len(priors) - num_to_remove)] + fakepriors[0:num_to_add]
+    to_keep = priors[0:(len(priors) - num_to_remove)]
+    to_add = fakepriors[0:num_to_add]
+    
+    return  to_keep + to_add 
 
 
 #now also marks orths as real or fake
@@ -621,7 +626,10 @@ def write_fake_data1(out_dir=None, tfg_count1=(5,10), tfg_count2=(5,10), N1=10, 
     (genes2c, expr2) = concat_tfs_genes(genes2, tfs2, x2, y2)
     #(genes1c, expr1) = (genes1, x1)
     #(genes2c, expr2) = (genes2, x2)
-
+    #maybe someday TFs can be some left-eigenvector with eigenvalue 1 of an interesting B, but not today
+    B1 = np.hstack((np.eye(B1.shape[0]), B1))
+    B2 = np.hstack((np.eye(B2.shape[0]), B2))
+    
     priors1 = generate_faulty_priors(B1, genes1c, tfs1, prior_falsepos, prior_falseneg)
     priors2 = generate_faulty_priors(B2, genes2c, tfs2, prior_falsepos, prior_falseneg)
 
@@ -642,9 +650,9 @@ def write_fake_data1(out_dir=None, tfg_count1=(5,10), tfg_count2=(5,10), N1=10, 
     write_tfnames(out_dir+os.sep+'tfnames2',tfs2)
     #since this is simulated data the first part of B is an identity matrix. That is, the TF expressions appear out of nowhere.
     #does this make me happy? no it does not.
-    #maybe someday TFs can be some left-eigenvector with eigenvalue 1 of an interesting B, but not today
-    write_network(genes1c, tfs1, np.hstack((np.eye(B1.shape[0]), B1)), os.path.join(out_dir, 'beta1'))
-    write_network(genes2c, tfs2, np.hstack((np.eye(B2.shape[0]), B2)), os.path.join(out_dir, 'beta2'))
+    
+    write_network(genes1c, tfs1, B1, os.path.join(out_dir, 'beta1'))
+    write_network(genes2c, tfs2, B2, os.path.join(out_dir, 'beta2'))
 
 
 
@@ -704,7 +712,9 @@ def write_priors(outf, priors, signs=None):
 def write_orth(outf, orth):
     f = file(outf, 'w')
     for o in orth:
+        
         if len(o.genes) > 2:
+            
             print 'WARNING TRYING TO WRITE NON 1-1 ORTHOLOGY'
         gene1 = o.genes[0].name
         gene2 = o.genes[1].name
@@ -766,6 +776,18 @@ def voodoo():
                 sign = signs[i]
             f.write('%s\t%s\t%s\n' % (tf.name, gene.name, sign))
         f.close()
+    def load_orth_voodoo(orth_fn, organisms):
+        f = file(orth_fn)
+        fs = f.read()
+        fsn = filter(len, fs.split('\n'))
+        fsnt = map(lambda x: x.split('\t'), fsn)
+    
+        orths = []
+        for o in fsnt:
+            real = True
+            orth = fr.orthology(genes = (fr.one_gene(name=o[0],organism=organisms[0]), fr.one_gene(name=o[1], organism=organisms[1])), real = real)
+            orths.append(orth)
+        return orths
 
 
     sub = subt()
@@ -776,8 +798,8 @@ def voodoo():
 
     (bs_priors, bs_sign) = sub.get_priors()
     (ba_priors, ba_sign) = anth.get_priors()
-    orths = ba_bs_orth()
-    orths = map(lambda x: (x[0], x[1], True), orths)
+    orths = load_orth_voodoo('data/bacteria1/bs_ba_ortho_804',['B_anthracis','B_subtilis'])
+    
     out_dir = os.path.join('data','bacteria_standard')
     if not os.path.exists(out_dir):
         os.mkdir(out_dir)

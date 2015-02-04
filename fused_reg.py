@@ -16,6 +16,8 @@ constraint = collections.namedtuple('constraint',['c1','c2','lam'])
 one_gene = collections.namedtuple('gene',['name','organism'])
 
 orthology = collections.namedtuple('orthology',['genes','real'])
+
+column = collections.namedtuple('column',['sub','c'])
 class dictl(dict):
     def __getitem__(self, i):
         if not i in self:
@@ -38,6 +40,40 @@ def diag_concat(mats):
         row += mi.shape[0]
         col += mi.shape[1]
     return A
+
+#assumes csr
+#
+def diag_concat_sparse(mats):
+    tot_rows=sum(map(lambda x: x.shape[0], mats))
+    tot_cols=sum(map(lambda x: x.shape[1], mats))
+    #csr_matrix((data, (row_ind, col_ind)), [shape=(M, N)])
+    #where data, row_ind and col_ind satisfy the relationship a[row_ind[k], col_ind[k]] = data[k].
+    r_inds_l = []
+    c_inds_l = []
+    data_l = []
+    r_offs = 0
+    c_offs = 0
+    
+    for m in mats:
+        data = m.ravel()
+        inds = np.arange(m.shape[0]*m.shape[1])
+        (r_inds, c_inds) = np.unravel_index(inds, m.shape)
+        r_inds = np.array(r_inds) #make writeable
+        c_inds = np.array(c_inds)
+        
+        r_inds += r_offs
+        c_inds += c_offs
+        r_offs += m.shape[0]
+        c_offs += m.shape[1]
+        data_l.append(data)
+        r_inds_l.append(r_inds)
+        c_inds_l.append(c_inds)
+    data_all = np.hstack(data_l)
+    r_inds_all = np.hstack(r_inds_l)
+    c_inds_all = np.hstack(c_inds_l)
+    
+    M = scipy.sparse.csr_matrix((data_all, (r_inds_all, c_inds_all)), shape=(tot_rows, tot_cols))
+    return M
 
 #returns a list of lists of all pairs of entries from l, where the first entry in the pair occurs before the second in l
 def all_pairs(l):
@@ -309,7 +345,7 @@ def adjust_vol(Xs, cols, fuse_cons, ridge_cons, lamR):
 
 #no cleverness at all
 #this is here as a sanity check
-def direct_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, it):
+def direct_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR):
     ncols = sum(map(lambda y: y.shape[1], Ys))
     nrowsX = sum(map(lambda x: x.shape[0], Xs))
     ncolsX = sum(map(lambda x: x.shape[1], Xs))
@@ -325,7 +361,7 @@ def direct_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, it):
     ypad_l = [y]
     I = np.eye(X.shape[1])*lambdaR
     for con in ridge_constraints:
-        ind = indb(con.c1.sub, con.c1.r, conc1.c)
+        ind = indb(con.c1.sub, con.c1.r, con.c1.c)
         I[ind, ind] = con.lam
     for con in fuse_constraints:
         xpad_l.append(np.zeros((1, X.shape[1])))
@@ -358,6 +394,22 @@ def direct_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, it):
 
 
 
+#reference solver, that does not involve breaking up constraints
+#gene_ls/tf_ls: lists of gene names and tf names for each problem
+#Xs: list of TF expression matrices
+#YS: list of gene expression matrices
+#Orth: list of lists of one_genes
+#priors: list of lists of one_gene pairs
+def solve_ortho_ref(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors,lamP, lamR, lamS, adjust=False, self_reg_pen = 0, special_args=None):
+    
+    
+    ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
+    fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
+    if self_reg_pen:
+        self_con = no_self_reg_constraints(organisms, gene_ls, tf_ls, lamR * self_reg_pen)
+
+    Bs = direct_solve(Xs, Ys, fuse_con, ridge_con, lamR)    
+    return Bs
 
 #most basic solver. Can involve a pre-adjustment step to avoid over-regularizing fused constraints. Solves by factoring.
 #gene_ls/tf_ls: lists of gene names and tf names for each problem
@@ -401,8 +453,113 @@ def solve_ortho_direct_mcp(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP
 #ridge_constraints: ridge regression constraints. constraints not mentioned are assumed to exist with lam=lambdaR
 #it: number of iterations to run
 def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, adjust=False):
+    if False:#this switches to the old version, which is faster for inexplicable reasons
+        return direct_solve_factor_o(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, adjust=adjust)
     
-    (coeff_l, con_l) = factor_constraints_columns(Xs, Ys, fuse_constraints)
+    (cols_l, cons_l, ridg_l) = factor_constraints_columns(Xs, Ys, fuse_constraints, ridge_constraints)
+    
+    Bs = []
+    
+    #Initialize matrices to hold solutions
+    for i in range(len(Xs)):
+        Bs.append(np.zeros((Xs[i].shape[1], Ys[i].shape[1])))
+    
+    #iterate over subproblems
+    for f in range(len(cols_l)):
+#print('\r working on subproblem: %d'%f), #!?!?!?!
+        #get the coefficients and constraints associated with the current problem
+        
+        columns = cols_l[f]
+        constraints = cons_l[f]
+        ridge_cons = ridg_l[f]
+        #num_species = len(set(map(lambda co: co.sub, coefficients)))
+        if adjust:
+            print 'haha not implmneted'
+            (constraints, ridge_cons) = adjust_vol2(Xs, columns, constraints, ridge_cons,lambdaR)
+        
+        #we're building a canonical ordering over the columns for the current subproblem
+        counter = 0
+        col_order = dict()
+        for co in columns:
+            sub = co.sub
+            col_order[co] = counter
+            counter += 1
+        #make a list of Xs for diagonal concatenation
+        X_l = []
+        for co in columns:
+            X_l.append(Xs[co.sub])
+        #make Y 
+        Y_l = []
+        for co in columns:
+            Y = Ys[co.sub]
+            Y_l.append(Y[:, [co.c]])
+        
+
+        #compute a cumulative sum over the number of columns in each sub-block, for use as offsets when computing coefficient indices for penalties
+        #what this means is that column c in subproblem s has start index cums[s] + r
+        cums = [0]+list(np.cumsum(map(lambda x: x.shape[1], X_l)))
+        
+        #initialize P. we know it has as many rows as constraints
+        if len(constraints):
+            P = scipy.sparse.dok_matrix((len(constraints), cums[-1]))#np.zeros((len(constraints), cums[-1]))
+        else:
+            P = None
+        I_vals = np.ones(cums[-1]) * lambdaR
+        #now we go through the ridge constraints and set entries of I
+        for con in ridge_cons:
+            ind1 = col_order[(con.c1.sub, con.c1.c)]
+            pc1 = cums[ind1] + con.c1.r
+            I_vals[pc1] = con.lam
+                
+        I = scipy.sparse.csr_matrix((I_vals, np.vstack((np.arange(cums[-1]), np.arange(cums[-1])))), shape=(cums[-1],cums[-1]))
+        
+        for P_r, con in enumerate(constraints):
+            #get the indices of the diagonal blocks in X corresponding to the coefficients in this constraint
+            ind1 = col_order[(con.c1.sub, con.c1.c)]
+            ind2 = col_order[(con.c2.sub, con.c2.c)]
+            #the locations corresponding to the coefficients we want to penalize are the start index of that block plus the row
+            pc1 = cums[ind1] + con.c1.r
+            pc2 = cums[ind2] + con.c2.r
+            
+            P[P_r, pc1] = con.lam
+            P[P_r, pc2] = -con.lam
+            
+        #due to an annoying bug in sparse vstack, I need to check if P is all zeros
+        
+        
+        X = diag_concat_sparse(X_l)        
+        if P and len(P.keys()):
+            P = P.asformat('csr')
+            Y_l.append(np.zeros((cums[-1] + len(constraints), 1)))
+            F = scipy.sparse.vstack((X, P, I))#F is the penalized design matrix
+        else:
+            Y_l.append(np.zeros((cums[-1], 1)))
+            F = scipy.sparse.vstack((X, I), format='csr')#F is the penalized design matrix
+        
+        y = np.vstack(Y_l)        
+        bsp = scipy.sparse.linalg.lsqr(F, y)#the first result is b, and it needs to be turned into a column vector
+        b = bsp[0][:, None] #god this is annoying
+        
+        
+        #we've now solved a b vector that contains potentially several columns of B. figure out what indices go where, and put them into the right B
+        for co_i in range(len(columns)):
+            co = columns[co_i]
+            start_ind = cums[co_i]
+            end_ind = cums[co_i+1]
+            
+            Bs[co.sub][:, [co.c]] = b[start_ind:end_ind]
+    print ' done solving'
+    return Bs
+
+#this is like direct solve, but it brakes up unrelated columns
+#solves W = argmin_W ((XW - Y)**2).sum() + constraint related terms
+#Xs, Ys: X and Y for each subproblem
+#fuse_constraints: fusion constraints
+#ridge_constraints: ridge regression constraints. constraints not mentioned are assumed to exist with lam=lambdaR
+#it: number of iterations to run
+def direct_solve_factor_o(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, adjust=False):
+    
+    (coeff_l, con_l) = factor_constraints_columns_o(Xs, Ys, fuse_constraints)
     
     Bs = []
     
@@ -414,6 +571,7 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, ad
     for f in range(len(coeff_l)):
         #print('\r working on subproblem: %d'%f), #!?!?!?!
         #get the coefficients and constraints associated with the current problem
+        
         coefficients = coeff_l[f]
         constraints = con_l[f]
         ridge_cons = []
@@ -445,7 +603,6 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, ad
             if not (co.sub, co.c) in sub_map:
                 sub_map[(sub, co.c)] = counter
                 counter += 1
-                
         #make X
         X_l = []
         for co in columns:
@@ -460,7 +617,7 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, ad
 
         cums = [0]+list(np.cumsum(map(lambda x: x.shape[1], X_l)))
         P_l = [np.zeros((0, cums[-1]))]
-                
+        
         for con in constraints:
             P = np.zeros((1, cums[-1]))
             #get the indices of the diagonal blocks in X corresponding to the coefficients in this constraint
@@ -493,6 +650,9 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, ad
         X = np.vstack((diag_concat(X_l), P, I))
         y = np.vstack(Y_l)
         
+        #from matplotlib import pyplot as plt
+        #plt.matshow(X.T)
+        #plt.show()
         
         Xsp = scipy.sparse.csr_matrix(X)
         
@@ -510,7 +670,7 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, ad
             end_ind = cums[co_i+1]
             
             Bs[co.sub][:, [co.c]] = b[start_ind:end_ind]
-                
+    print ' done solving'
     return Bs
 
 
@@ -615,16 +775,93 @@ def scad(Bs_init, fuse_constraints, lamS, lamW=None, a=3.7):
 #it: number of iterations to run
 def iter_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, it):
     print 'nope'
+
+
+#this code cuts up columns by depth first search
+#returns a list of lists of columns associated with each subproblem
+#and a list of lists of constraints associated with each subproblem
+#and a list of ridge constraints associated with each subproblem
+def factor_constraints_columns(Xs, Ys, constraints, ridge):
+    columns = []
+    
+    for sub in range(len(Xs)):
+        for c in range(Ys[sub].shape[1]):
+            columns.append(column(sub=sub, c=c))
+            
+    #first we construct an adjacency map on columns
+    col_adj = collections.defaultdict(lambda: [])
+    
+    for con in constraints:
+        col_adj[column(sub = con.c1.sub, c=con.c1.c)].append(column(sub = con.c2.sub, c=con.c2.c))
+        col_adj[column(sub = con.c2.sub, c=con.c2.c)].append(column(sub = con.c1.sub, c=con.c1.c))
+
+    #constraints_c = set()
+    #for con in constraints:
+    #    constraints_c.add(constraint(coefficient(con.c1.sub, None, con.c1.c), coefficient(con.c2.sub, None, con.c2.c), None))
+    #    constraints_c.add(constraint( coefficient(con.c2.sub, None, con.c2.c), coefficient(con.c1.sub, None, con.c1.c), None))
+    #start with a set of all unvisited columns
+    not_visited = set(columns)
+    
+    #this function recursively enumerates all of the columns linked col
+    #for speed reasons, i'll start with an empty list and append to it
+    def enumerate_linked_columns(start_col):
+        linked_cols = []
+        
+        def elc_inner(col):
+            linked_cols.append(col)
+            for adj in col_adj[col]:        
+                if adj in not_visited:
+                    not_visited.remove(adj)
+                    elc_inner(adj)
+        
+        elc_inner(start_col)
+        return linked_cols
+    
+    col_subls = []
+    while len(not_visited):
+        #print('\r factoring: %d remaining' % len(not_visited))
+        col_fr = not_visited.pop()
+        linked_cols = enumerate_linked_columns(col_fr)
+        col_subls.append(linked_cols)
+        
+    #now we look at the linked columns and break up constraints by subproblems, and coefficients
+    cols_l = col_subls
+    cons_l = []
+    ridg_l = []
+    #we know exactly how many subproblems there are, so initialize coeffs_l and cons_l
+    for i in range(len(col_subls)):
+        cons_l.append([])
+        ridg_l.append([])
+    #build a map from column to subproblem number
+    col_to_sub = dict()
+    for sub, cols in enumerate(col_subls):
+        for col in cols:
+            col_to_sub[col] = sub
+    
+    #now add columns and constraints to the right sub lists
+    for con in constraints:
+        col = column(sub = con.c1.sub, c = con.c1.c)
+        sub = col_to_sub[col]
+        cons_l[sub].append(con)
+        
+    for con in ridge:
+        col = column(sub = con.c1.sub, c = con.c1.c)
+        sub = col_to_sub[col]
+        ridg_l[sub].append(con)
+    
+    return (cols_l, cons_l, ridg_l)
+
+
 #this code cuts up columns by depth first search
 #returns a list of lists of coefficients associated with each subproblem
 #and a list of lists of constraints associated with each subproblem
 #NOTE: this is pretty horribly written and should be redone at some point
-def factor_constraints_columns(Xs, Ys, constraints):
+def factor_constraints_columns_o(Xs, Ys, constraints):
     columns = []
     for sub in range(len(Xs)):
         for c in range(Ys[sub].shape[1]):
             columns.append((sub, c))
-            
+    
     constraints_c = set()
     for con in constraints:
         constraints_c.add(constraint(coefficient(con.c1.sub, None, con.c1.c), coefficient(con.c2.sub, None, con.c2.c), None))
@@ -646,7 +883,7 @@ def factor_constraints_columns(Xs, Ys, constraints):
                 factor_helper(col_to, col_l)
     col_subls = []
     while len(not_visited):
-        
+        #print('factoring: \r %d remaining' % len(not_visited))
         col_fr = not_visited.pop()
         
         col_l = [col_fr]
