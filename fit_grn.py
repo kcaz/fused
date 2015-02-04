@@ -153,7 +153,7 @@ def cv_model1(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_
         if len(priors2):        
             auroc2 += eval_network_roc(Bs[1], genes2, tfs2, priors2)
 
-    params_str = 'simple lamP=%f lamR=%f lamS=%f' % (lamP, lamR, lamS)
+    params_str =  solver + '\t' + 'lamP=%f lamR=%f lamS=%f' % (lamP, lamR, lamS)
     
     result_str = '\t'.join(8*['%f']) % (mse1/k, mse2/k, R21/k, R22/k, aupr1/k, aupr2/k, auroc1/k, auroc2/k)
     print params_str + '\t' + result_str + '\n'

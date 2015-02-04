@@ -379,13 +379,22 @@ def solve_ortho_direct(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors,lamP, lam
 #parameters as solve_ortho_direct. 
 #s_it defines the number of scad-like iterations to do
 def solve_ortho_direct_scad(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS, s_it, special_args=None):
-    ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
-    
+    ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)    
     fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
     Bs = solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, s_it=s_it,special_args=special_args)
     return Bs
 
-#this is like direct solve, but it brakes up unrelated columns
+
+#parameters as solve_ortho_direct. 
+#m_it defines the number of mcp-like iterations to do
+def solve_ortho_direct_mcp(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS, m_it, special_args=None):
+    ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)    
+    fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
+    Bs = solve_mcp(Xs, Ys, fuse_con, ridge_con, lamR, lamS, m_it=m_it,special_args=special_args)
+    return Bs
+
+
+#this is like direct solve, but it breaks up unrelated columns
 #solves W = argmin_W ((XW - Y)**2).sum() + constraint related terms
 #Xs, Ys: X and Y for each subproblem
 #fuse_constraints: fusion constraints
@@ -505,14 +514,14 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, ad
     return Bs
 
 
-def solve_mcp(Xs, Ys, fuse_con, ridge_con, lamR, lamS, s_it, special_args=None):    
+def solve_mcp(Xs, Ys, fuse_con, ridge_con, lamR, lamS, m_it, special_args=None):    
     if special_args and 'a' in special_args:
         a = special_args['a']
     else:   
         a = 3.7
     
     Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
-    for i in range(s_it-1):
+    for i in range(m_it-1):
         Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
         fuse_con = mcp(Bs, fuse_con, lamS, a=a)
     
@@ -523,7 +532,7 @@ def solve_mcp(Xs, Ys, fuse_con, ridge_con, lamR, lamS, s_it, special_args=None):
     return Bs
 
 #returns a new set of fusion constraints corresponding to a saturating penalty
-def mcp(Bs_init, fuse_constraints, lamS, lamW=None, a=0.5):
+def mcp(Bs_init, fuse_constraints, lamS, lamW=None, a=2):
     new_fuse_constraints = []
     
     for i in range(len(fuse_constraints)):
@@ -533,10 +542,12 @@ def mcp(Bs_init, fuse_constraints, lamS, lamW=None, a=0.5):
         theta_init = np.abs(b_init_1 - b_init_2)
 
         if np.abs(theta_init) <= lamS*a:
-            nlamS = lamS - (np.abs(theta_init)/a)
+            nlamS = np.abs(lamS-1/a)
+            #nlamS = (lamS*theta_init - theta_init/a) / theta_init
+            #nlamS = lamS*(theta_init**2) - (theta_init**2)/(2*a) / theta_init
 
         else:
-            nlamS = 0
+            nlamS = ((a*lamS**2)/(2*theta_init**2)) #/ theta_init
 
         new_con = constraint(con.c1, con.c2, nlamS)
         new_fuse_constraints.append(new_con)
@@ -564,9 +575,9 @@ def solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, s_it, special_args=None)
 
 def scad_prime(theta, lamS, a):
     if theta < lamS:
-        return 1.0
+        return theta * lamS
     else:
-        return max(0, (a*lamS - theta) / ((a-1)*theta))
+        return max(0, (a*lamS - theta) / (a-1))
     
 def scad2_prime(theta, lamS, a):
     
