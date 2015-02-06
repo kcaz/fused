@@ -918,11 +918,12 @@ def test_em():
     N_G = 200
     amt_fused = 1.0
     orth_err = [0,0.3,0.5,1.0]
+    lamS = 1
     if not os.path.exists(os.path.join('data','fake_data','test_em')):
         os.mkdir(os.path.join('data','fake_data','test_em'))
     #iterate over how much fusion
-    errors_em = np.zeros((len(orth_err), len(lamSs)))
-    errors_l2 = np.zeros((len(orth_err), len(lamSs)))
+    errors_em = np.zeros(len(orth_err))
+    errors_l2 = np.zeros(len(orth_err))
     for i, N in enumerate(orth_err):
         out = os.path.join('data','fake_data','test_em','dat_'+str(N))
         ds.write_fake_data1(N1 = 10*10, N2 = 10*10, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = N, orth_falseneg = N, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.1)
@@ -930,8 +931,8 @@ def test_em():
         lamP = 1.0 #priors don't matter
         errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct_em', reverse = True, special_args = {'em_it':5, 'f':1, 'uf':1}, cv_both = (True, True))
         errl = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
-        errors_em[i,j] = errd['mse'][0]
-        errors_l2[i,j] = errl['mse'][0]
+        errors_em[i] = errd['mse'][0]
+        errors_l2[i] = errl['mse'][0]
 
     colorlist = [[0,0,1],[0,1,0],[1,0,0],[0.5,0,0.5]]
     for r, amnt in enumerate(orth_err):
