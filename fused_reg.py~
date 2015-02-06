@@ -446,6 +446,15 @@ def solve_ortho_direct_mcp(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP
     return Bs
 
 
+#parameters as solve_ortho_direct. 
+#em_it defines the number of em iterations to do
+def solve_ortho_direct_em(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS, em_it, special_args=None):
+    ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)    
+    fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
+    Bs = solve_em(Xs, Ys, fuse_con, ridge_con, lamR, lamS, em_it=em_it,special_args=special_args)
+    return Bs
+
+
 #this is like direct solve, but it breaks up unrelated columns
 #solves W = argmin_W ((XW - Y)**2).sum() + constraint related terms
 #Xs, Ys: X and Y for each subproblem
@@ -528,7 +537,7 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, ad
         
         
         X = diag_concat_sparse(X_l)        
-        if P and len(P.keys()):
+        if len(constraints) and len(P.keys()):
             P = P.asformat('csr')
             Y_l.append(np.zeros((cums[-1] + len(constraints), 1)))
             F = scipy.sparse.vstack((X, P, I))#F is the penalized design matrix
@@ -684,38 +693,48 @@ def solve_em(Xs, Ys, fuse_con, ridge_con, lamR, lamS, em_it, special_args=None):
         Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
     return Bs
 
-def em(Bs, fuse_con, lamS, f, uf):
-    g = mixture.GMM(n_components=2)
+def em(Bs_init, fuse_con, lamS, f, uf):
+    g = mixture.GMM(n_components=2, n_iter=10)
+    thetas_uf = []
+    for i in range(len(fuse_con)):
+        r1 = Bs_init[0].shape[0]
+        c1 = Bs_init[0].shape[1]
+        b_init_1 = Bs_init[0][random.randrange(0,r1,1)][random.randrange(0,c1,1)]
+        r2 = Bs_init[1].shape[0]
+        c2 = Bs_init[1].shape[1]
+        b_init_2 = Bs_init[1][random.randrange(0,r2,1)][random.randrange(0,c2,1)]
+        thetas_uf.append(b_init_1 - b_init_2)
 
-    theta_inits = []
-    for i in range(len(fuse_constraints)):
-        con = fuse_constraints[i]
+    thetas_f = []
+    for i in range(len(fuse_con)):
+        con = fuse_con[i]
         b_init_1 = Bs_init[con.c1.sub][con.c1.r, con.c1.c]
         b_init_2 = Bs_init[con.c2.sub][con.c2.r, con.c2.c]
-        theta_inits.append([np.abs(b_init_1 - b_init_2)])
-    thetas = np.array(theta_inits)
+        thetas_f.append(b_init_1 - b_init_2)
+    thetas = np.array(thetas_f + thetas_uf)
     g.fit(thetas)
 
     constants = []
     m1 = np.round(g.means_, 2)[0]
     m2 = np.round(g.means_, 2)[1]
+    print g.means_
+    print g.covars_
     if abs(m1) >= abs(m2):
-        constants[0] = f
-        constants[1] = uf
+        constants = [f,uf]
     else:
-        constants[0] = uf
-        constants[1] = f
+        constants = [uf, f]
 
     new_fuse_constraints = []
 
-    for i in range(len(fuse_constraints)):
-        con = fuse_constraints[i]
+    for i in range(len(fuse_con)):
+        con = fuse_con[i]
         b_init_1 = Bs_init[con.c1.sub][con.c1.r, con.c1.c]
-        b_init_2 = Bs_inits[con.c2.sub][con.c2.r, con.c2.c]
+        b_init_2 = Bs_init[con.c2.sub][con.c2.r, con.c2.c]
         theta_init = np.abs(b_init_1 - b_init_2)
         gauss = g.predict([theta_init])
-        newlamS = constant[gauss] * (1/(g.covars_[gauss]))
-        new_con = constraint(con.c1, con.c2, nlamS)
+        newlamS = constants[gauss] * (1/(g.covars_[gauss]))
+        new_con = constraint(con.c1, con.c2, newlamS[0][0])
+        #hacky
         new_fuse_constraints.append(new_con)
 
     return new_fuse_constraints
@@ -768,7 +787,7 @@ def solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, s_it, special_args=None)
         a = special_args['a']
     else:
         a = 3.7
-    
+    print s_it
     Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
     for i in range(s_it-1):
         Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)

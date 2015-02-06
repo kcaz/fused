@@ -117,6 +117,12 @@ def cv_model1(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_
             Bs = fl.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
         if solver == 'solve_ortho_direct_scad':
             Bs = fl.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, s_it = special_args['s_it'])
+        if solver == 'solve_ortho_direct_mcp':
+            Bs = fl.solve_ortho_direct_mcp(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, m_it = special_args['m_it'])
+        if solver == 'solve_ortho_direct_em':
+            Bs = fl.solve_ortho_direct_em(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, em_it = special_args['em_it'])
+
+            
         
 #        from matplotlib import pyplot as plt
 #        if fold==0:
