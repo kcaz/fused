@@ -519,7 +519,7 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, ad
         
         
         X = diag_concat_sparse(X_l)        
-        if P and len(P.keys()):
+        if len(constraints) and len(P.keys()):
             P = P.asformat('csr')
             Y_l.append(np.zeros((cums[-1] + len(constraints), 1)))
             F = scipy.sparse.vstack((X, P, I))#F is the penalized design matrix
