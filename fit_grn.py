@@ -59,8 +59,10 @@ def cv_model1(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_
 
     organisms = [ds1.name, ds2.name]
     orth = ds.load_orth(orth_fn, organisms)
+    #accumulate metrics
     (mse1, mse2, R21, R22, aupr1, aupr2, auroc1, auroc2) = list(np.zeros(8))
-
+    #accumulate squared metrics for variance
+    (v_mse1, v_mse2, v_R21, v_R22, v_aupr1, v_aupr2, v_auroc1, v_auroc2) = list(np.zeros(8))
     
     folds1 = ds1.partition_data(k)
     folds2 = ds2.partition_data(k)
@@ -130,38 +132,83 @@ def cv_model1(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_
 #            plt.matshow(Bs[0])
 #            plt.show()
 
-        mse1 += prediction_error(t1_te, Bs[0], e1_te, 'mse', exclude_tfs=exclude_tfs)
-        mse2 += prediction_error(t2_te, Bs[1], e2_te, 'mse', exclude_tfs=exclude_tfs)
+        mse_err1 = prediction_error(t1_te, Bs[0], e1_te, 'mse', exclude_tfs=exclude_tfs)
+        mse_err2 = prediction_error(t2_te, Bs[1], e2_te, 'mse', exclude_tfs=exclude_tfs)
+        mse1 += mse_err1 
+        mse2 += mse_err2
+        v_mse1 += mse_err1**2
+        v_mse2 += mse_err2**2
 
-        R21 += prediction_error(t1_te, Bs[0], e1_te, 'R2', exclude_tfs=exclude_tfs)
-        R22 += prediction_error(t2_te, Bs[1], e2_te, 'R2', exclude_tfs=exclude_tfs)
+
+        r2_err1 = prediction_error(t1_te, Bs[0], e1_te, 'R2', exclude_tfs=exclude_tfs)
+        r2_err2 = prediction_error(t2_te, Bs[1], e2_te, 'R2', exclude_tfs=exclude_tfs)
+        R21 += r2_err1
+        R22 += r2_err2
+        v_R21 += r2_err1**2
+        v_R22 += r2_err2**2
+
+        
 
         if len(priors1):
-            aupr1 += eval_network_pr(Bs[0], genes1, tfs1, priors1, exclude_tfs=exclude_tfs)
+            aupr1_err = eval_network_pr(Bs[0], genes1, tfs1, priors1, exclude_tfs=exclude_tfs)
+            aupr1 += aupr1_err
+            v_aupr1 += aupr1_err**2
+ 
         if len(priors2):
-            aupr2 += eval_network_pr(Bs[1], genes2, tfs2, priors2, exclude_tfs=exclude_tfs)
+            aupr2_err = eval_network_pr(Bs[1], genes2, tfs2, priors2, exclude_tfs=exclude_tfs)
+            aupr2 += aupr2_err
+            v_aupr2 += aupr2_err**2
 
         if len(priors1):
-            auroc1 += eval_network_roc(Bs[0], genes1, tfs1, priors1, exclude_tfs=exclude_tfs)
+            auroc1_err = eval_network_roc(Bs[0], genes1, tfs1, priors1, exclude_tfs=exclude_tfs)
+            auroc1 += auroc1_err
+            v_auroc1 += auroc1_err**2
         if len(priors2):        
-            auroc2 += eval_network_roc(Bs[1], genes2, tfs2, priors2, exclude_tfs=exclude_tfs)
+            auroc2_err = eval_network_roc(Bs[1], genes2, tfs2, priors2, exclude_tfs=exclude_tfs)
+            auroc2 += auroc2_err
+            v_auroc2 += auroc2_err**2
+            
+            errd = {'mse':(mse1/k, mse2/k), 'R2':(R21/k, R22/k), 'aupr':(aupr1/k, aupr2/k),'auroc':(auroc1/k, auroc2/k)}
+            vrrd = {'mse':(v_mse1/k, v_mse2/k), 'R2':(v_R21/k, v_R22/k), 'aupr':(v_aupr1/k, v_aupr2/k),'auroc':(v_auroc1/k, v_auroc2/k)}
+            
+            for key in errd.keys():
+                acc = []
+                for i in range(len(errd[key])):
+                    acc.append(vrrd[key][i]-errd[key][i]**2)
+                errd[key + '_v'] = acc
+            
+            
 
     params_str =  solver + '\t' + 'lamP=%f lamR=%f lamS=%f' % (lamP, lamR, lamS)
     
-    result_str = '\t'.join(8*['%f']) % (mse1/k, mse2/k, R21/k, R22/k, aupr1/k, aupr2/k, auroc1/k, auroc2/k)
+    result_str_l = []
+    header_str_l = ['params']
+    for k in ['mse','R2','aupr','auroc']:
+        kv = k+'_v'
+        result_str_l.append(errd[k][0])
+        result_str_l.append(errd[kv][0])
+        result_str_l.append(errd[k][1])
+        result_str_l.append(errd[kv][1])
+        header_str_l.append(k+'1')
+        header_str_l.append(kv+'1')
+        header_str_l.append(k+'2')
+        header_str_l.append(kv+'2')
+    result_str = '\t'.join(map(str, result_str_l))
+    header_str = '\t'.join(map(str, header_str_l))                       
+    
     print params_str + '\t' + result_str + '\n'
 
     if not os.path.exists(os.path.join(data_fn, 'results')):
         with open(os.path.join(data_fn, 'results'),'w') as outf:
-            outf.write('params\tmse1\tmse2\tR21\tR22\taupr1\taupr2\tauroc1\tauroc2\n')
+            outf.write(header_str + '\n')
     with open(os.path.join(data_fn, 'results'),'a') as outf:
         outf.write(params_str + '\t' + result_str + '\n')
     with open(os.path.join(data_fn, 'last_results'),'a') as outf:
-        outf.write('params\tmse1\tmse2\tR21\tR22\taupr1\taupr2\tauroc1\tauroc2\n')
+        outf.write(header_str + '\n')
         outf.write(params_str + '\t' + result_str + '\n')
 
-    ret_dict = {'mse':(mse1/k, mse2/k), 'R2':(R21/k, R22/k), 'aupr':(aupr1/k, aupr2/k),'auroc':(auroc1/k, auroc2/k)}
-    return ret_dict
+    
+    return errd
 #SECTION: -------------------------CODE FOR EVALUATING THE OUTPUT
 
 #model prediction error, using one of several metrics
