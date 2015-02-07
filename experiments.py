@@ -863,7 +863,8 @@ def plot_betas():
     Bem2 = []
     colors = []
     con_inds = np.random.permutation(range(len(constraints)))
- 
+    area_fs = []
+    area_em = [] 
 
     subs = 300
     for i in con_inds[0:subs]:
@@ -877,6 +878,9 @@ def plot_betas():
         Bfs2.append(Bs_fs[con.c2.sub][con.c2.r, con.c2.c])
         Bem1.append(Bs_em[con.c1.sub][con.c1.r, con.c1.c])
         Bem2.append(Bs_em[con.c2.sub][con.c2.r, con.c2.c])
+
+        area_fs.append(con.lam)
+        area_em.append(con.lam)
         if mark == 1:
             colors.append('g')
         else:
@@ -890,6 +894,9 @@ def plot_betas():
         Bem1.append(Bs_em[0][random.randrange(0,r1,1)][random.randrange(0,c1,1)])
         Bem2.append(Bs_em[1][random.randrange(0,r2,1)][random.randrange(0,c2,1)])
         colors.append('b')
+        area_fs.append(1)
+        area_em.append(1)
+
     Buf1s = np.array(Buf1)
     Buf2s = np.array(Buf2)
     Bfr1s = np.array(Bfr1)
@@ -917,13 +924,14 @@ def test_em():
     N_TF = 10
     N_G = 200
     amt_fused = 1.0
-    orth_err = [0,0.3,0.5,1.0]
+    orth_err = [0,0.3,0.5,0.7,0.9]
     lamS = 1
     if not os.path.exists(os.path.join('data','fake_data','test_em')):
         os.mkdir(os.path.join('data','fake_data','test_em'))
     #iterate over how much fusion
     errors_em = np.zeros(len(orth_err))
     errors_l2 = np.zeros(len(orth_err))
+    errors_uf = np.zeros(len(orth_err))
     for i, N in enumerate(orth_err):
         out = os.path.join('data','fake_data','test_em','dat_'+str(N))
         ds.write_fake_data1(N1 = 10*10, N2 = 10*10, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = N, orth_falseneg = N, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.1)
@@ -931,14 +939,15 @@ def test_em():
         lamP = 1.0 #priors don't matter
         errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct_em', reverse = True, special_args = {'em_it':5, 'f':1, 'uf':1}, cv_both = (True, True))
         errl = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
+        erru = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=0, k=10, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
         errors_em[i] = errd['mse'][0]
         errors_l2[i] = errl['mse'][0]
+        errors_uf[i] = erru['mse'][0]
 
     colorlist = [[0,0,1],[0,1,0],[1,0,0],[0.5,0,0.5]]
-    for r, amnt in enumerate(orth_err):
-        plt.plot(orth_err, errors_em[r,:], color = colorlist[r])
-    for r, amnt in enumerate(orth_err):
-        plt.plot(orth_err, errors_l2[r,:], '--', color = colorlist[r])
+    plt.plot(orth_err, errors_em, color = colorlist)
+    plt.plot(orth_err, errors_l2, '--', color = colorlist)
+    plt.plot(orth_err, errors_uf, ':', color = colorlist)
     #plt.legend(lamSs+lamSs)
     plt.xlabel('orth error')
     plt.ylabel('mean squared error')

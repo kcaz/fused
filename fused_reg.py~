@@ -694,7 +694,7 @@ def solve_em(Xs, Ys, fuse_con, ridge_con, lamR, lamS, em_it, special_args=None):
     return Bs
 
 def em(Bs_init, fuse_con, lamS, f, uf):
-    g = mixture.GMM(n_components=2, n_iter=10)
+    g = mixture.GMM(n_components=2) #n_iter=10)
     thetas_uf = []
     for i in range(len(fuse_con)):
         r1 = Bs_init[0].shape[0]
@@ -711,18 +711,20 @@ def em(Bs_init, fuse_con, lamS, f, uf):
         b_init_1 = Bs_init[con.c1.sub][con.c1.r, con.c1.c]
         b_init_2 = Bs_init[con.c2.sub][con.c2.r, con.c2.c]
         thetas_f.append(b_init_1 - b_init_2)
+    print len(thetas_f)
+    print len(thetas_uf)
     thetas = np.array(thetas_f + thetas_uf)
-    g.fit(thetas)
+    g.fit(thetas_f+thetas_uf)
 
     constants = []
     m1 = np.round(g.means_, 2)[0]
     m2 = np.round(g.means_, 2)[1]
-    print g.means_
-    print g.covars_
-    if abs(m1) >= abs(m2):
-        constants = [f,uf]
+    v1 = np.round(g.covars_, 2)[0]
+    v2 = np.round(g.covars_, 2)[1]
+    if abs(v1) >= abs(v2):
+        constants = [uf,f]
     else:
-        constants = [uf, f]
+        constants = [f, uf]
 
     new_fuse_constraints = []
 
@@ -731,9 +733,17 @@ def em(Bs_init, fuse_con, lamS, f, uf):
         b_init_1 = Bs_init[con.c1.sub][con.c1.r, con.c1.c]
         b_init_2 = Bs_init[con.c2.sub][con.c2.r, con.c2.c]
         theta_init = np.abs(b_init_1 - b_init_2)
-        gauss = g.predict([theta_init])
-        newlamS = constants[gauss] * (1/(g.covars_[gauss]))
-        new_con = constraint(con.c1, con.c2, newlamS[0][0])
+        gauss = g.predict([theta_init])[0]
+        prob1 = g.predict_proba([theta_init])[0][0]
+        prob2 = g.predict_proba([theta_init])[0][1]
+        print abs(1-gauss)
+        print constants[abs(1-gauss)]
+        print g.covars_
+        print g.covars_[abs(1-gauss)]
+        comp1 = constants[gauss]*prob1*(1/g.covars_[gauss][0])
+        comp2 = constants[abs(1-gauss)]*prob2*(1/g.covars_[abs(1-gauss)][0])
+        newlamS = comp1 + comp2
+        new_con = constraint(con.c1, con.c2, newlamS)
         #hacky
         new_fuse_constraints.append(new_con)
 
@@ -787,7 +797,6 @@ def solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, s_it, special_args=None)
         a = special_args['a']
     else:
         a = 3.7
-    print s_it
     Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
     for i in range(s_it-1):
         Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
