@@ -3,6 +3,8 @@ import data_sources as ds
 import fit_grn as fg
 import numpy as np
 import os
+import matplotlib
+matplotlib.use('PS')
 from matplotlib import pyplot as plt
 import random
 #This file is just a list of experiments. Only code that is used nowhere else is appropriate (ie general plotting code should go somewhere else
