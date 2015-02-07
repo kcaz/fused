@@ -12,8 +12,8 @@ def normalize(exp_a, mean_zero = False):
     canonical_dist = np.sort(exp_a, axis=1).mean(axis=0)
     #if mean_zero:
     #    canonical_dist = canonical_dist - canonical_dist.mean()
-    
-    canonical_dist = canonical_dist / canonical_dist.std()
+    canonical_mean = canonical_dist.mean()
+    canonical_dist = (canonical_dist - canonical_mean) / canonical_dist.std() + canonical_mean
     
     exp_n_a = np.zeros(exp_a.shape)
     for r in range(exp_a.shape[0]):
@@ -140,17 +140,22 @@ class standard_source(data_source):
         tfs_fsn = filter(len, tfs_fs.split('\n'))
         
         tfs = tfs_fsn
-        #now pull out that part of the expression data as the TF expr matrix
-        
-        tfs_set = set(tfs)
-        gene_is_tf = np.array(map(lambda x: x in tfs_set, genes))
-        
-        tf_mat = exp_mat[:, gene_is_tf]
+        #create a map from gene to its index
+        gene_to_ind = {genes[i] : i for i in range(len(genes))}
+        tf_inds = map(lambda x: gene_to_ind[x], tfs)
 
-            
+        #now pull out the tfs        
+        
+        
+        tf_mat = exp_mat[:, np.array(tf_inds)]
+        
+        print 'yolo'
+        #note: adding normalization 
+        self.exp_mat = normalize(exp_mat, True)
+        self.tf_mat = normalize(tf_mat, False)
         self.datadir = datadir
-        self.exp_mat = exp_mat
-        self.tf_mat = tf_mat
+        #self.exp_mat = exp_mat
+        #self.tf_mat = tf_mat
         self.genes = genes
         self.tfs = tfs
         self.N = exp_mat.shape[0]
@@ -224,6 +229,7 @@ class ba_timeseries(data_source):
 
         self.exp_mat = exp_mat
         self.tf_mat = tf_mat
+        #NOTE: why was there no normalization here?
         self.genes = genes
         self.tfs = tfs
         self.N = exp_mat.shape[0]
@@ -275,8 +281,11 @@ class ba_iron(data_source):
         exp_mat = exp_mat_t.T
 
         tf_mat = tf_mat_t.T
-        self.exp_mat = normalize(exp_mat, True)
-        self.tf_mat = normalize(tf_mat, False)
+        #NOTE removing normalization here
+        #self.exp_mat = normalize(exp_mat, True)
+        #self.tf_mat = normalize(tf_mat, False)
+        self.exp_mat = exp_mat
+        self.tf_mat = tf_mat
         self.genes = genes
         self.tfs = tfs
         self.N = exp_mat.shape[0]
@@ -323,9 +332,11 @@ class subt(data_source):
 
         exp_mat = exp_mat_t.T
         tf_mat = tf_mat_t.T
-
-        self.exp_mat = normalize(exp_mat, True)
-        self.tf_mat = normalize(tf_mat, False)
+        #NOTE: removed normalization
+        #self.exp_mat = normalize(exp_mat, True)
+        #self.tf_mat = normalize(tf_mat, False)
+        self.exp_mat = exp_mat
+        self.tf_mat = tf_mat
         self.genes = genes
         self.tfs = tfs
         self.N = exp_mat.shape[0]

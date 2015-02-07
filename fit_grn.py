@@ -166,15 +166,16 @@ def cv_model1(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_
             auroc2_err = eval_network_roc(Bs[1], genes2, tfs2, priors2, exclude_tfs=exclude_tfs)
             auroc2 += auroc2_err
             v_auroc2 += auroc2_err**2
+        
+        print (mse_err1, r2_err1, aupr1_err, auroc1_err)
+    errd = {'mse':(mse1/k, mse2/k), 'R2':(R21/k, R22/k), 'aupr':(aupr1/k, aupr2/k),'auroc':(auroc1/k, auroc2/k)}
+    vrrd = {'mse':(v_mse1/k, v_mse2/k), 'R2':(v_R21/k, v_R22/k), 'aupr':(v_aupr1/k, v_aupr2/k),'auroc':(v_auroc1/k, v_auroc2/k)}
             
-            errd = {'mse':(mse1/k, mse2/k), 'R2':(R21/k, R22/k), 'aupr':(aupr1/k, aupr2/k),'auroc':(auroc1/k, auroc2/k)}
-            vrrd = {'mse':(v_mse1/k, v_mse2/k), 'R2':(v_R21/k, v_R22/k), 'aupr':(v_aupr1/k, v_aupr2/k),'auroc':(v_auroc1/k, v_auroc2/k)}
-            
-            for key in errd.keys():
-                acc = []
-                for i in range(len(errd[key])):
-                    acc.append(vrrd[key][i]-errd[key][i]**2)
-                errd[key + '_v'] = acc
+    for key in errd.keys():
+        acc = []
+        for i in range(len(errd[key])):
+            acc.append(vrrd[key][i]-errd[key][i]**2)
+        errd[key + '_v'] = acc
             
             
 
