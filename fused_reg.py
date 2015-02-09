@@ -694,6 +694,9 @@ def solve_em(Xs, Ys, fuse_con, ridge_con, lamR, lamS, em_it, special_args=None):
     return Bs
 
 def em(Bs_init, fuse_con, lamS, f, uf):
+    if not len(fuse_con):
+        print 'no fusion constraints, skipping em adjustment'
+        return fuse_con
     g = mixture.GMM(n_components=2) #n_iter=10)
     thetas_uf = []
     for i in range(len(fuse_con)):

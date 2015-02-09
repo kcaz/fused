@@ -574,7 +574,7 @@ def generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, organisms, falsepos,
         num_to_add = len(orths)
     else:
         num_to_add = int(falsepos*(len(orths) - num_to_remove)/(1-falsepos))
-    
+    print 'adding %d fake orths!' % num_to_add
     orth_genes = set()
     for orth in orths:
         orth_genes.add(orth.genes[0])

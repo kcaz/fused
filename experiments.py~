@@ -2,9 +2,15 @@ import fused_reg as fr
 import data_sources as ds
 import fit_grn as fg
 import numpy as np
+np.random.seed(9221999)
 import os
+import matplotlib
+#matplotlib.use('PS')
 from matplotlib import pyplot as plt
 import random
+import pandas as pd
+import seaborn as sns
+sns.set(palette="Set2")
 #This file is just a list of experiments. Only code that is used nowhere else is appropriate (ie general plotting code should go somewhere else
 
 #this is basic - loads all the data, fits the basic model, and returns B
@@ -863,7 +869,8 @@ def plot_betas():
     Bem2 = []
     colors = []
     con_inds = np.random.permutation(range(len(constraints)))
- 
+    area_fs = []
+    area_em = [] 
 
     subs = 300
     for i in con_inds[0:subs]:
@@ -877,6 +884,9 @@ def plot_betas():
         Bfs2.append(Bs_fs[con.c2.sub][con.c2.r, con.c2.c])
         Bem1.append(Bs_em[con.c1.sub][con.c1.r, con.c1.c])
         Bem2.append(Bs_em[con.c2.sub][con.c2.r, con.c2.c])
+
+        area_fs.append(con.lam)
+        area_em.append(con.lam)
         if mark == 1:
             colors.append('g')
         else:
@@ -890,6 +900,9 @@ def plot_betas():
         Bem1.append(Bs_em[0][random.randrange(0,r1,1)][random.randrange(0,c1,1)])
         Bem2.append(Bs_em[1][random.randrange(0,r2,1)][random.randrange(0,c2,1)])
         colors.append('b')
+        area_fs.append(1)
+        area_em.append(1)
+
     Buf1s = np.array(Buf1)
     Buf2s = np.array(Buf2)
     Bfr1s = np.array(Bfr1)
@@ -911,38 +924,276 @@ def plot_betas():
     plt.show()
 
 
+#lets us look at the delta betas for random betas and for betas with fusion constraints, plots them before and after using em and identifies 
+def plot_betas2():
+    N_TF = 20
+    N_G = 500
+    lamP = 1.0
+    lamR = 1.0
+    lamS = 1.0
+    lamSe = 0.1
+
+    out1 = os.path.join('data','fake_data','plot_betas2')
+    if not os.path.exists(out1):
+        os.mkdir(out1)
+    out2 = os.path.join(out1,'dat')
+    ds.write_fake_data1(N1 = 15, N2 = 15, out_dir = out2, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, orth_falsepos=0.3, orth_falseneg=0.3, fuse_std = 0.1, pct_fused=0.75)
+    ds1 = ds.standard_source(out2,0)
+    ds2 = ds.standard_source(out2,1)
+    orth_fn = os.path.join(out2, 'orth')
+    organisms = [ds1.name, ds2.name]
+    orth = ds.load_orth(orth_fn, organisms)
+    (e1, t1, genes1, tfs1) = ds1.load_data()
+    (e2, t2, genes2, tfs2) = ds2.load_data()
+    Xs = [t1, t2]
+    Ys = [e1, e2]
+    genes = [genes1, genes2]
+    tfs = [tfs1, tfs2]
+    (priors1, signs1) = ds1.get_priors()
+    (priors2, signs2) = ds2.get_priors()	
+    priors = priors1 + priors2
+    (constraints, marks) = fr.orth_to_constraints_marked(organisms, genes, tfs, orth, 1.0)
+
+    Bs_uf = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS=0)
+    Bs_fr = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
+    s_it = 5
+    special_args={'a':3}
+    Bs_fs = fr.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamSe, s_it, special_args=special_args)
+    em_it=2
+    special_args={'f':1,'uf':0.1}
+    Bs_em = fr.solve_ortho_direct_em(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, em_it, special_args=special_args)
+    r1 = Bs_uf[0].shape[0]
+    c1 = Bs_uf[0].shape[1]
+    r2 = Bs_uf[1].shape[0]
+    c2 = Bs_uf[1].shape[1]
+    Buf1 = []
+    Buf2 = []
+    Bfr1 = []
+    Bfr2 = []
+    Bfs1 = []
+    Bfs2 = []
+    Bem1 = []
+    Bem2 = []
+
+    Bufd = []
+    Bfrd = []
+    Bfsd = []
+    Bemd = []
+
+    Bufu = []
+    Bfru = []
+    Bfsu = []
+    Bemu = []
+
+    colors = []
+    con_inds = np.random.permutation(range(len(constraints)))
+    area_fr = []
+    area_fs = []
+    area_em = [] 
+
+    subs = 1000
+    for i in con_inds[0:subs]:
+        con = constraints[i]
+        mark = marks[i]
+        Buf1.append(Bs_uf[con.c1.sub][con.c1.r, con.c1.c])
+        Buf2.append(Bs_uf[con.c2.sub][con.c2.r, con.c2.c])
+        Bufd.append(Bs_uf[con.c1.sub][con.c1.r, con.c1.c]-Bs_uf[con.c2.sub][con.c2.r, con.c2.c])
+        Bfr1.append(Bs_fr[con.c1.sub][con.c1.r, con.c1.c])
+        Bfr2.append(Bs_fr[con.c2.sub][con.c2.r, con.c2.c])
+        Bfrd.append(Bs_fr[con.c1.sub][con.c1.r, con.c1.c]-Bs_fr[con.c2.sub][con.c2.r, con.c2.c])
+        Bfs1.append(Bs_fs[con.c1.sub][con.c1.r, con.c1.c])
+        Bfs2.append(Bs_fs[con.c2.sub][con.c2.r, con.c2.c])
+        Bfsd.append(Bs_fs[con.c1.sub][con.c1.r, con.c1.c]-Bs_fs[con.c2.sub][con.c2.r, con.c2.c])
+        Bem1.append(Bs_em[con.c1.sub][con.c1.r, con.c1.c])
+        Bem2.append(Bs_em[con.c2.sub][con.c2.r, con.c2.c])
+        Bemd.append(Bs_em[con.c1.sub][con.c1.r, con.c1.c]-Bs_em[con.c2.sub][con.c2.r, con.c2.c])
+        area_fr.append(con.lam*30)
+        area_fs.append(con.lam*30)
+        area_em.append(con.lam*30)
+        if mark == 1:
+            colors.append('g')
+        else:
+            colors.append('r')
+        Buf1.append(Bs_uf[0][random.randrange(0,r1,1)][random.randrange(0,c1,1)])
+        Buf2.append(Bs_uf[1][random.randrange(0,r2,1)][random.randrange(0,c2,1)])
+        Bufu.append(Bs_uf[0][random.randrange(0,r1,1)][random.randrange(0,c1,1)]-Bs_uf[1][random.randrange(0,r2,1)][random.randrange(0,c2,1)])
+        Bfr1.append(Bs_fr[0][random.randrange(0,r1,1)][random.randrange(0,c1,1)])
+        Bfr2.append(Bs_fr[1][random.randrange(0,r2,1)][random.randrange(0,c2,1)])
+        Bfru.append(Bs_fr[0][random.randrange(0,r1,1)][random.randrange(0,c1,1)]-Bs_fr[1][random.randrange(0,r2,1)][random.randrange(0,c2,1)])
+        Bfs1.append(Bs_fs[0][random.randrange(0,r1,1)][random.randrange(0,c1,1)])
+        Bfs2.append(Bs_fs[1][random.randrange(0,r2,1)][random.randrange(0,c2,1)])
+        Bfsu.append(Bs_fs[0][random.randrange(0,r1,1)][random.randrange(0,c1,1)]-Bs_fs[1][random.randrange(0,r2,1)][random.randrange(0,c2,1)])
+        Bem1.append(Bs_em[0][random.randrange(0,r1,1)][random.randrange(0,c1,1)])
+        Bem2.append(Bs_em[1][random.randrange(0,r2,1)][random.randrange(0,c2,1)])
+        Bemu.append(Bs_em[0][random.randrange(0,r1,1)][random.randrange(0,c1,1)]-Bs_em[1][random.randrange(0,r2,1)][random.randrange(0,c2,1)])
+        colors.append('b')
+        area_fr.append(5)
+        area_fs.append(5)
+        area_em.append(5)
+
+    Buf1s = np.array(Buf1)
+    Buf2s = np.array(Buf2)
+    Bfr1s = np.array(Bfr1)
+    Bfr2s = np.array(Bfr2)
+    Bfs1s = np.array(Bfs1)
+    Bfs2s = np.array(Bfs2)
+    Bem1s = np.array(Bem1)
+    Bem2s = np.array(Bem2)
+    colors = np.array(colors)
+
+    plt.close()
+    sns.kdeplot(np.array(Bufd), shade=True)
+    sns.kdeplot(np.array(Bufu), shade=True)
+    plt.savefig(os.path.join(out1,'unfuseddist'))
+    plt.close()
+    sns.kdeplot(np.array(Bfrd), shade=True)
+    sns.kdeplot(np.array(Bfru), shade=True)
+    plt.savefig(os.path.join(out1,'ridgedist'))
+    plt.close()
+    sns.kdeplot(np.array(Bfsd), shade=True)
+    sns.kdeplot(np.array(Bfsu), shade=True)
+    plt.savefig(os.path.join(out1,'scaddist'))
+    plt.close()
+    sns.kdeplot(np.array(Bemd), shade=True)
+    sns.kdeplot(np.array(Bemu), shade=True)
+    plt.savefig(os.path.join(out1,'emdist'))
+    plt.close()
+
+
+    plt.scatter(Buf1s, Buf2s, c=colors, alpha=0.5)
+    plt.savefig(os.path.join(out1,'unfused'))
+    plt.close()
+    plt.scatter(Bfr1s, Bfr2s, c=colors, s=area_fr, alpha=0.5)
+    plt.savefig(os.path.join(out1,'fused l2'))
+    plt.close()
+    plt.scatter(Bfs1s, Bfs2s, c=colors, s=area_fs, alpha=0.5)
+    plt.savefig(os.path.join(out1,'scad'))
+    plt.close()
+    plt.scatter(Bem1s, Bem2s, c=colors, s=area_em, alpha=0.5)
+    plt.savefig(os.path.join(out1,'em'))
+
+    plt.show()
+
+
+
 def test_em():
+#create simulated data set with false orthology and run fused L2 and fused scad 
+     
+    N_TF = 20
+    N_G = 200
+    N_cond = 15
+    amt_fused = 1.0
+    orth_err = [0,0.3,0.5,0.7,0.9]
+    lamS = 1
+    k = 10
+    if not os.path.exists(os.path.join('data','fake_data','test_em1')):
+        os.mkdir(os.path.join('data','fake_data','test_em1'))
+    #iterate over how much fusion 
+    errors_em = np.zeros((k,0))
+    errors_l2 = np.zeros((k,0))
+    errors_uf = np.zeros((k,0))
+    for i, N in enumerate(orth_err):
+        out = os.path.join('data','fake_data','test_em1','dat_'+str(N))
+        ds.write_fake_data1(N1 = N_cond*k, N2 = N_cond*k, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = N, orth_falseneg = N, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.1)
+        lamR = 1
+        lamP = 1.0 #priors don't matter
+        errd = fg.cv_model2(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct_em', reverse = True, special_args = {'em_it':5, 'f':1, 'uf':1}, cv_both = (True, True))[0]
+        errl = fg.cv_model2(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))[0]
+        erru = fg.cv_model2(out, lamP=lamP, lamR=lamR, lamS=0, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))[0]
+        errors_em = np.hstack((errors_em, errd))
+        errors_l2 = np.hstack((errors_l2, errl))
+        errors_uf = np.hstack((errors_uf, erru))
+    
+    errors = np.dstack((errors_em, errors_l2, errors_uf))
+    print errors[:,:,0]
+    print errors[:,:,1]
+    print errors[:,:,2]
+    print errors.shape
+    step = pd.Series(orth_err)
+    solver = pd.Series(["EM", "fused L2", "L2"], name="solver")
+    plt.close()
+    sns.tsplot(errors, time=step, condition=solver, value="mean squared error")
+    plt.savefig(os.path.join(os.path.join('data','fake_data','test_em1','fig5')))
+    plt.show()
+    return errors
+
+def test_em2():
+#create simulated data set with false orthology and run fused L2 and fused scad 
+     
+    N_TF = 5
+    N_G = 20
+    amt_fused = 1.0
+    orth_err = [0,0.3,0.5,0.7,0.9]
+    lamS = 1
+    k = 10
+    if not os.path.exists(os.path.join('data','fake_data','test_em2')):
+        os.mkdir(os.path.join('data','fake_data','test_em2'))
+    #iterate over how much fusion 
+    errors_em = np.zeros((k,0))
+    errors_l2 = np.zeros((k,0))
+    errors_uf = np.zeros((k,0))
+    for i, N in enumerate(orth_err):
+        out = os.path.join('data','fake_data','test_em2','dat_'+str(N))
+        ds.write_fake_data1(N1 = 10*10, N2 = 10*10, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = N, orth_falseneg = N, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.1)
+        lamR = 0.1
+        lamP = 1.0 #priors don't matter
+        errd1 = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct_em', reverse = True, special_args = {'em_it':5, 'f':1, 'uf':1}, cv_both = (True, True))
+        errl1 = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
+        erru1 = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=0, k=10, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
+        errd = fg.cv_model2(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct_em', reverse = True, special_args = {'em_it':5, 'f':1, 'uf':1}, cv_both = (True, True))[0]
+        errl = fg.cv_model2(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))[0]
+        erru = fg.cv_model2(out, lamP=lamP, lamR=lamR, lamS=0, k=10, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))[0]
+        errors_em = np.hstack((errors_em, errd))
+        errors_l2 = np.hstack((errors_l2, errl))
+        errors_uf = np.hstack((errors_uf, erru))
+    
+    errors = np.dstack((errors_em, errors_l2, errors_uf))
+    print errors[:,:,0]
+    print errors[:,:,1]
+    print errors[:,:,2]
+    print errors.shape
+    step = pd.Series(orth_err)
+    solver = pd.Series(["EM", "fused L2", "L2"], name="solver")
+    plt.close()
+    sns.tsplot(errors, time=step, condition=solver, value="mean squared error")
+    plt.savefig(os.path.join(os.path.join('data','fake_data','test_em1','fig4')))
+    plt.show()
+    return (errors,errd1, errl1, erru1)
+
+
+def test_em3():
 #create simulated data set with false orthology and run fused L2 and fused scad 
      
     N_TF = 10
     N_G = 200
     amt_fused = 1.0
     orth_err = [0,0.3,0.5,0.7,0.9]
-    lamS = 1
-    if not os.path.exists(os.path.join('data','fake_data','test_em')):
-        os.mkdir(os.path.join('data','fake_data','test_em'))
+    lamS = 1.0
+    if not os.path.exists(os.path.join('data','fake_data','test_em4')):
+        os.mkdir(os.path.join('data','fake_data','test_em4'))
     #iterate over how much fusion
     errors_em = np.zeros(len(orth_err))
     errors_l2 = np.zeros(len(orth_err))
     errors_uf = np.zeros(len(orth_err))
     for i, N in enumerate(orth_err):
-        out = os.path.join('data','fake_data','test_em','dat_'+str(N))
+        out = os.path.join('data','fake_data','test_em4','dat_'+str(N))
         ds.write_fake_data1(N1 = 10*10, N2 = 10*10, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = N, orth_falseneg = N, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.1)
         lamR = 0.1
         lamP = 1.0 #priors don't matter
         errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct_em', reverse = True, special_args = {'em_it':5, 'f':1, 'uf':1}, cv_both = (True, True))
         errl = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
         erru = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=0, k=10, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
-        errors_em[i] = errd['mse'][0]
-        errors_l2[i] = errl['mse'][0]
-        errors_uf[i] = erru['mse'][0]
+#        errors_em[i] = errd['mse'][0]
+#        errors_l2[i] = errl['mse'][0]
+#        errors_uf[i] = erru['mse']
 
-    colorlist = [[0,0,1],[0,1,0],[1,0,0],[0.5,0,0.5]]
-    plt.plot(orth_err, errors_em, color = colorlist)
-    plt.plot(orth_err, errors_l2, '--', color = colorlist)
-    plt.plot(orth_err, errors_uf, ':', color = colorlist)
-    #plt.legend(lamSs+lamSs)
-    plt.xlabel('orth error')
-    plt.ylabel('mean squared error')
-    plt.savefig(os.path.join(os.path.join('data','fake_data','test_em','fig3')))
-    plt.figure()
+#    colorlist = [[0,0,1],[0,1,0],[1,0,0],[0.5,0,0.5]]
+#    for r, amnt in enumerate(orth_err):
+#        plt.plot(orth_err, errors_em[r,:], color = colorlist[r])
+#    for r, amnt in enumerate(orth_err):
+#        plt.plot(orth_err, errors_l2[r,:], '--', color = colorlist[r])
+#    #plt.legend(lamSs+lamSs)
+#    plt.xlabel('orth error')
+#    plt.ylabel('mean squared error')
+#    plt.savefig(os.path.join(os.path.join('data','fake_data','test_em3','fig3')))
+#    plt.figure()
