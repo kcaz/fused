@@ -814,7 +814,7 @@ def increase_data2():
     plt.show()
 
 #lets us look at the delta betas for random betas and for betas with fusion constraints, plots them before and after using em and identifies 
-def plot_betas:
+def plot_betas():
     N_TF = 50
     N_G = 1000
     lamP = 1.0
