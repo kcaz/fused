@@ -38,6 +38,17 @@ def test_bacteria(lamP, lamR, lamS):
 
     return Bs
 
+#load all the anthracis data and some of the subtilis data
+def test_bacteria_subs_subt(lamP, lamRs, lamSs):
+    out = 'data/bacteria_standard'
+    errds = []
+    for lamR in lamRs:
+        for lamS in lamSs:
+            errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=20, solver='solve_ortho_direct', reverse = True, cv_both = (True, True), exclude_tfs=False)
+            errds.append(errd)
+    return errds
+
+
 
 
 #In this experiment, we generate several data sets with a moderate number of TFs and genes. Fusion is total and noiseless. Measure performance as a function of lamS, and performance as a function of the amount of data. Plot both. This is a basic sanity check for fusion helping

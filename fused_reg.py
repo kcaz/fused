@@ -483,7 +483,7 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, ad
         ridge_cons = ridg_l[f]
         #num_species = len(set(map(lambda co: co.sub, coefficients)))
         if adjust:
-            print 'haha not implmneted'
+            
             (constraints, ridge_cons) = adjust_vol2(Xs, columns, constraints, ridge_cons,lambdaR)
         
         #we're building a canonical ordering over the columns for the current subproblem
