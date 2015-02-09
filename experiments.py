@@ -38,7 +38,7 @@ def test_bacteria_subs_subt(lamP, lamRs, lamSs):
     errds = []
     for lamR in lamRs:
         for lamS in lamSs:
-            errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=2, solver='solve_ortho_direct', reverse = True, cv_both = (True, True), exclude_tfs=False)
+            errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=20, solver='solve_ortho_direct', reverse = True, cv_both = (True, True), exclude_tfs=False)
             errds.append(errd)
     return errds
 
