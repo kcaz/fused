@@ -545,7 +545,8 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, ad
             Y_l.append(np.zeros((cums[-1], 1)))
             F = scipy.sparse.vstack((X, I), format='csr')#F is the penalized design matrix
         
-        y = np.vstack(Y_l)        
+        y = np.vstack(Y_l)
+        
         bsp = scipy.sparse.linalg.lsqr(F, y)#the first result is b, and it needs to be turned into a column vector
         b = bsp[0][:, None] #god this is annoying
         

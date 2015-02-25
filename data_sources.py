@@ -149,7 +149,22 @@ class standard_source(data_source):
         
         tf_mat = exp_mat[:, np.array(tf_inds)]
         
-        print 'yolo'
+        tfs_come_first = True
+        #rearrange the gene indices and tf indices so that tfs come first, in the order that they appear in the original list of genes, followed by genes in the order of the original list of genes. This should not affect network inference performance, but simplifies some secondary tests
+
+        if tfs_come_first:
+            tfs_set = set(tfs)
+            #compute the (gene) indices of tfs and non-tfs
+            tf_indices = filter(lambda x: genes[x] in tfs_set, range(len(genes)))
+            ntf_indices = filter(lambda x: not genes[x] in tfs_set, range(len(genes)))
+            new_order = tf_indices + ntf_indices
+            
+            tfs = map(lambda x: genes[x], tf_indices)            
+            genes = map(lambda x: genes[x], new_order)
+            
+            exp_mat = exp_mat[:, new_order]
+            
+
         #note: adding normalization 
         self.exp_mat = normalize(exp_mat, True)
         self.tf_mat = normalize(tf_mat, False)
@@ -173,9 +188,10 @@ class standard_source(data_source):
         signs = []
         for x in psnt:
             sign = x[2]
-            if sign == 'activation':
+            
+            if sign == '1':
                 signs.append(1)
-            if sign == 'repression':
+            elif sign == '-1':
                 signs.append(-1)
             else:
                 signs.append(0)
@@ -413,7 +429,7 @@ def load_constraints(data_fn):
     ds1 = standard_source(data_fn,0)
     ds2 = standard_source(data_fn,1)
     orth_fn = os.path.join(data_fn, 'orth')
-    organisms = [ds1.name, ds2.name]
+    organisms = [ds2.name, ds1.name] #OOPS inconsistent ordering here, anthr comes first
     orth = load_orth(orth_fn, organisms)
 
     gene_ls = [ds1.genes, ds2.genes]
@@ -816,8 +832,8 @@ def voodoo():
         os.mkdir(out_dir)
     write_expr_mat(out_dir+os.sep+'expression1', bs_e, bs_genes)
     write_expr_mat(out_dir+os.sep+'expression2', ba_e, ba_genes)
-    write_priors_voodoo(out_dir+os.sep+'priors1',bs_priors)
-    write_priors_voodoo(out_dir+os.sep+'priors2',ba_priors)
+    write_priors_voodoo(out_dir+os.sep+'priors1',bs_priors, bs_sign)
+    write_priors_voodoo(out_dir+os.sep+'priors2',ba_priors, ba_sign)
     write_tfnames(out_dir+os.sep+'tfnames1',bs_tfs)
     write_tfnames(out_dir+os.sep+'tfnames2',ba_tfs)
     write_orth(out_dir+os.sep+'orth', orths)
