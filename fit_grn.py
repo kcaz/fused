@@ -111,7 +111,10 @@ def cv_model1(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_
         # jam things together
         Xs = [t1_tr, t2_tr]
         Ys = [e1_tr, e2_tr]
+        print 'leng'
         genes = [genes1, genes2]
+        print len(genes1)
+        print len(genes2)
         tfs = [tfs1, tfs2]
         priors = priors1 + priors2
         
@@ -124,6 +127,8 @@ def cv_model1(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_
             Bs = fl.solve_ortho_direct_mcp(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, m_it = special_args['m_it'], special_args=special_args)
         if solver == 'solve_ortho_direct_em':
             Bs = fl.solve_ortho_direct_em(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, em_it = special_args['em_it'], special_args=special_args)
+        if solver == 'solve_ortho_direct_mcp_r':
+            Bs = fl.solve_ortho_direct_mcp_r(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
 
             
         

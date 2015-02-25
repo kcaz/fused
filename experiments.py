@@ -1208,3 +1208,25 @@ def test_em3():
 #    plt.ylabel('mean squared error')
 #    plt.savefig(os.path.join(os.path.join('data','fake_data','test_em3','fig3')))
 #    plt.figure()
+
+
+def test_mcp_r():
+    N_TF = 10
+    N_G = 200
+    amt_fused = 1.0
+    orth_err = [0,0.3,0.5,0.7,0.9]
+    lamS = 1.0
+    if not os.path.exists(os.path.join('data','fake_data','test_mcp_r')):
+        os.mkdir(os.path.join('data','fake_data','test_mcp_r'))
+    #iterate over how much fusion
+    errors_em = np.zeros(len(orth_err))
+    errors_l2 = np.zeros(len(orth_err))
+    errors_uf = np.zeros(len(orth_err))
+    for i, N in enumerate(orth_err):
+        out = os.path.join('data','fake_data','test_mcp_r','dat_'+str(N))
+        ds.write_fake_data1(N1 = 10*10, N2 = 10*10, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = N, orth_falseneg = N, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.1)
+        lamR = 0.1
+        lamP = 1.0 #priors don't matter
+        errmr = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct_mcp_r', reverse = True, cv_both = (True, True))
+        errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
+        errm = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=0, k=10, solver='solve_ortho_direct_mcp', reverse = True, cv_both = (True, True),special_args={'m_it':5})

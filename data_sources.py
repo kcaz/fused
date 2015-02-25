@@ -149,7 +149,7 @@ class standard_source(data_source):
         
         tf_mat = exp_mat[:, np.array(tf_inds)]
         
-        print 'yolo'
+        #print 'yolo'
         #note: adding normalization 
         self.exp_mat = normalize(exp_mat, True)
         self.tf_mat = normalize(tf_mat, False)

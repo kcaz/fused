@@ -111,6 +111,9 @@ def cv_model1(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_
         # jam things together
         Xs = [t1_tr, t2_tr]
         Ys = [e1_tr, e2_tr]
+        print 'lenY'
+        print len(Ys)
+        print Ys[0].shape
         genes = [genes1, genes2]
         tfs = [tfs1, tfs2]
         priors = priors1 + priors2
@@ -124,6 +127,8 @@ def cv_model1(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_
             Bs = fl.solve_ortho_direct_mcp(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, m_it = special_args['m_it'], special_args=special_args)
         if solver == 'solve_ortho_direct_em':
             Bs = fl.solve_ortho_direct_em(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, em_it = special_args['em_it'], special_args=special_args)
+        if solver == 'solve_ortho_direct_mcp_r':
+            Bs = fl.solve_ortho_direct_mcp_r(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
 
             
         
@@ -172,23 +177,11 @@ def cv_model1(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_
     errd = {'mse':(mse1/k, mse2/k), 'R2':(R21/k, R22/k), 'aupr':(aupr1/k, aupr2/k),'auroc':(auroc1/k, auroc2/k)}
     vrrd = {'mse':(v_mse1/k, v_mse2/k), 'R2':(v_R21/k, v_R22/k), 'aupr':(v_aupr1/k, v_aupr2/k),'auroc':(v_auroc1/k, v_auroc2/k)}
             
-<<<<<<< HEAD
-        errd = {'mse':(mse1/k, mse2/k), 'R2':(R21/k, R22/k), 'aupr':(aupr1/k, aupr2/k),'auroc':(auroc1/k, auroc2/k)}
-        vrrd = {'mse':(v_mse1/k, v_mse2/k), 'R2':(v_R21/k, v_R22/k), 'aupr':(v_aupr1/k, v_aupr2/k),'auroc':(v_auroc1/k, v_auroc2/k)}
-        
-        for key in errd.keys():
-            acc = []
-            for i in range(len(errd[key])):
-                acc.append(vrrd[key][i]-errd[key][i]**2)
-            errd[key + '_v'] = acc
-=======
     for key in errd.keys():
         acc = []
         for i in range(len(errd[key])):
             acc.append(vrrd[key][i]-errd[key][i]**2)
         errd[key + '_v'] = acc
->>>>>>> d6cdd43adb2cde8b673727db0e3a4219d057db00
-            
             
 
     params_str =  solver + '\t' + 'lamP=%f lamR=%f lamS=%f' % (lamP, lamR, lamS)
