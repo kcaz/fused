@@ -1347,11 +1347,11 @@ def check_ortho_corr():
     tfs_set_subt = set(tfs1)
     tfs_set_anth = set(tfs2)
 
-    orth_set_subt = set(map(lambda orth: orth.genes[1].name, orths))
-    orth_set_anth = set(map(lambda orth: orth.genes[0].name, orths))
+    orth_set_subt = set(map(lambda orth: orth.genes[0].name, orths))
+    orth_set_anth = set(map(lambda orth: orth.genes[1].name, orths))
     #map from one to the other, OK if orthology 1-1
-    subt_to_anth = {orths[x].genes[1].name : orths[x].genes[0].name for x in range(len(orths))}
-    anth_to_subt = {orths[x].genes[0].name : orths[x].genes[1].name for x in range(len(orths))}
+    subt_to_anth = {orths[x].genes[0].name : orths[x].genes[1].name for x in range(len(orths))}
+    anth_to_subt = {orths[x].genes[1].name : orths[x].genes[0].name for x in range(len(orths))}
 
 
     tfs_orth_subt = filter(lambda tf: tf in orth_set_subt and subt_to_anth[tf] in tfs_set_anth, tfs1)
@@ -1378,7 +1378,7 @@ def check_ortho_corr():
             
             
             subt_corr_mat[r, c] = corr
-    anth_to_subt = {orths[x].genes[0].name : orths[x].genes[1].name for x in range(len(orths))}
+    anth_to_subt = {orths[x].genes[1].name : orths[x].genes[0].name for x in range(len(orths))}
     #for the anthracis correlations, we map the tf or gene onto the corresponding subtilis gene, then compute that index
     tfs_orth_subt_ind = {tfs_orth_subt[i] : i for i in range(len(tfs_orth_subt))}
     gen_orth_subt_ind = {gen_orth_subt[i] : i for i in range(len(gen_orth_subt))}
@@ -1445,8 +1445,8 @@ def verify_orth_preserves_tf():
     (e1_tr, t1_tr, genes1, tfs1) = ds1.load_data()
     (e2_tr, t2_tr, genes2, tfs2) = ds2.load_data()
     
-    orth_set_subt = set(map(lambda orth: orth.genes[1].name, orths))
-    orth_set_anth = set(map(lambda orth: orth.genes[0].name, orths))
+    orth_set_subt = set(map(lambda orth: orth.genes[0].name, orths))
+    orth_set_anth = set(map(lambda orth: orth.genes[1].name, orths))
 
     tfs_orth_subt = filter(lambda tf: tf in orth_set_subt, tfs1)
     tfs_orth_anth = filter(lambda tf: tf in orth_set_anth, tfs2)
@@ -1457,8 +1457,8 @@ def verify_orth_preserves_tf():
     gene_inds_subt = {genes1[i] : i for i in range(len(genes1))}
     gene_inds_anth = {genes2[i] : i for i in range(len(genes2))}
 
-    subt_to_anth = {orths[x].genes[1].name : orths[x].genes[0].name for x in range(len(orths))}
-    anth_to_subt = {orths[x].genes[0].name : orths[x].genes[1].name for x in range(len(orths))}
+    subt_to_anth = {orths[x].genes[0].name : orths[x].genes[1].name for x in range(len(orths))}
+    anth_to_subt = {orths[x].genes[1].name : orths[x].genes[0].name for x in range(len(orths))}
     #map subtilis tfs onto their orthologs
     subt_tfs_mapped = map(lambda x: subt_to_anth[x], tfs_orth_subt)
     anth_tfs_mapped = map(lambda x: anth_to_subt[x], tfs_orth_anth)
@@ -1479,10 +1479,11 @@ def test_prior_sign_corr_orth():
     
     
     (constraints, marks, orths) = ds.load_constraints(bactf)
+    print len(constraints)
     (e1_tr, t1_tr, genes1, tfs1) = ds1.load_data()
     (e2_tr, t2_tr, genes2, tfs2) = ds2.load_data()
 
-    subt_to_anth = {orths[x].genes[1].name : orths[x].genes[0].name for x in range(len(orths))}
+    subt_to_anth = {orths[x].genes[0].name : orths[x].genes[1].name for x in range(len(orths))}
     
     priors_a = map(lambda ind1: priors1[ind1], filter(lambda ind2: signs1[ind2] == 1, range(len(signs1))))
     priors_r = map(lambda ind1: priors1[ind1], filter(lambda ind2: signs1[ind2] == -1, range(len(signs1))))

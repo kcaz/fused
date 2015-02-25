@@ -429,7 +429,7 @@ def load_constraints(data_fn):
     ds1 = standard_source(data_fn,0)
     ds2 = standard_source(data_fn,1)
     orth_fn = os.path.join(data_fn, 'orth')
-    organisms = [ds2.name, ds1.name] #OOPS inconsistent ordering here, anthr comes first
+    organisms = [ds1.name, ds2.name]
     orth = load_orth(orth_fn, organisms)
 
     gene_ls = [ds1.genes, ds2.genes]
@@ -803,6 +803,7 @@ def voodoo():
                 sign = signs[i]
             f.write('%s\t%s\t%s\n' % (tf.name, gene.name, sign))
         f.close()
+    #we need to reverse the order of the orthology to be consistent with 0=subtilis 1=anthracis
     def load_orth_voodoo(orth_fn, organisms):
         f = file(orth_fn)
         fs = f.read()
@@ -812,7 +813,8 @@ def voodoo():
         orths = []
         for o in fsnt:
             real = True
-            orth = fr.orthology(genes = (fr.one_gene(name=o[0],organism=organisms[0]), fr.one_gene(name=o[1], organism=organisms[1])), real = real)
+            #reversing here
+            orth = fr.orthology(genes = (fr.one_gene(name=o[1],organism=organisms[1]), fr.one_gene(name=o[0], organism=organisms[0])), real = real)
             orths.append(orth)
         return orths
 

@@ -70,8 +70,8 @@ def cv_model1(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_
     excl = lambda x,i: x[0:i]+x[(i+1):]
     (priors1, signs1) = ds1.get_priors()
     (priors2, signs2) = ds2.get_priors()
-    #initialize a bunch of things to accumulate over
-    
+
+    corr_acc = 0.0 #to get average correlation of fused coefficients
 
     #clear the last_results output 
     file(os.path.join(data_fn, 'last_results'),'w').close()
@@ -125,12 +125,11 @@ def cv_model1(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_
         if solver == 'solve_ortho_direct_em':
             Bs = fl.solve_ortho_direct_em(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, em_it = special_args['em_it'], special_args=special_args)
 
-            
+         #get correlation of fused coefficients, for diagnostic purposes
         
-#        from matplotlib import pyplot as plt
-#        if fold==0:
-#            plt.matshow(Bs[0])
-#            plt.show()
+        (corr, fused_coeffs) = fused_coeff_corr(organisms, genes, tfs, orth, Bs)
+        corr_acc += corr
+        
 
         mse_err1 = prediction_error(t1_te, Bs[0], e1_te, 'mse', exclude_tfs=exclude_tfs)
         mse_err2 = prediction_error(t2_te, Bs[1], e2_te, 'mse', exclude_tfs=exclude_tfs)
@@ -168,7 +167,7 @@ def cv_model1(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_
             auroc2 += auroc2_err
             v_auroc2 += auroc2_err**2
         
-        print (mse_err1, r2_err1, aupr1_err, auroc1_err)
+        
     errd = {'mse':(mse1/k, mse2/k), 'R2':(R21/k, R22/k), 'aupr':(aupr1/k, aupr2/k),'auroc':(auroc1/k, auroc2/k)}
     vrrd = {'mse':(v_mse1/k, v_mse2/k), 'R2':(v_R21/k, v_R22/k), 'aupr':(v_aupr1/k, v_aupr2/k),'auroc':(v_auroc1/k, v_auroc2/k)}
             
@@ -197,7 +196,7 @@ def cv_model1(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_
     header_str = '\t'.join(map(str, header_str_l))                       
     
     print params_str + '\t' + result_str + '\n'
-
+    print 'correlation of fused coefficients is %f' % corr
     if not os.path.exists(os.path.join(data_fn, 'results')):
         with open(os.path.join(data_fn, 'results'),'w') as outf:
             outf.write(header_str + '\n')
@@ -217,123 +216,18 @@ def cv_model1(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_
 #cv_both: if false, always use all the data for the corresponding species
 #exclude_tfs: don't evaluate on transcription factors. this is useful for generated data, where you can't hope to get them right
 def cv_model2(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_args=None, reverse=False, cv_both=(True,True), exclude_tfs=True):
-    print special_args
-    ds1 = ds.standard_source(data_fn,0)
-    ds2 = ds.standard_source(data_fn,1)
-    orth_fn = os.path.join(data_fn, 'orth')
-
-    organisms = [ds1.name, ds2.name]
-    orth = ds.load_orth(orth_fn, organisms)
-    #accumulate metrics
-    mse1 = np.zeros((k,1))
-    mse2 = np.zeros((k,1))
-    R21 = np.zeros((k,1))
-    R22 = np.zeros((k,1))
-    aupr1 = np.zeros((k,1))
-    aupr2 = np.zeros((k,1))
-    auroc1 = np.zeros((k,1))
-    auroc2 = np.zeros((k,1))
+    errd = cv_model(data_fn, lamP, lamR, lamS, k, solver,special_args, reverse, cv_both, exclude_tfs)
+    err_list = []
+    err_list.append(errd['mse'][0])
+    err_list.append(errd['mse'][1])
+    err_list.append(errd['R2'][0])
+    err_list.append(errd['R2'][1])
+    err_list.append(errd['aupr'][0])
+    err_list.append(errd['aupr'][1])
+    err_list.append(errd['auroc'][0])
+    err_list.append(errd['auroc'][1])
     
-    folds1 = ds1.partition_data(k)
-    folds2 = ds2.partition_data(k)
-
-    excl = lambda x,i: x[0:i]+x[(i+1):]
-    (priors1, signs1) = ds1.get_priors()
-    (priors2, signs2) = ds2.get_priors()
-    #initialize a bunch of things to accumulate over
-    
-
-    #clear the last_results output 
-    file(os.path.join(data_fn, 'last_results'),'w').close()
-    for fold in range(k):
-        #get conditions for current cross-validation fold
-        f1_te_c = folds1[fold]
-        f1_tr_c = np.hstack(excl(folds1, fold))
-
-        f2_te_c = folds2[fold]
-        f2_tr_c = np.hstack(excl(folds2, fold))
-        
-        if reverse:
-            tmp = f1_tr_c
-            f1_tr_c = f1_te_c
-            f1_te_c = tmp
-            
-            tmp = f2_tr_c
-            f2_tr_c = f2_te_c
-            f2_te_c = tmp
-        
-        
-        #load train and test data
-        if cv_both[0]:
-            (e1_tr, t1_tr, genes1, tfs1) = ds1.load_data(f1_tr_c)
-            (e1_te, t1_te, genes1, tfs1) = ds1.load_data(f1_te_c)
-        else:
-            (e1_tr, t1_tr, genes1, tfs1) = ds1.load_data()
-            (e1_te, t1_te, genes1, tfs1) = ds1.load_data()
-        if cv_both[1]:
-            (e2_tr, t2_tr, genes2, tfs2) = ds2.load_data(f2_tr_c)
-            (e2_te, t2_te, genes2, tfs2) = ds2.load_data(f2_te_c)
-        else:
-            (e2_tr, t2_tr, genes2, tfs2) = ds2.load_data()
-            (e2_te, t2_te, genes2, tfs2) = ds2.load_data()
-
-        
-        # jam things together
-        Xs = [t1_tr, t2_tr]
-        Ys = [e1_tr, e2_tr]
-        genes = [genes1, genes2]
-        tfs = [tfs1, tfs2]
-        priors = priors1 + priors2
-        
-        #solve the model
-        if solver == 'solve_ortho_direct':
-            Bs = fl.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
-        if solver == 'solve_ortho_direct_scad':
-            Bs = fl.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, s_it = special_args['s_it'], special_args=special_args)
-        if solver == 'solve_ortho_direct_mcp':
-            Bs = fl.solve_ortho_direct_mcp(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, m_it = special_args['m_it'], special_args=special_args)
-        if solver == 'solve_ortho_direct_em':
-            Bs = fl.solve_ortho_direct_em(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, em_it = special_args['em_it'], special_args=special_args)
-
-        mse_err1 = prediction_error(t1_te, Bs[0], e1_te, 'mse', exclude_tfs=exclude_tfs)
-        mse_err2 = prediction_error(t2_te, Bs[1], e2_te, 'mse', exclude_tfs=exclude_tfs)
-        mse1[fold,0] = mse_err1 
-        mse2[fold,0] = mse_err2
-
-
-        r2_err1 = prediction_error(t1_te, Bs[0], e1_te, 'R2', exclude_tfs=exclude_tfs)
-        r2_err2 = prediction_error(t2_te, Bs[1], e2_te, 'R2', exclude_tfs=exclude_tfs)
-        R21[fold,0] = r2_err1
-        R22[fold,0] = r2_err2
-   
-
-        if len(priors1):
-            aupr1_err = eval_network_pr(Bs[0], genes1, tfs1, priors1, exclude_tfs=exclude_tfs)
-            aupr1[fold,0] = aupr1_err
-
-        if len(priors2):
-            aupr2_err = eval_network_pr(Bs[1], genes2, tfs2, priors2, exclude_tfs=exclude_tfs)
-            aupr2[fold,0] = aupr2_err
-
-        if len(priors1):
-            auroc1_err = eval_network_roc(Bs[0], genes1, tfs1, priors1, exclude_tfs=exclude_tfs)
-            auroc1[fold,0] = auroc1_err
-
-        if len(priors2):        
-            auroc2_err = eval_network_roc(Bs[1], genes2, tfs2, priors2, exclude_tfs=exclude_tfs)
-            auroc2[fold,0] = auroc2_err
-
-    errd = []            
-    errd.append(mse1)
-    errd.append(mse2)
-    errd.append(R21)
-    errd.append(R22)
-    errd.append(aupr1)
-    errd.append(aupr2)
-    errd.append(auroc1)
-    errd.append(auroc2)
-    
-    return errd
+    return err_list
 
 
 
@@ -470,3 +364,19 @@ def eval_network_roc(net, genes, tfs, priors, exclude_tfs = True):
 def eval_network_beta(net1, net2):
     return ((net1 - net2)**2).mean()
             
+#generates fusion constraints, then computes the correlation between fused coefficients
+def fused_coeff_corr(organisms, genes_l, tfs_l, orth, B_l):
+    constraints = fl.orth_to_constraints(organisms, genes_l, tfs_l, orth, 1.0)
+    fused_vals = [[],[]]
+    print 'there are %d constraints'%len(constraints)
+    if len(constraints) == 0:
+        return (np.nan, np.zeros((2,0)))
+    for con in constraints:
+        s1 = con.c1.sub
+        b1 = B_l[s1][con.c1.r, con.c1.c]
+        s2 = con.c2.sub
+        b2 = B_l[s2][con.c2.r, con.c2.c]
+        fused_vals[s1].append(b1)
+        fused_vals[s2].append(b2)
+    fused_vals = np.array(fused_vals)
+    return (np.corrcoef(fused_vals)[0,1], fused_vals)

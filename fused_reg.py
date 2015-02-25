@@ -189,20 +189,26 @@ def orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS):
         ortho_dict[gene1].append(gene2)
         ortho_dict[gene2].append(gene1)
     
-    
+    #print 'hallo, here i am'
+    #print organisms
+    #print len(tf_ls[0])
+    #print len(gene_ls[0])
+    #print orth
     constraints = []
     for org_i in range(len(organisms)):
         for tf_i in range(len(tf_ls[org_i])):
             for g_i in range(len(gene_ls[org_i])):
                 tf = one_gene(tf_ls[org_i][tf_i], organisms[org_i])
                 g = one_gene(gene_ls[org_i][g_i], organisms[org_i])
+                #print (tf, g)
                 
                 for tf_orth in ortho_dict[tf]:
                     for g_orth in ortho_dict[g]:
                         sub1 = org_i
                         sub2 = org_to_ind[tf_orth.organism]
                         sub3 = org_to_ind[g_orth.organism]
-                        
+            
+                        #print (tf, g, tf_orth, g_orth)
                         if not sub2 == sub3:
                             continue
                         if not tf_orth.name in tf_to_inds[sub2]:
@@ -422,6 +428,7 @@ def solve_ortho_direct(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors,lamP, lam
     
     ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
     fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
+    
     if self_reg_pen:
         self_con = no_self_reg_constraints(organisms, gene_ls, tf_ls, lamR * self_reg_pen)
 
