@@ -107,6 +107,8 @@ def cv_model1(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_
             (e2_tr, t2_tr, genes2, tfs2) = ds2.load_data()
             (e2_te, t2_te, genes2, tfs2) = ds2.load_data()
 
+        print 'training set 1: %d, training set 2: %d' % (e1_tr.shape[0], e2_tr.shape[0])
+        print 'test set 1: %d, test set 2: %d'% (e1_te.shape[0], e2_te.shape[0])
         
         # jam things together
         Xs = [t1_tr, t2_tr]
@@ -278,8 +280,10 @@ def prediction_error(X, B, Y, metric, exclude_tfs = True):
         return corra / (Ypred.shape[1] - start_ind)
 
 #evaluates the area under the precision recall curve, with respect to some given priors
-# NOTE: exclude_tfs currently not implemented
-def eval_network_pr(net, genes, tfs, priors, exclude_tfs = False):
+# exclude_tfs: do not evaluate on tf x tf interactions
+# constraints: if not None, evaluates only on interactions which have fusion constraints
+#sub: name of subproblem. used if constraints != None
+def eval_network_pr(net, genes, tfs, priors, exclude_tfs = False, constraints = None, sub=None):
     #from matplotlib import pyplot as plt
     org = priors[0][0].organism
     priors_set = set(priors)
@@ -287,7 +291,17 @@ def eval_network_pr(net, genes, tfs, priors, exclude_tfs = False):
     tf_to_ind = {tfs[x] : x for x in range(len(tfs))}
     gene_marked = np.zeros(len(genes)) != 0
     tf_marked = np.zeros(len(tfs)) != 0
+    if constraints != None:
+        con_set = set()
+        for con in constraints:
+            if con.c1.sub == sub:
+                con_set.add(con.c1)
+            if con.c2.sub == sub:
+                con_set.add(con.c2)
+
+    #we only evaluate on interactions when the gene/tf is mentioned in a prior
     for prior in priors:
+        
         gene_marked[gene_to_ind[prior[0].name]] = True
         gene_marked[gene_to_ind[prior[1].name]] = True
         if prior[0].name in tf_to_ind:
@@ -306,6 +320,11 @@ def eval_network_pr(net, genes, tfs, priors, exclude_tfs = False):
         for gi in range(len(genes)):
             if exclude_tfs and gi < len(tfs):
                 continue
+            if constraints != None:
+                coeff = fl.coefficient(sub=sub, r=tfi, c=gi) #potential coefficient
+                if coeff in con_set:
+                    continue
+
             tf = tfs[tfi]
             g = genes[gi]
             score = np.abs(net[tfi, gi])
@@ -326,18 +345,30 @@ def eval_network_pr(net, genes, tfs, priors, exclude_tfs = False):
 
 #evaluates the area under the roc, with respect to some given priors
 
-def eval_network_roc(net, genes, tfs, priors, exclude_tfs = True):
+def eval_network_roc(net, genes, tfs, priors, exclude_tfs = True, constraints = None, sub=None):
     
     org = priors[0][0].organism
     priors_set = set(priors)
     scores = []#np.zeros(len(genes)*len(tfs))
     labels = []#np.zeros(len(genes)*len(tfs))
     i=0
+    if constraints != None:
+        con_set = set()
+        for con in constraints:
+            if con.c1.sub == sub:
+                con_set.add(con.c1)
+            if con.c2.sub == sub:
+                con_set.add(con.c2)
     
     for tfi in range(len(tfs)):
         for gi in range(len(genes)):
             if exclude_tfs and gi < len(tfs):
                 continue
+            if constraints != None:
+                coeff = fl.coefficient(sub=sub, r=tfi, c=gi) #potential coefficient
+                if coeff in con_set:
+                    continue
+
             tf = tfs[tfi]
             g = genes[gi]
             score = np.abs(net[tfi, gi])
