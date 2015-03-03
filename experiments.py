@@ -1914,3 +1914,31 @@ def plot_synthetic_performance(lamP=1.0, lamR=5, lamSs=[0], k=20):
     
     plt.show()
 
+#plots error dictionaries
+#this one includes lots of incorrect orthology
+def plot_synthetic_performance2(lamP=1.0, lamR=5, lamSs=[0], k=20):
+    N = 10
+    N_TF = 20
+    N_G = 30
+    out = os.path.join('data','fake_data','plot_synthetic_performance2')
+    ds.write_fake_data1(N1 = k*N, N2 = k*N, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.5, fuse_std = 0.0, orth_falsepos=1.0,orth_falseneg=0.0)
+    metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con']
+    err_dict1 = {m : np.zeros((k, len(lamSs))) for m in metrics} #subtilis
+    err_dict2 = {m : np.zeros((k, len(lamSs))) for m in metrics} #anthracis
+
+    
+    for i, lamS in enumerate(lamSs):
+        (errd1, errd2) = fg.cv_model3(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, False), exclude_tfs=False)
+        for metric in metrics:
+            err_dict1[metric][:, [i]] = errd1[metric]
+            err_dict2[metric][:, [i]] = errd2[metric]
+    print err_dict1
+    print err_dict2
+    sns.tsplot(err_dict1['aupr'], time=lamSs, legend='full')
+    plt.figure()
+    sns.tsplot(err_dict1['aupr_con'], time=lamSs, legend='constrained')
+    plt.xlabel('lamS')
+    plt.ylabel('aupr')
+    
+    plt.show()
+

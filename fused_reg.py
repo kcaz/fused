@@ -463,7 +463,7 @@ def solve_ortho_lasso(organisms, gene_ls, tf_ls, Xs, Ys, Xs_t, Ys_t, orth, prior
     alpha = alphas[best_alpha_ind]
     (Bs, _) = lasso_path(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, Xs_t, Ys_t, alphas, return_model=False)
     
->>>>>>> 9d4d50d8149e1f8ff56535664a31f10eac818e11
+
 
 #parameters as solve_ortho_direct. 
 #s_it defines the number of scad-like iterations to do
