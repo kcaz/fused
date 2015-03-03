@@ -39,12 +39,12 @@ def test_bacteria(lamP, lamR, lamS):
     return Bs
 
 #load all the anthracis data and some of the subtilis data
-def test_bacteria_subs_subt(lamP, lamRs, lamSs, k=20):
+def test_bacteria_subs_subt(lamP, lamRs, lamSs, k=20, eval_con=False):
     out = 'data/bacteria_standard'
     errds = []
     for lamR in lamRs:
         for lamS in lamSs:
-            errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, False), exclude_tfs=False)
+            errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, False), exclude_tfs=False, eval_con=True)
             errds.append(errd)
     return errds
 
@@ -1798,7 +1798,63 @@ def eval_mapped_performance(lamP=1.0, lamR=1.0,lamS=0):
     print 'performance, mapped: aupr %f, auc %f' % (aupr, auc)
     
 
-    aupr = fg.eval_network_pr(B0_mapped2, genes1, tfs1, priors1, exclude_tfs=False)
-    auc = fg.eval_network_roc(B0_mapped2, genes1, tfs1, priors1, exclude_tfs=False)
+    aupr = fg.eval_network_pr(B0_mapped2, genes1, tfs1, priors1, exclude_tfs=False, constraints=constraints, sub=0)
+    auc = fg.eval_network_roc(B0_mapped2, genes1, tfs1, priors1, exclude_tfs=False, constraints=constraints, sub=0)
 
     print 'performance, mapped2: aupr %f, auc %f' % (aupr, auc)
+
+
+
+
+    
+def plot_bacteria_performance(lamP=1.0, lamR=5, lamSs=[0], k=20):
+    out = 'data/bacteria_standard'
+
+    metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con']
+    err_dict1 = {m : np.zeros((k, len(lamSs))) for m in metrics} #subtilis
+    err_dict2 = {m : np.zeros((k, len(lamSs))) for m in metrics} #anthracis
+
+    
+    for i, lamS in enumerate(lamSs):
+        (errd1, errd2) = fg.cv_model3(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, False), exclude_tfs=False)
+        for metric in metrics:
+            err_dict1[metric][:, [i]] = errd1[metric]
+            err_dict2[metric][:, [i]] = errd2[metric]
+    print err_dict1
+    print err_dict2
+    sns.tsplot(err_dict1['aupr'], time=lamSs, legend='full')
+    plt.figure()
+    sns.tsplot(err_dict1['aupr_con'], time=lamSs, legend='constrained')
+    plt.xlabel('lamS')
+    plt.ylabel('aupr')
+    
+    plt.show()
+
+
+#plots error dictionaries
+#this is really for debugging plot_bacteria_performance 
+def plot_synthetic_performance(lamP=1.0, lamR=5, lamSs=[0], k=20):
+    N = 5
+    N_TF = 20
+    N_G = 30
+    out = os.path.join('data','fake_data','plot_synthatic_performance')
+    ds.write_fake_data1(N1 = k*N, N2 = k*N, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.5, fuse_std = 0.0)
+    metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con']
+    err_dict1 = {m : np.zeros((k, len(lamSs))) for m in metrics} #subtilis
+    err_dict2 = {m : np.zeros((k, len(lamSs))) for m in metrics} #anthracis
+
+    
+    for i, lamS in enumerate(lamSs):
+        (errd1, errd2) = fg.cv_model3(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, False), exclude_tfs=False)
+        for metric in metrics:
+            err_dict1[metric][:, [i]] = errd1[metric]
+            err_dict2[metric][:, [i]] = errd2[metric]
+    print err_dict1
+    print err_dict2
+    sns.tsplot(err_dict1['aupr'], time=lamSs, legend='full')
+    plt.figure()
+    sns.tsplot(err_dict1['aupr_con'], time=lamSs, legend='constrained')
+    plt.xlabel('lamS')
+    plt.ylabel('aupr')
+    
+    plt.show()
