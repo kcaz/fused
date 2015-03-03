@@ -6,9 +6,16 @@ import time
 import scipy.sparse
 import scipy.sparse.linalg
 from sklearn import mixture
-import rpy2
-import rpy2.robjects.packages as rpackages
-import rpy2.robjects as robjects
+try:
+    import rpy2
+    import rpy2.robjects.packages as rpackages
+    import rpy2.robjects as robjects
+    import rpy2.robjects.numpy2ri
+except ImportError:
+    print 'rpy2 not installed'
+
+
+
 from sklearn import linear_model
 
 #SECTION: -------------------DATA STRUCTURES--------------
@@ -719,7 +726,7 @@ def direct_solve_factor_r(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, 
         y = np.vstack(Y_l)
  
         F0 = np.array(F.todense())
-        import rpy2.robjects.numpy2ri
+        
         rpy2.robjects.numpy2ri.activate()
 
         fit = ncvreg.ncvreg(F0, y)
