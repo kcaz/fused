@@ -118,7 +118,10 @@ def cv_model1(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_
         # jam things together
         Xs = [t1_tr, t2_tr]
         Ys = [e1_tr, e2_tr]
+        print 'leng'
         genes = [genes1, genes2]
+        print len(genes1)
+        print len(genes2)
         tfs = [tfs1, tfs2]
         priors = priors1 + priors2
         
@@ -131,6 +134,8 @@ def cv_model1(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_
             Bs = fl.solve_ortho_direct_mcp(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, m_it = special_args['m_it'], special_args=special_args)
         if solver == 'solve_ortho_direct_em':
             Bs = fl.solve_ortho_direct_em(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, em_it = special_args['em_it'], special_args=special_args)
+        if solver == 'solve_ortho_direct_mcp_r':
+            Bs = fl.solve_ortho_direct_mcp_r(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
 
          #get correlation of fused coefficients, for diagnostic purposes
         
@@ -541,3 +546,59 @@ def fused_coeff_corr(organisms, genes_l, tfs_l, orth, B_l):
         fused_vals[s2].append(b2)
     fused_vals = np.array(fused_vals)
     return (np.corrcoef(fused_vals)[0,1], fused_vals)
+
+#take list of lamP, lamR, lamS values and fin	ds the optimal parameters using cv_model1
+def grid_search_params(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_args=None, reverse=False, cv_both=(True,True), exclude_tfs=True, eval_metric='mse'):
+    grid = dict()
+    best_mse = 1000
+    best_R2 = 0
+    best_aupr = 0
+    best_auroc = 0
+    best_lamP = 1.0
+    best_lamR = 0
+    best_lamS = 0
+    for r in range(len(lamR)):
+        for s in range(len(lamS)):
+            for p in range(len(lamP)):
+                errd = cv_model1(data_fn, lamP[p], lamR[r], lamS[s], k, solver='solve_ortho_direct',special_args=None, reverse=False, cv_both=(True,True), exclude_tfs=True)
+                if eval_metric == 'mse':
+                    grid[str(lamR[r])+'_'+str(lamS[s])+'_'+str(lamP[p])] = errd['mse']
+                    score = 0.5*(errd['mse'][0]+errd['mse'][1])
+                    if score < best_mse:
+                        best_mse = score
+                        best_lamP = lamP[p]
+                        best_lamR = lamR[r]
+                        best_lamS = lamS[s]
+                if eval_metric == 'R2':
+                    grid[str(lamR[r])+'_'+str(lamS[s])+'_'+str(lamP[p])] = errd['R2']   
+                    score = 0.5*(errd['R2'][0]+errd['R2'][1])
+                    if score > best_R2:
+                        best_R2 = score
+                        best_lamP = lamP[p]
+                        best_lamR = lamR[r]
+                        best_lamS = lamS[s]
+                if eval_metric == 'aupr':
+                    grid[str(lamR[r])+'_'+str(lamS[s])+'_'+str(lamP[p])] = errd['aupr']
+                    score = 0.5*(errd['aupr'][0]+errd['aupr'][1])
+                    if score > best_aupr:
+                        best_aupr = score
+                        best_lamP = lamP[p]
+                        best_lamR = lamR[r]
+                        best_lamS = lamS[s]
+                if eval_metric == 'auroc':
+                    grid[str(lamR[r])+'_'+str(lamS[s])+'_'+str(lamP[p])] = errd['auroc']
+                    score = 0.5*(errd['auroc'][0]+errd['auroc'][1])
+                    if score > best_auroc:
+                        best_auroc = score
+                        best_lamP = lamP[p]
+                        best_lamR = lamR[r]
+                        best_lamS = lamS[s]
+    if eval_metric == 'mse':
+        return (best_mse, best_lamP, best_lamR, best_lamS)
+    if eval_metric == 'R2':
+        return (best_R2, best_lamP, best_lamR, best_lamS)
+    if eval_metric == 'aupr':
+        return (best_aupr, best_lamP, best_lamR, best_lamS)
+    if eval_metric == 'auroc':
+        return (best_auroc, best_lamP, best_lamR, best_lamS)
+

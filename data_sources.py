@@ -166,7 +166,6 @@ class standard_source(data_source):
             tf_mat = exp_mat[:, tf_indices]            
             exp_mat = exp_mat[:, new_order]
 
-
         #note: adding normalization 
         self.exp_mat = normalize(exp_mat, True)
         self.tf_mat = normalize(tf_mat, False)

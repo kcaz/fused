@@ -12,8 +12,8 @@ def normalize(exp_a, mean_zero = False):
     canonical_dist = np.sort(exp_a, axis=1).mean(axis=0)
     #if mean_zero:
     #    canonical_dist = canonical_dist - canonical_dist.mean()
-    
-    canonical_dist = canonical_dist / canonical_dist.std()
+    canonical_mean = canonical_dist.mean()
+    canonical_dist = (canonical_dist - canonical_mean) / canonical_dist.std() + canonical_mean
     
     exp_n_a = np.zeros(exp_a.shape)
     for r in range(exp_a.shape[0]):
@@ -140,17 +140,38 @@ class standard_source(data_source):
         tfs_fsn = filter(len, tfs_fs.split('\n'))
         
         tfs = tfs_fsn
-        #now pull out that part of the expression data as the TF expr matrix
-        
-        tfs_set = set(tfs)
-        gene_is_tf = np.array(map(lambda x: x in tfs_set, genes))
-        
-        tf_mat = exp_mat[:, gene_is_tf]
+        #create a map from gene to its index
+        gene_to_ind = {genes[i] : i for i in range(len(genes))}
+        tf_inds = map(lambda x: gene_to_ind[x], tfs)
 
+        #now pull out the tfs        
+        
+        
+        tf_mat = exp_mat[:, np.array(tf_inds)]
+        
+        tfs_come_first = True
+        #rearrange the gene indices and tf indices so that tfs come first, in the order that they appear in the original list of genes, followed by genes in the order of the original list of genes. This should not affect network inference performance, but simplifies some secondary tests
+
+        if tfs_come_first:
+            tfs_set = set(tfs)
+            #compute the (gene) indices of tfs and non-tfs
+            tf_indices = filter(lambda x: genes[x] in tfs_set, range(len(genes)))
+            ntf_indices = filter(lambda x: not genes[x] in tfs_set, range(len(genes)))
+            new_order = tf_indices + ntf_indices
             
+            tfs = map(lambda x: genes[x], tf_indices)            
+            genes = map(lambda x: genes[x], new_order)
+            
+            exp_mat = exp_mat[:, new_order]
+            
+
+>>>>>>> 775931ac00355373b6e9b25efe3579444ce14107
+        #note: adding normalization 
+        self.exp_mat = normalize(exp_mat, True)
+        self.tf_mat = normalize(tf_mat, False)
         self.datadir = datadir
-        self.exp_mat = exp_mat
-        self.tf_mat = tf_mat
+        #self.exp_mat = exp_mat
+        #self.tf_mat = tf_mat
         self.genes = genes
         self.tfs = tfs
         self.N = exp_mat.shape[0]
@@ -168,9 +189,10 @@ class standard_source(data_source):
         signs = []
         for x in psnt:
             sign = x[2]
-            if sign == 'activation':
+            
+            if sign == '1':
                 signs.append(1)
-            if sign == 'repression':
+            elif sign == '-1':
                 signs.append(-1)
             else:
                 signs.append(0)
@@ -224,6 +246,7 @@ class ba_timeseries(data_source):
 
         self.exp_mat = exp_mat
         self.tf_mat = tf_mat
+        #NOTE: why was there no normalization here?
         self.genes = genes
         self.tfs = tfs
         self.N = exp_mat.shape[0]
@@ -275,8 +298,11 @@ class ba_iron(data_source):
         exp_mat = exp_mat_t.T
 
         tf_mat = tf_mat_t.T
-        self.exp_mat = normalize(exp_mat, True)
-        self.tf_mat = normalize(tf_mat, False)
+        #NOTE removing normalization here
+        #self.exp_mat = normalize(exp_mat, True)
+        #self.tf_mat = normalize(tf_mat, False)
+        self.exp_mat = exp_mat
+        self.tf_mat = tf_mat
         self.genes = genes
         self.tfs = tfs
         self.N = exp_mat.shape[0]
@@ -323,9 +349,11 @@ class subt(data_source):
 
         exp_mat = exp_mat_t.T
         tf_mat = tf_mat_t.T
-
-        self.exp_mat = normalize(exp_mat, True)
-        self.tf_mat = normalize(tf_mat, False)
+        #NOTE: removed normalization
+        #self.exp_mat = normalize(exp_mat, True)
+        #self.tf_mat = normalize(tf_mat, False)
+        self.exp_mat = exp_mat
+        self.tf_mat = tf_mat
         self.genes = genes
         self.tfs = tfs
         self.N = exp_mat.shape[0]
@@ -574,7 +602,7 @@ def generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, organisms, falsepos,
         num_to_add = len(orths)
     else:
         num_to_add = int(falsepos*(len(orths) - num_to_remove)/(1-falsepos))
-    
+    print 'adding %d fake orths!' % num_to_add
     orth_genes = set()
     for orth in orths:
         orth_genes.add(orth.genes[0])
@@ -776,6 +804,7 @@ def voodoo():
                 sign = signs[i]
             f.write('%s\t%s\t%s\n' % (tf.name, gene.name, sign))
         f.close()
+    #we need to reverse the order of the orthology to be consistent with 0=subtilis 1=anthracis
     def load_orth_voodoo(orth_fn, organisms):
         f = file(orth_fn)
         fs = f.read()
@@ -785,7 +814,8 @@ def voodoo():
         orths = []
         for o in fsnt:
             real = True
-            orth = fr.orthology(genes = (fr.one_gene(name=o[0],organism=organisms[0]), fr.one_gene(name=o[1], organism=organisms[1])), real = real)
+            #reversing here
+            orth = fr.orthology(genes = (fr.one_gene(name=o[1],organism=organisms[1]), fr.one_gene(name=o[0], organism=organisms[0])), real = real)
             orths.append(orth)
         return orths
 
@@ -805,8 +835,8 @@ def voodoo():
         os.mkdir(out_dir)
     write_expr_mat(out_dir+os.sep+'expression1', bs_e, bs_genes)
     write_expr_mat(out_dir+os.sep+'expression2', ba_e, ba_genes)
-    write_priors_voodoo(out_dir+os.sep+'priors1',bs_priors)
-    write_priors_voodoo(out_dir+os.sep+'priors2',ba_priors)
+    write_priors_voodoo(out_dir+os.sep+'priors1',bs_priors, bs_sign)
+    write_priors_voodoo(out_dir+os.sep+'priors2',ba_priors, ba_sign)
     write_tfnames(out_dir+os.sep+'tfnames1',bs_tfs)
     write_tfnames(out_dir+os.sep+'tfnames2',ba_tfs)
     write_orth(out_dir+os.sep+'orth', orths)
