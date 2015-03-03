@@ -1586,8 +1586,7 @@ def test_prior_sign_corr_orth():
     plt.show()
 
 
-<<<<<<< HEAD
-#makes heatmap showing effect of lamS on networks in L2 fusion 
+#makes heatmap showing effect of lamS on networks in L2 fusion, using optimal parameters
 def L2fusiontest():    
     N_TF = 20
     N_G = 200
@@ -1620,12 +1619,6 @@ def L2fusiontest():
 
 
 
-
-
-
-        
-    
-=======
 #this looks at the distributions Betas for +/- priors, and an equal number of non-priors in subtilis
 def test_prior_sign_betas(lamP=1.0, lamR=1.0,lamS=0):
     #first, get the betas. don't fuse

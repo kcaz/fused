@@ -1586,7 +1586,7 @@ def test_prior_sign_corr_orth():
     plt.show()
 
 
-#makes heatmap showing effect of lamS on networks in L2 fusion 
+#makes heatmap showing effect of lamS on networks in L2 fusion, using optimal lamR
 def L2fusiontest():    
     N_TF = 20
     N_G = 200
