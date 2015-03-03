@@ -157,13 +157,15 @@ class standard_source(data_source):
             #compute the (gene) indices of tfs and non-tfs
             tf_indices = filter(lambda x: genes[x] in tfs_set, range(len(genes)))
             ntf_indices = filter(lambda x: not genes[x] in tfs_set, range(len(genes)))
+
             new_order = tf_indices + ntf_indices
             
             tfs = map(lambda x: genes[x], tf_indices)            
             genes = map(lambda x: genes[x], new_order)
-            
+
+            tf_mat = exp_mat[:, tf_indices]            
             exp_mat = exp_mat[:, new_order]
-            
+
         #note: adding normalization 
         self.exp_mat = normalize(exp_mat, True)
         self.tf_mat = normalize(tf_mat, False)

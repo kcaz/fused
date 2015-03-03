@@ -39,12 +39,12 @@ def test_bacteria(lamP, lamR, lamS):
     return Bs
 
 #load all the anthracis data and some of the subtilis data
-def test_bacteria_subs_subt(lamP, lamRs, lamSs):
+def test_bacteria_subs_subt(lamP, lamRs, lamSs, k=20, eval_con=False):
     out = 'data/bacteria_standard'
     errds = []
     for lamR in lamRs:
         for lamS in lamSs:
-            errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=20, solver='solve_ortho_direct', reverse = True, cv_both = (True, True), exclude_tfs=False)
+            errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, False), exclude_tfs=False, eval_con=True)
             errds.append(errd)
     return errds
 
@@ -1692,7 +1692,7 @@ def test_prior_sign_betas(lamP=1.0, lamR=1.0,lamS=0):
 
     plt.show()
 #looks at distribution of correlations for repression and activation priors in anthracis, after mapping from subtilis
-def test_prior_sign_betas_orth():
+def test_prior_sign_betas_orth(lamP=1.0, lamR=1.0,lamS=0):
     
     bactf = 'data/bacteria_standard'
     ds1 = ds.standard_source(bactf,0)
@@ -1724,7 +1724,11 @@ def test_prior_sign_betas_orth():
     acti_interactions = []
     rand_interactions = []
     
-    (B0, B1) = test_bacteria(1, 10, 0)
+    (B0, B1) = test_bacteria(lamP, lamR, lamS)
+    aupr = fg.eval_network_pr(B0, genes1, tfs1, priors1, exclude_tfs=False)
+    auc = fg.eval_network_roc(B0, genes1, tfs1, priors1, exclude_tfs=False)
+
+    print 'performance: aupr %f, auc %f' % (aupr, auc)
 
     for i, prior in enumerate(prior_cons_r):
         tfi = prior.c1.r
@@ -1760,9 +1764,9 @@ def test_prior_sign_betas_orth():
         
         rand_interactions.append(B1[tfi, gi])
 
-    repr_interactions = np.array(repr_interactions)
-    acti_interactions = np.array(acti_interactions)
-    rand_interactions = np.array(rand_interactions)
+    repr_interactions = 1000*np.array(repr_interactions)
+    acti_interactions = 1000*np.array(acti_interactions)
+    rand_interactions = 1000*np.array(rand_interactions)
     
     sns.kdeplot(repr_interactions, shade=True, label = 'repression, %f'% np.mean(repr_interactions))
     plt.hold(True)
@@ -1774,4 +1778,139 @@ def test_prior_sign_betas_orth():
     plt.ylabel('frequency')    
     
     plt.show()
->>>>>>> 9d4d50d8149e1f8ff56535664a31f10eac818e11
+
+
+    sns.kdeplot(np.abs(np.hstack((repr_interactions, acti_interactions))), label='abs priors %f' % (0.5*np.mean(np.abs(repr_interactions)) + 0.5*np.mean(np.abs(acti_interactions))))
+    sns.kdeplot(np.abs(np.hstack((rand_interactions, rand_interactions))), label='abs non_priors %f' % (np.mean(np.abs(rand_interactions))))
+
+    plt.show()
+
+#this function fits the anthracis network, then maps interactions to the subtilis network, and evaluates aupr/auc
+def eval_mapped_performance(lamP=1.0, lamR=1.0,lamS=0):
+    
+    bactf = 'data/bacteria_standard'
+    ds1 = ds.standard_source(bactf,0)
+    ds2 = ds.standard_source(bactf,1)
+    (priors1, signs1) = ds1.get_priors()
+    
+    
+    (constraints, marks, orths) = ds.load_constraints(bactf)
+    
+    (e1_tr, t1_tr, genes1, tfs1) = ds1.load_data()
+    (e2_tr, t2_tr, genes2, tfs2) = ds2.load_data()
+
+    subt_to_anth = {orths[x].genes[0].name : orths[x].genes[1].name for x in range(len(orths))}
+    anthracis_gene_inds = {genes2[i] : i for i in range(len(genes2))}
+    subtilis_gene_inds = {genes1[i] : i for i in range(len(genes1))}
+    
+    
+    (B0, B1) = test_bacteria(lamP, lamR, lamS)
+    
+    aupr = fg.eval_network_pr(B0, genes1, tfs1, priors1, exclude_tfs=False)
+    auc = fg.eval_network_roc(B0, genes1, tfs1, priors1, exclude_tfs=False)
+
+    print 'performance: aupr %f, auc %f' % (aupr, auc)
+
+    B0_mapped = np.zeros(B0.shape)
+    B0_mapped2 = np.zeros(B0.shape) #same thing but using constraints
+    filled = 0
+    for gi, gene in enumerate(genes1):
+        for tfi, tf in enumerate(tfs1):
+            if gene in subt_to_anth and tf in subt_to_anth:
+                gi_mapped = anthracis_gene_inds[subt_to_anth[gene]]
+                tfi_mapped = anthracis_gene_inds[subt_to_anth[tf]]
+                if tfi_mapped < B1.shape[0]: #exclude possibility of a tf <-> non-tf mapping
+                    B0_mapped[tfi, gi] = B1[tfi_mapped, gi_mapped]
+                    filled += 1
+    
+    print 'filled in %d' % filled
+    
+    for con in constraints:
+        if con.c1.sub == 0:
+            con_fr_g = genes1[con.c1.c]
+            con_fr_tf = genes1[con.c1.r]
+            con_to_g = genes2[con.c2.c]
+            con_to_tf = genes2[con.c2.r]
+            
+            con_to_m_g = subt_to_anth[con_fr_g]
+            con_to_m_tf = subt_to_anth[con_fr_tf]
+
+            if con_to_g != con_to_m_g or con_to_tf != con_to_m_tf:
+                print 'constraint maps (%s, %s) to (%s, %s). Orthology maps (%s, %s) to (%s, %s). '%(con_fr_g, con_fr_tf,con_to_g,con_to_tf,con_fr_g, con_fr_tf,con_to_m_g,con_to_m_tf,)
+            B0_mapped2[con.c1.r, con.c1.c] = B1[con.c2.r, con.c2.c]
+            #double check this is the same as B0_mapped
+            if B0_mapped[con.c1.r, con.c1.c] != B0_mapped2[con.c1.r, con.c1.c]:
+                print 'wtf???'
+                print 'constraint maps (%s, %s) to (%s, %s). Orthology maps (%s, %s) to (%s, %s). '%(con_fr_g, con_fr_tf,con_to_g,con_to_tf,con_fr_g, con_fr_tf,con_to_m_g,con_to_m_tf,)
+                print B0_mapped[con.c1.r, con.c1.c]
+                print B0_mapped2[con.c1.r, con.c1.c]
+                print 'cons (%d, %d) to (%d, %d)' % (con.c1.r, con.c1.c, con.c2.r, con.c2.c)
+                print 'omap (%d, %d) to (%d, %d)' % (subtilis_gene_inds[con_fr_tf], subtilis_gene_inds[con_fr_g], anthracis_gene_inds[con_to_tf], anthracis_gene_inds[con_to_g])
+    print 'there are %d different entries' % (B0_mapped != B0_mapped2).sum()
+    aupr = fg.eval_network_pr(B0_mapped, genes1, tfs1, priors1, exclude_tfs=False)
+    auc = fg.eval_network_roc(B0_mapped, genes1, tfs1, priors1, exclude_tfs=False)
+
+    print 'performance, mapped: aupr %f, auc %f' % (aupr, auc)
+    
+
+    aupr = fg.eval_network_pr(B0_mapped2, genes1, tfs1, priors1, exclude_tfs=False, constraints=constraints, sub=0)
+    auc = fg.eval_network_roc(B0_mapped2, genes1, tfs1, priors1, exclude_tfs=False, constraints=constraints, sub=0)
+
+    print 'performance, mapped2: aupr %f, auc %f' % (aupr, auc)
+
+
+
+
+    
+def plot_bacteria_performance(lamP=1.0, lamR=5, lamSs=[0], k=20):
+    out = 'data/bacteria_standard'
+
+    metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con']
+    err_dict1 = {m : np.zeros((k, len(lamSs))) for m in metrics} #subtilis
+    err_dict2 = {m : np.zeros((k, len(lamSs))) for m in metrics} #anthracis
+
+    
+    for i, lamS in enumerate(lamSs):
+        (errd1, errd2) = fg.cv_model3(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, False), exclude_tfs=False)
+        for metric in metrics:
+            err_dict1[metric][:, [i]] = errd1[metric]
+            err_dict2[metric][:, [i]] = errd2[metric]
+    print err_dict1
+    print err_dict2
+    sns.tsplot(err_dict1['aupr'], time=lamSs, legend='full')
+    plt.figure()
+    sns.tsplot(err_dict1['aupr_con'], time=lamSs, legend='constrained')
+    plt.xlabel('lamS')
+    plt.ylabel('aupr')
+    
+    plt.show()
+
+
+#plots error dictionaries
+#this is really for debugging plot_bacteria_performance 
+def plot_synthetic_performance(lamP=1.0, lamR=5, lamSs=[0], k=20):
+    N = 5
+    N_TF = 20
+    N_G = 30
+    out = os.path.join('data','fake_data','plot_synthatic_performance')
+    ds.write_fake_data1(N1 = k*N, N2 = k*N, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.5, fuse_std = 0.0)
+    metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con']
+    err_dict1 = {m : np.zeros((k, len(lamSs))) for m in metrics} #subtilis
+    err_dict2 = {m : np.zeros((k, len(lamSs))) for m in metrics} #anthracis
+
+    
+    for i, lamS in enumerate(lamSs):
+        (errd1, errd2) = fg.cv_model3(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, False), exclude_tfs=False)
+        for metric in metrics:
+            err_dict1[metric][:, [i]] = errd1[metric]
+            err_dict2[metric][:, [i]] = errd2[metric]
+    print err_dict1
+    print err_dict2
+    sns.tsplot(err_dict1['aupr'], time=lamSs, legend='full')
+    plt.figure()
+    sns.tsplot(err_dict1['aupr_con'], time=lamSs, legend='constrained')
+    plt.xlabel('lamS')
+    plt.ylabel('aupr')
+    
+    plt.show()
+
