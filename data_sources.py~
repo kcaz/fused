@@ -149,7 +149,23 @@ class standard_source(data_source):
         
         tf_mat = exp_mat[:, np.array(tf_inds)]
         
-        print 'yolo'
+        tfs_come_first = True
+        #rearrange the gene indices and tf indices so that tfs come first, in the order that they appear in the original list of genes, followed by genes in the order of the original list of genes. This should not affect network inference performance, but simplifies some secondary tests
+
+        if tfs_come_first:
+            tfs_set = set(tfs)
+            #compute the (gene) indices of tfs and non-tfs
+            tf_indices = filter(lambda x: genes[x] in tfs_set, range(len(genes)))
+            ntf_indices = filter(lambda x: not genes[x] in tfs_set, range(len(genes)))
+            new_order = tf_indices + ntf_indices
+            
+            tfs = map(lambda x: genes[x], tf_indices)            
+            genes = map(lambda x: genes[x], new_order)
+            
+            exp_mat = exp_mat[:, new_order]
+            
+
+>>>>>>> 775931ac00355373b6e9b25efe3579444ce14107
         #note: adding normalization 
         self.exp_mat = normalize(exp_mat, True)
         self.tf_mat = normalize(tf_mat, False)
@@ -173,9 +189,10 @@ class standard_source(data_source):
         signs = []
         for x in psnt:
             sign = x[2]
-            if sign == 'activation':
+            
+            if sign == '1':
                 signs.append(1)
-            if sign == 'repression':
+            elif sign == '-1':
                 signs.append(-1)
             else:
                 signs.append(0)
@@ -787,6 +804,7 @@ def voodoo():
                 sign = signs[i]
             f.write('%s\t%s\t%s\n' % (tf.name, gene.name, sign))
         f.close()
+    #we need to reverse the order of the orthology to be consistent with 0=subtilis 1=anthracis
     def load_orth_voodoo(orth_fn, organisms):
         f = file(orth_fn)
         fs = f.read()
@@ -796,7 +814,8 @@ def voodoo():
         orths = []
         for o in fsnt:
             real = True
-            orth = fr.orthology(genes = (fr.one_gene(name=o[0],organism=organisms[0]), fr.one_gene(name=o[1], organism=organisms[1])), real = real)
+            #reversing here
+            orth = fr.orthology(genes = (fr.one_gene(name=o[1],organism=organisms[1]), fr.one_gene(name=o[0], organism=organisms[0])), real = real)
             orths.append(orth)
         return orths
 
@@ -816,8 +835,8 @@ def voodoo():
         os.mkdir(out_dir)
     write_expr_mat(out_dir+os.sep+'expression1', bs_e, bs_genes)
     write_expr_mat(out_dir+os.sep+'expression2', ba_e, ba_genes)
-    write_priors_voodoo(out_dir+os.sep+'priors1',bs_priors)
-    write_priors_voodoo(out_dir+os.sep+'priors2',ba_priors)
+    write_priors_voodoo(out_dir+os.sep+'priors1',bs_priors, bs_sign)
+    write_priors_voodoo(out_dir+os.sep+'priors2',ba_priors, ba_sign)
     write_tfnames(out_dir+os.sep+'tfnames1',bs_tfs)
     write_tfnames(out_dir+os.sep+'tfnames2',ba_tfs)
     write_orth(out_dir+os.sep+'orth', orths)

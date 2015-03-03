@@ -243,7 +243,7 @@ def test_scad2():
 
 
 def test_mcp():
-#create simulated data set with false orthology and run fused scad + visualize scad penalty at each cv
+#create simulated data set with false orthology and run fused scad + visualize mcp penalty at each cv
      
     N_TF = 10
     N_G = 200
@@ -936,6 +936,7 @@ def plot_betas():
 
 
 #lets us look at the delta betas for random betas and for betas with fusion constraints, plots them before and after using em and identifies 
+#uses seaborn
 def plot_betas2():
     N_TF = 20
     N_G = 500
@@ -944,7 +945,7 @@ def plot_betas2():
     lamS = 1.0
     lamSe = 0.1
 
-    out1 = os.path.join('data','fake_data','plot_betas2')
+    out1 = os.path.join('data','fake_data','plot_betas2spare')
     if not os.path.exists(out1):
         os.mkdir(out1)
     out2 = os.path.join(out1,'dat')
@@ -1209,26 +1210,26 @@ def test_em3():
 #    plt.savefig(os.path.join(os.path.join('data','fake_data','test_em3','fig3')))
 #    plt.figure()
 
-def test_mcp_r():
+def test_mcp_2():
     N_TF = 10
     N_G = 200
     amt_fused = 1.0
     orth_err = [0,0.3,0.5,0.7,0.9]
     lamS = 1.0
-    if not os.path.exists(os.path.join('data','fake_data','test_mcp_r')):
-        os.mkdir(os.path.join('data','fake_data','test_mcp_r'))
+    if not os.path.exists(os.path.join('data','fake_data','test_mcp_2')):
+        os.mkdir(os.path.join('data','fake_data','test_mcp_2'))
     #iterate over how much fusion
     errors_em = np.zeros(len(orth_err))
     errors_l2 = np.zeros(len(orth_err))
     errors_uf = np.zeros(len(orth_err))
     for i, N in enumerate(orth_err):
-        out = os.path.join('data','fake_data','test_mcp_r','dat_'+str(N))
-        ds.write_fake_data1(N1 = 10*10, N2 = 10*10, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = N, orth_falseneg = N, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.1)
+        out = os.path.join('data','fake_data','test_mcp_2','dat_'+str(N))
+        ds.write_fake_data1(N1 = 10, N2 = 10, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = N, orth_falseneg = N, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.1)
         lamR = 0.1
         lamP = 1.0 #priors don't matter
-        errmr = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct_mcp_r', reverse = True, cv_both = (True, True))
+        #errmr = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct_mcp_r', reverse = True, cv_both = (True, True))
         errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
-        errm = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=0, k=10, solver='solve_ortho_direct_mcp', reverse = True, cv_both = (True, True),special_args={'m_it':5})
+        errm = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=0, k=10, solver='solve_ortho_direct_mcp', reverse = True, cv_both = (True, True),special_args={'m_it':5, 'a':0.5})
 
 #looks at the distribution of absolute values of correlations for prior interactions, and an equally sized set of random interactions
 def test_prior_corr():
@@ -1579,4 +1580,43 @@ def test_prior_sign_corr_orth():
     plt.ylabel('frequency')    
     
     plt.show()
->>>>>>> 775931ac00355373b6e9b25efe3579444ce14107
+
+
+#makes heatmap showing effect of lamS on networks in L2 fusion 
+def L2fusiontest():    
+    N_TF = 20
+    N_G = 200
+    pct_fused = list(np.arange(0,1.0,0.1))
+
+    lamRs = list(np.arange(0,3.0,0.1))
+    lamSs = list(np.arange(0,3.0,0.1))
+    lamP = 1.0
+    mse_array = np.zeros((len(pct_fused),len(lamSs)))
+
+    out1 = os.path.join('data','fake_data','L2fusiontest')
+    k = 5#cv folds
+    if not os.path.exists(out1):
+        os.mkdir(out1)
+
+
+    for j, N in enumerate(pct_fused):
+        out2 = os.path.join(out1,'dat_'+str(N))
+        ds.write_fake_data1(out_dir = out2, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.1, pct_fused=N)        
+        lamP = 1.0 #priors don't matter
+        for i, fused in enumerate(pct_fused):
+            for j, lamS in enumerate(lamSs):
+                (mse, best_lamP, best_lamR, best_lamS) = fg.grid_search_params(out2, lamP=[lamP], lamR=lamRs, lamS=[lamS], k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
+                mse_array[i,j] += mse
+
+    mse_df = pd.DataFrame(mse_array, index=pct_fused, columns=lamSs)
+    sns.heatmap(mse_df)
+    plt.show()
+
+
+
+
+
+
+
+        
+    

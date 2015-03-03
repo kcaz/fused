@@ -149,9 +149,6 @@ class standard_source(data_source):
         
         tf_mat = exp_mat[:, np.array(tf_inds)]
         
-<<<<<<< HEAD
-        #print 'yolo'
-=======
         tfs_come_first = True
         #rearrange the gene indices and tf indices so that tfs come first, in the order that they appear in the original list of genes, followed by genes in the order of the original list of genes. This should not affect network inference performance, but simplifies some secondary tests
 
@@ -167,8 +164,6 @@ class standard_source(data_source):
             
             exp_mat = exp_mat[:, new_order]
             
-
->>>>>>> 775931ac00355373b6e9b25efe3579444ce14107
         #note: adding normalization 
         self.exp_mat = normalize(exp_mat, True)
         self.tf_mat = normalize(tf_mat, False)
