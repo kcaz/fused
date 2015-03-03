@@ -949,7 +949,7 @@ def plot_betas2():
     lamS = 1.0
     lamSe = 0.1
 
-    out1 = os.path.join('data','fake_data','plot_betas2spare')
+    out1 = os.path.join('data','fake_data','plot_betas2')
     if not os.path.exists(out1):
         os.mkdir(out1)
     out2 = os.path.join(out1,'dat')
@@ -975,6 +975,8 @@ def plot_betas2():
     s_it = 5
     special_args={'a':0.2}
     Bs_fs = fr.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamSe, s_it, special_args=special_args)
+    m_it = 5
+    Bs_fm = fr.solve_ortho_direct_mcp(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamSe, m_it, special_args=special_args)
     em_it=10
     special_args={'f':1,'uf':0.1}
     Bs_em = fr.solve_ortho_direct_em(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, em_it, special_args=special_args)
@@ -988,23 +990,28 @@ def plot_betas2():
     Bfr2 = []
     Bfs1 = []
     Bfs2 = []
+    Bfm1 = []
+    Bfm2 = []
     Bem1 = []
     Bem2 = []
 
     Bufd = []
     Bfrd = []
     Bfsd = []
+    Bfmd = []
     Bemd = []
 
     Bufu = []
     Bfru = []
     Bfsu = []
+    Bfmu = []
     Bemu = []
 
     colors = []
     con_inds = np.random.permutation(range(len(constraints)))
     area_fr = []
     area_fs = []
+    area_fm = []
     area_em = [] 
 
     subs = 1000
@@ -1020,12 +1027,15 @@ def plot_betas2():
         Bfs1.append(Bs_fs[con.c1.sub][con.c1.r, con.c1.c])
         Bfs2.append(Bs_fs[con.c2.sub][con.c2.r, con.c2.c])
         Bfsd.append(Bs_fs[con.c1.sub][con.c1.r, con.c1.c]-Bs_fs[con.c2.sub][con.c2.r, con.c2.c])
+        Bfm1.append(Bs_fm[con.c1.sub][con.c1.r, con.c1.c])
+        Bfm2.append(Bs_fm[con.c2.sub][con.c2.r, con.c2.c])
+        Bfmd.append(Bs_fm[con.c1.sub][con.c1.r, con.c1.c]-Bs_fm[con.c2.sub][con.c2.r, con.c2.c])
         Bem1.append(Bs_em[con.c1.sub][con.c1.r, con.c1.c])
         Bem2.append(Bs_em[con.c2.sub][con.c2.r, con.c2.c])
         Bemd.append(Bs_em[con.c1.sub][con.c1.r, con.c1.c]-Bs_em[con.c2.sub][con.c2.r, con.c2.c])
-        area_fr.append(con.lam*30)
-        area_fs.append(con.lam*30)
-        area_em.append(con.lam*30)
+        area_fr.append(con.lam*50)
+        area_fs.append(con.lam*50)
+        area_em.append(con.lam*50)
         if mark == 1:
             colors.append('g')
         else:
@@ -1039,6 +1049,9 @@ def plot_betas2():
         Bfs1.append(Bs_fs[0][random.randrange(0,r1,1)][random.randrange(0,c1,1)])
         Bfs2.append(Bs_fs[1][random.randrange(0,r2,1)][random.randrange(0,c2,1)])
         Bfsu.append(Bs_fs[0][random.randrange(0,r1,1)][random.randrange(0,c1,1)]-Bs_fs[1][random.randrange(0,r2,1)][random.randrange(0,c2,1)])
+        Bfm1.append(Bs_fm[0][random.randrange(0,r1,1)][random.randrange(0,c1,1)])
+        Bfm2.append(Bs_fm[1][random.randrange(0,r2,1)][random.randrange(0,c2,1)])
+        Bfmu.append(Bs_fm[0][random.randrange(0,r1,1)][random.randrange(0,c1,1)]-Bs_fm[1][random.randrange(0,r2,1)][random.randrange(0,c2,1)])
         Bem1.append(Bs_em[0][random.randrange(0,r1,1)][random.randrange(0,c1,1)])
         Bem2.append(Bs_em[1][random.randrange(0,r2,1)][random.randrange(0,c2,1)])
         Bemu.append(Bs_em[0][random.randrange(0,r1,1)][random.randrange(0,c1,1)]-Bs_em[1][random.randrange(0,r2,1)][random.randrange(0,c2,1)])
@@ -1053,6 +1066,8 @@ def plot_betas2():
     Bfr2s = np.array(Bfr2)
     Bfs1s = np.array(Bfs1)
     Bfs2s = np.array(Bfs2)
+    Bfm1s = np.array(Bfm1)
+    Bfm2s = np.array(Bfm2)
     Bem1s = np.array(Bem1)
     Bem2s = np.array(Bem2)
     colors = np.array(colors)
@@ -1070,11 +1085,27 @@ def plot_betas2():
     sns.kdeplot(np.array(Bfsu), shade=True)
     plt.savefig(os.path.join(out1,'scaddist'))
     plt.close()
+    sns.kdeplot(np.array(Bfmd), shade=True)
+    sns.kdeplot(np.array(Bfmu), shade=True)
+    plt.savefig(os.path.join(out1,'mcpdist'))
+    plt.close()
     sns.kdeplot(np.array(Bemd), shade=True)
     sns.kdeplot(np.array(Bemu), shade=True)
     plt.savefig(os.path.join(out1,'emdist'))
     plt.close()
 
+    plt.hist(np.array(area_fr))
+    plt.savefig(os.path.join(out1, 'ridgelam'))
+    plt.close()
+    plt.hist(np.array(area_fs))
+    plt.savefig(os.path.join(out1, 'scadlam'))
+    plt.close()
+    plt.hist(np.array(area_fm))
+    plt.savefig(os.path.join(out1, 'mcplam'))
+    plt.close()
+    plt.hist(np.array(area_em))
+    plt.savefig(os.path.join(out1, 'emlam'))
+    plt.close()
 
     plt.scatter(Buf1s, Buf2s, c=colors, alpha=0.5)
     plt.savefig(os.path.join(out1,'unfused'))
@@ -1084,6 +1115,9 @@ def plot_betas2():
     plt.close()
     plt.scatter(Bfs1s, Bfs2s, c=colors, s=area_fs, alpha=0.5)
     plt.savefig(os.path.join(out1,'scad'))
+    plt.close()
+    plt.scatter(Bfm1s, Bfm2s, c=colors, s=area_fm, alpha=0.5)
+    plt.savefig(os.path.join(out1,'mcp'))
     plt.close()
     plt.scatter(Bem1s, Bem2s, c=colors, s=area_em, alpha=0.5)
     plt.savefig(os.path.join(out1,'em'))

@@ -627,8 +627,6 @@ def lasso_path(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, Xs_t, Ys_t,
     
     return (Bs, alpha_err)
 
-<<<<<<< HEAD
-
 #produces X, y for use in R package ncvreg
 def direct_solve_factor_r(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, adjust=False):
 #    if False:#this switches to the old version, which is faster for inexplicable reasons
@@ -742,9 +740,7 @@ def direct_solve_factor_r(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, 
 
     return Bs
 
-=======
-    
->>>>>>> 9d4d50d8149e1f8ff56535664a31f10eac818e11
+
 def solve_em(Xs, Ys, fuse_con, ridge_con, lamR, lamS, em_it, special_args=None):
     #special_args is a dictionary where 'f': constant to multiply 1/covar_fused by to get lamS; 'uf' is unfused and 'f' is fused
     f = special_args['f']
