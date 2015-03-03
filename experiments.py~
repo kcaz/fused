@@ -76,10 +76,14 @@ def sanity1():
             errors[i,j] == errors[i,j]/10
     plt.plot(errors.T)
     plt.legend(data_amnts)
+    plt.xlabel('lamS')
+    plt.ylabel('mse')
     plt.savefig(os.path.join(os.path.join('data','fake_data','sanity1','fig1')))
     plt.figure()
     plt.plot(errors)
     plt.legend(lamSs)
+    plt.xlabel('lamS')
+    plt.ylabel('mse')
     plt.savefig(os.path.join(os.path.join('data','fake_data','sanity1','fig2')))
 
 #shows performance as a function of the amount of  data in a secondary network for several values of lamS
@@ -376,7 +380,7 @@ def test_2coeff_fuse():
         os.mkdir(out)
 
     N = 10
-    #ds.write_fake_data1(out_dir=out, N1=N,N2=N,tfg_count1=(2,1),tfg_count2=(2,1),sparse=0.0,fuse_std=0.0,measure_noise1=0.3,measure_noise2=0.3)
+    ds.write_fake_data1(out_dir=out, N1=N,N2=N,tfg_count1=(2,1),tfg_count2=(2,1),sparse=0.0,fuse_std=0.0,measure_noise1=0.3,measure_noise2=0.3)
     
 
     (br1, genes1, tfs1) = ds.load_network(os.path.join(out, 'beta1'))
@@ -641,7 +645,7 @@ def ref1():
     N1 = 6
     N2 = 6
     out = os.path.join('data','fake_data','ref1')
-    ds.write_fake_data1(N1 = N1, N2 = N2, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.0)
+    ds.write_fake_data1(N1 = N1, N2 = N2, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.0,pct_fused=1.0)
     
     (b1, b2) = fg.fit_model(out, 1.0, 0.1, 0.5, solver='solve_ortho_direct')
     (n11,g,t) = ds.load_network(os.path.join(out,'beta1'))
@@ -945,7 +949,7 @@ def plot_betas2():
     lamS = 1.0
     lamSe = 0.1
 
-    out1 = os.path.join('data','fake_data','plot_betas2')
+    out1 = os.path.join('data','fake_data','plot_betas2spare')
     if not os.path.exists(out1):
         os.mkdir(out1)
     out2 = os.path.join(out1,'dat')
@@ -1582,6 +1586,7 @@ def test_prior_sign_corr_orth():
     plt.show()
 
 
+<<<<<<< HEAD
 #makes heatmap showing effect of lamS on networks in L2 fusion 
 def L2fusiontest():    
     N_TF = 20
@@ -1620,3 +1625,160 @@ def L2fusiontest():
 
         
     
+=======
+#this looks at the distributions Betas for +/- priors, and an equal number of non-priors in subtilis
+def test_prior_sign_betas(lamP=1.0, lamR=1.0,lamS=0):
+    #first, get the betas. don't fuse
+    (B0, _) = test_bacteria(lamP, lamR, lamS)
+    print 'hallo'
+    bactf = 'data/bacteria_standard'
+    
+    ds1 = ds.standard_source(bactf,0)
+    #ds2 = ds.standard_source(bactf,1)
+    (priors1, signs1) = ds1.get_priors()
+    
+    #(priors2, signs2) = ds2.get_priors()
+    #(constraints, marks, orths) = ds.load_constraints(bactf)
+    (e1_tr, t1_tr, genes1, tfs1) = ds1.load_data()
+    #(e2_tr, t2_tr, genes2, tfs2) = ds2.load_data()
+    aupr = fg.eval_network_pr(B0, genes1, tfs1, priors1, exclude_tfs=False)
+    auc = fg.eval_network_roc(B0, genes1, tfs1, priors1, exclude_tfs=False)
+
+    print 'performance: aupr %f, auc %f' % (aupr, auc)
+    priors_a = map(lambda ind1: priors1[ind1], filter(lambda ind2: signs1[ind2] == 1, range(len(signs1))))
+
+    priors_r = map(lambda ind1: priors1[ind1], filter(lambda ind2: signs1[ind2] == -1, range(len(signs1))))
+
+    prior_cons_r = fr.priors_to_constraints([ds1.name], [genes1], [tfs1], priors_r, 1.0)
+    prior_cons_a = fr.priors_to_constraints([ds1.name], [genes1], [tfs1], priors_a, 1.0)
+    #gene_corr = np.corrcoef(e1_tr.T)
+    #we now rely on the fact that tfs occur before genes, and in the same order as they do in the list of genes, so indices are the same
+    
+    repr_interactions = []
+    acti_interactions = []
+    rand_interactions = []
+    for i, prior in enumerate(prior_cons_r):
+        tfi = prior.c1.r
+        gi = prior.c1.c
+        exp_tf = e1_tr[:,[tfi]]
+        exp_g = e1_tr[:, [gi]]
+        if tfi < B0.shape[0]:
+            repr_interactions.append(B0[tfi, gi])
+
+    for i, prior in enumerate(prior_cons_a):
+        tfi = prior.c1.r
+        gi = prior.c1.c
+        exp_tf = e1_tr[:,[tfi]]
+        exp_g = e1_tr[:, [gi]]        
+        if tfi < B0.shape[0]:
+            acti_interactions.append(B0[tfi, gi])
+
+    for i, prior in enumerate(prior_cons_a):
+        tfi = np.random.randint(0, len(tfs1))
+        gi = np.random.randint(0, len(genes1))
+        exp_tf = e1_tr[:,[tfi]]
+        exp_g = e1_tr[:, [gi]]
+        if tfi < B0.shape[0]:
+            rand_interactions.append(B0[tfi, gi])
+    repr_interactions = 1000*np.array(repr_interactions)
+    acti_interactions = 1000*np.array(acti_interactions)
+    rand_interactions = 1000*np.array(rand_interactions)
+    sns.kdeplot(repr_interactions, shade=True, label = 'repression, %f'% np.mean(repr_interactions))
+    plt.hold(True)
+    sns.kdeplot(acti_interactions, shade=True, label = 'activation, %f'% np.mean(acti_interactions))
+    sns.kdeplot(rand_interactions, shade=True, label = 'non-priors, %f' % np.mean(rand_interactions))
+    
+    plt.xlabel('beta')
+    plt.legend()
+    plt.ylabel('frequency')    
+    
+    plt.show()
+
+    sns.kdeplot(np.abs(np.hstack((repr_interactions, acti_interactions))), label='abs priors %f' % (0.5*np.mean(np.abs(repr_interactions)) + 0.5*np.mean(np.abs(acti_interactions))))
+    sns.kdeplot(np.abs(np.hstack((rand_interactions, rand_interactions))), label='abs non_priors %f' % (np.mean(np.abs(rand_interactions))))
+
+    plt.show()
+#looks at distribution of correlations for repression and activation priors in anthracis, after mapping from subtilis
+def test_prior_sign_betas_orth():
+    
+    bactf = 'data/bacteria_standard'
+    ds1 = ds.standard_source(bactf,0)
+    ds2 = ds.standard_source(bactf,1)
+    (priors1, signs1) = ds1.get_priors()
+    
+    
+    (constraints, marks, orths) = ds.load_constraints(bactf)
+    
+    (e1_tr, t1_tr, genes1, tfs1) = ds1.load_data()
+    (e2_tr, t2_tr, genes2, tfs2) = ds2.load_data()
+
+    subt_to_anth = {orths[x].genes[0].name : orths[x].genes[1].name for x in range(len(orths))}
+    
+    priors_a = map(lambda ind1: priors1[ind1], filter(lambda ind2: signs1[ind2] == 1, range(len(signs1))))
+    priors_r = map(lambda ind1: priors1[ind1], filter(lambda ind2: signs1[ind2] == -1, range(len(signs1))))
+
+    priors_a = filter(lambda p: p[0].name in subt_to_anth and p[1].name in subt_to_anth, priors_a)
+    priors_r = filter(lambda p: p[0].name in subt_to_anth and p[1].name in subt_to_anth, priors_r)
+
+
+    gene_ind_anth = {genes2[i] : i for i in range(len(genes2))}
+    prior_cons_r = fr.priors_to_constraints([ds1.name], [genes1], [tfs1], priors_r, 1.0)
+    prior_cons_a = fr.priors_to_constraints([ds1.name], [genes1], [tfs1], priors_a, 1.0)
+    #gene_corr = np.corrcoef(e1_tr.T)
+    #we now rely on the fact that tfs occur before genes, and in the same order as they do in the list of genes, so indices are the same
+    
+    repr_interactions = []
+    acti_interactions = []
+    rand_interactions = []
+    
+    (B0, B1) = test_bacteria(1, 10, 0)
+
+    for i, prior in enumerate(prior_cons_r):
+        tfi = prior.c1.r
+        gi = prior.c1.c
+
+        tf_anth = subt_to_anth[tfs1[tfi]]
+        g_anth = subt_to_anth[genes1[gi]]
+
+        tfi_anth = gene_ind_anth[tf_anth]
+        gi_anth = gene_ind_anth[g_anth]
+        if tfi_anth < B1.shape[0]:
+            repr_interactions.append(B1[tfi_anth, gi_anth])
+
+
+    for i, prior in enumerate(prior_cons_a):
+        tfi = prior.c1.r
+        gi = prior.c1.c
+
+        tf_anth = subt_to_anth[tfs1[tfi]]
+        g_anth = subt_to_anth[genes1[gi]]
+
+        tfi_anth = gene_ind_anth[tf_anth]
+        gi_anth = gene_ind_anth[g_anth]
+        if tfi_anth < B1.shape[0]:
+            acti_interactions.append(B1[tfi_anth, gi_anth])
+
+
+    for i, prior in enumerate(prior_cons_a):
+        tfi = np.random.randint(0, len(tfs2))
+        gi = np.random.randint(0, len(genes2))
+        exp_tf = e2_tr[:,[tfi]]
+        exp_g = e2_tr[:, [gi]]
+        
+        rand_interactions.append(B1[tfi, gi])
+
+    repr_interactions = np.array(repr_interactions)
+    acti_interactions = np.array(acti_interactions)
+    rand_interactions = np.array(rand_interactions)
+    
+    sns.kdeplot(repr_interactions, shade=True, label = 'repression, %f'% np.mean(repr_interactions))
+    plt.hold(True)
+    sns.kdeplot(acti_interactions, shade=True, label = 'activation, %f'% np.mean(acti_interactions))
+    sns.kdeplot(rand_interactions, shade=True, label = 'non-priors, %f' % np.mean(rand_interactions))
+    
+    plt.xlabel('beta')
+    plt.legend()
+    plt.ylabel('frequency')    
+    
+    plt.show()
+>>>>>>> 9d4d50d8149e1f8ff56535664a31f10eac818e11

@@ -9,6 +9,7 @@ from sklearn import mixture
 import rpy2
 import rpy2.robjects.packages as rpackages
 import rpy2.robjects as robjects
+from sklearn import linear_model
 
 #SECTION: -------------------DATA STRUCTURES--------------
 coefficient = collections.namedtuple('coefficient',['sub','r','c'])
@@ -302,7 +303,7 @@ def adjust_vol(Xs, cols, fuse_cons, ridge_cons, lamR):
         adj_rows.add(m)
         adj_rows.add(n)
 
-    Einv_noS = Einv_noS/lamR
+    Einv_noS = Einv_noS/lamR #we do this so that most values will be equal to 1 in the determinant computation
     d2 = np.linalg.det(Einv_noS)   
     Einv = Einv/lamR
     d1 = np.linalg.det(Einv)
@@ -433,7 +434,9 @@ def solve_ortho_direct(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors,lamP, lam
     if self_reg_pen:
         self_con = no_self_reg_constraints(organisms, gene_ls, tf_ls, lamR * self_reg_pen)
     Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)    
+    
     return Bs
+
 
 #solver that uses R package for mcp
 def solve_ortho_direct_mcp_r(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors,lamP, lamR, lamS, adjust=False, self_reg_pen = 0, special_args=None):   
@@ -443,6 +446,24 @@ def solve_ortho_direct_mcp_r(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors,lam
         self_con = no_self_reg_constraints(organisms, gene_ls, tf_ls, lamR * self_reg_pen)
     Bs = direct_solve_factor_r(Xs, Ys, fuse_con, ridge_con, lamR)    
     return Bs
+
+def solve_ortho_lasso(organisms, gene_ls, tf_ls, Xs, Ys, Xs_t, Ys_t, orth, priors,lamP, lamR, lamS, n_alpha=100, adjust=False, special_args=None):
+    ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
+    fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
+    #first, we find the max dot-product between a regressor and a column of y. This closely matches _alpha_grid code used in linear_models 
+    alpha_max = 0
+    for s, X in enumerate(Xs):
+        Xy = np.dot(X.T, Ys[s])
+        alpha_max = np.max((alpha_max, np.abs(Xy).max()))
+    eps = 0.001
+    alphas = np.logspace(np.log10(alpha_max*eps), np.log10(alpha_max), n_alpha)
+    
+    (_, errors) = lasso_path(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, Xs_t, Ys_t, alphas, return_model=False)
+    best_alpha_ind = np.argmin(errors)
+    alpha = alphas[best_alpha_ind]
+    (Bs, _) = lasso_path(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, Xs_t, Ys_t, alphas, return_model=False)
+    
+>>>>>>> 9d4d50d8149e1f8ff56535664a31f10eac818e11
 
 #parameters as solve_ortho_direct. 
 #s_it defines the number of scad-like iterations to do
@@ -478,91 +499,18 @@ def solve_ortho_direct_em(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP,
 #ridge_constraints: ridge regression constraints. constraints not mentioned are assumed to exist with lam=lambdaR
 #it: number of iterations to run
 def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, adjust=False):
-    if False:#this switches to the old version, which is faster for inexplicable reasons
-        return direct_solve_factor_o(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, adjust=adjust)
     
     (cols_l, cons_l, ridg_l) = factor_constraints_columns(Xs, Ys, fuse_constraints, ridge_constraints)
     
     Bs = []
-    
     #Initialize matrices to hold solutions
     for i in range(len(Xs)):
         Bs.append(np.zeros((Xs[i].shape[1], Ys[i].shape[1])))
-    
+        
     #iterate over subproblems
-    for f in range(len(cols_l)):
-#print('\r working on subproblem: %d'%f), #!?!?!?!
-        #get the coefficients and constraints associated with the current problem
-        
-        columns = cols_l[f]
-        constraints = cons_l[f]
-        ridge_cons = ridg_l[f]
-        #num_species = len(set(map(lambda co: co.sub, coefficients)))
-        if adjust:
-            
-            (constraints, ridge_cons) = adjust_vol2(Xs, columns, constraints, ridge_cons,lambdaR)
-        
-        #we're building a canonical ordering over the columns for the current subproblem
-        counter = 0
-        col_order = dict()
-        for co in columns:
-            sub = co.sub
-            col_order[co] = counter
-            counter += 1
-        #make a list of Xs for diagonal concatenation
-        X_l = []
-        for co in columns:
-            X_l.append(Xs[co.sub])
-        #make Y 
-        Y_l = []
-        for co in columns:
-            Y = Ys[co.sub]
-            Y_l.append(Y[:, [co.c]])
-        
+    for f, cols in enumerate(cols_l):
+        (F, y, b_inds) = get_Design(Xs, Ys, cols_l[f], cons_l[f], ridg_l[f], lambdaR)
 
-        #compute a cumulative sum over the number of columns in each sub-block, for use as offsets when computing coefficient indices for penalties
-        #what this means is that column c in subproblem s has start index cums[s] + r
-        cums = [0]+list(np.cumsum(map(lambda x: x.shape[1], X_l)))
-        
-        #initialize P. we know it has as many rows as constraints
-        if len(constraints):
-            P = scipy.sparse.dok_matrix((len(constraints), cums[-1]))#np.zeros((len(constraints), cums[-1]))
-        else:
-            P = None
-        I_vals = np.ones(cums[-1]) * lambdaR
-        #now we go through the ridge constraints and set entries of I
-        for con in ridge_cons:
-            ind1 = col_order[(con.c1.sub, con.c1.c)]
-            pc1 = cums[ind1] + con.c1.r
-            I_vals[pc1] = con.lam
-                
-        I = scipy.sparse.csr_matrix((I_vals, np.vstack((np.arange(cums[-1]), np.arange(cums[-1])))), shape=(cums[-1],cums[-1]))
-        
-        for P_r, con in enumerate(constraints):
-            #get the indices of the diagonal blocks in X corresponding to the coefficients in this constraint
-            ind1 = col_order[(con.c1.sub, con.c1.c)]
-            ind2 = col_order[(con.c2.sub, con.c2.c)]
-            #the locations corresponding to the coefficients we want to penalize are the start index of that block plus the row
-            pc1 = cums[ind1] + con.c1.r
-            pc2 = cums[ind2] + con.c2.r
-            
-            P[P_r, pc1] = con.lam
-            P[P_r, pc2] = -con.lam
-            
-        #due to an annoying bug in sparse vstack, I need to check if P is all zeros
-        
-        
-        X = diag_concat_sparse(X_l)        
-        if len(constraints) and len(P.keys()):
-            P = P.asformat('csr')
-            Y_l.append(np.zeros((cums[-1] + len(constraints), 1)))
-            F = scipy.sparse.vstack((X, P, I))#F is the penalized design matrix
-        else:
-            Y_l.append(np.zeros((cums[-1], 1)))
-            F = scipy.sparse.vstack((X, I), format='csr')#F is the penalized design matrix
-        
-        y = np.vstack(Y_l)
-        
         bsp = scipy.sparse.linalg.lsqr(F, y)#the first result is b, and it needs to be turned into a column vector
         b = bsp[0][:, None] #god this is annoying
         
@@ -573,132 +521,111 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, ad
             start_ind = cums[co_i]
             end_ind = cums[co_i+1]
             
+        for co_i, co in enumerate(cols):
+            (start_ind, end_ind) = b_inds[co_i]
             Bs[co.sub][:, [co.c]] = b[start_ind:end_ind]
-    print ' done solving'
     return Bs
 
-#this is like direct solve, but it brakes up unrelated columns
-#solves W = argmin_W ((XW - Y)**2).sum() + constraint related terms
-#Xs, Ys: X and Y for each subproblem
-#fuse_constraints: fusion constraints
-#ridge_constraints: ridge regression constraints. constraints not mentioned are assumed to exist with lam=lambdaR
-#it: number of iterations to run
-def direct_solve_factor_o(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, adjust=False):
+
+def get_Design(Xs, Ys, columns, cons_f, cons_r, lambdaR):
+    col_order = dict()
+    X_l = []
+    Y_l = []
+    counter = 0
+    for co in columns:
+        sub = co.sub
+        col_order[co] = counter
+        counter += 1
+    for co in columns:
+        X_l.append(Xs[co.sub])
+    for co in columns:
+        Y = Ys[co.sub]
+        Y_l.append(Y[:, [co.c]])    
     
-    (coeff_l, con_l) = factor_constraints_columns_o(Xs, Ys, fuse_constraints)
+   #compute a cumulative sum over the number of columns in each sub-block, for use as offsets when computing coefficient indices for penalties
+    #what this means is that column c in subproblem s has start index cums[s] + r
+    cums = [0]+list(np.cumsum(map(lambda x: x.shape[1], X_l)))
+    
+    
+    I_vals = np.ones(cums[-1]) * lambdaR
+        #now we go through the ridge constraints and set entries of I
+    for con in cons_r:
+        ind1 = col_order[(con.c1.sub, con.c1.c)]
+        pc1 = cums[ind1] + con.c1.r
+        I_vals[pc1] = con.lam
+            
+    I = scipy.sparse.csr_matrix((I_vals, np.vstack((np.arange(cums[-1]), np.arange(cums[-1])))), shape=(cums[-1],cums[-1]))
+    
+    #initialize P. we know it has as many rows as constraints
+    if len(cons_f):
+        P = scipy.sparse.dok_matrix((len(cons_f), cums[-1]))#np.zeros((len(constraints), cums[-1]))
+    else:
+        P = None
+    
+    for P_r, con in enumerate(cons_f):
+        #get the indices of the diagonal blocks in X corresponding to the coefficients in this constraint
+        ind1 = col_order[(con.c1.sub, con.c1.c)]
+        ind2 = col_order[(con.c2.sub, con.c2.c)]
+        #the locations corresponding to the coefficients we want to penalize are the start index of that block plus the row
+        pc1 = cums[ind1] + con.c1.r
+        pc2 = cums[ind2] + con.c2.r
+            
+        P[P_r, pc1] = con.lam
+        P[P_r, pc2] = -con.lam
+            
+        #due to an annoying bug in sparse vstack, I need to check if P is all zeros
+        
+    X = diag_concat_sparse(X_l)        
+    
+    if len(cons_f) and len(P.keys()):
+        P = P.asformat('csr')
+        F = scipy.sparse.vstack((X, P, I))#F is the penalized design matrix
+        Y_l.append(np.zeros((cums[-1] + len(cons_f), 1)))
+    else:
+        Y_l.append(np.zeros((cums[-1], 1)))
+        F = scipy.sparse.vstack((X, I), format='csr')#F is the penalized design matrix    
+    y = np.vstack(Y_l)
+
+    #now we get the indices for b. specifically, for each column in columns, we return a start and end index [ ) for b
+    b_inds = []
+    for co_i in range(len(columns)):
+        co = columns[co_i]
+        start_ind = cums[co_i]
+        end_ind = cums[co_i+1]
+        b_inds.append((start_ind, end_ind))
+    
+    return (F, y, b_inds)
+
+# solves lasso along the supplied path, and computes error on training set
+def lasso_path(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, Xs_t, Ys_t, alphas, return_model):
+    
+    (cols_l, cons_l, ridg_l) = factor_constraints_columns(Xs, Ys, fuse_constraints, ridge_constraints)
     
     Bs = []
-    
+    alpha_err = np.array(alphas.shape)
     #Initialize matrices to hold solutions
     for i in range(len(Xs)):
         Bs.append(np.zeros((Xs[i].shape[1], Ys[i].shape[1])))
-    #print 'starting solver'
-    #iterate over constraint sets
-    for f in range(len(coeff_l)):
-        #print('\r working on subproblem: %d'%f), #!?!?!?!
-        #get the coefficients and constraints associated with the current problem
         
-        coefficients = coeff_l[f]
-        constraints = con_l[f]
-        ridge_cons = []
-        
-        coefficients_set = set(coefficients)
+    #iterate over subproblems
+    for f, cols in enumerate(cols_l):
+        (F, y, b_inds) = get_Design(Xs, Ys, cols_l[f], cons_l[f], ridg_l[f], lambdaR)
 
-        for con in ridge_constraints:
-            coeff = con.c1
-            if coeff in coefficients_set:
-                ridge_cons.append(con)
+        X = np.array(F.todense()) # waka waka
+        
+        y = np.squeeze(y)
+        (alphas, coefs, _) = linear_model.lasso_path(X, y, return_models=False,alphas=alphas)
     
-        columns = set()
-
-        for co in coefficients:
-            columns.add(coefficient(co.sub, None, co.c))
-        columns = list(columns)
+        if return_model:
+            bsp = np.squeeze(coefs)
+        #bsp = scipy.sparse.linalg.lsqr(F, y)#the first result is b, and it needs to be turned into a column vector
+            b = bsp[:, None] #god this is annoying
         
-        if adjust:
-            print 'haha not implmneted'
-            (constraints, ridge_cons) = adjust_vol2(Xs, columns, constraints, ridge_cons,lambdaR)
-        
-        num_subproblems = len(set(map(lambda co: co.sub, coefficients)))
-        
-        #we're building a canonical ordering over the columns for the current set of columns
-        counter = 0
-        sub_map = dict()
-        for co in columns:
-            sub = co.sub
-            if not (co.sub, co.c) in sub_map:
-                sub_map[(sub, co.c)] = counter
-                counter += 1
-        #make X
-        X_l = []
-        for co in columns:
-            X_l.append(Xs[co.sub])
-        #make Y. 
-        Y_l = []
-        for co in columns:
-            Y = Ys[co.sub]
-            Y_l.append(Y[:, [co.c]])
-
-        #compute a cumulative sum over the number of columns in each sub-block, for use as offsets when computing coefficient indices for penalties
-
-        cums = [0]+list(np.cumsum(map(lambda x: x.shape[1], X_l)))
-        P_l = [np.zeros((0, cums[-1]))]
-        
-        for con in constraints:
-            P = np.zeros((1, cums[-1]))
-            #get the indices of the diagonal blocks in X corresponding to the coefficients in this constraint
-            ind1 = sub_map[(con.c1.sub, con.c1.c)]
-            ind2 = sub_map[(con.c2.sub, con.c2.c)]
-            #the locations corresponding to the coefficients we want to penalize are the start index of that block plus the row
-            pc1 = cums[ind1] + con.c1.r
-            pc2 = cums[ind2] + con.c2.r
-            P[0, pc1] = con.lam
-            P[0, pc2] = -con.lam
-            
-            P_l.append(P)
-        #set up ridge constraint. 
-        I = np.eye((cums[-1])) * lambdaR
-        
-        #now we go through the ridge constraints and set entries of I
-        for con in ridge_constraints:
-            coeff = con.c1
-            if coeff in coefficients_set:
-                ind1 = sub_map[(con.c1.sub, con.c1.c)]
-                pc1 = cums[ind1] + con.c1.r
-                I[pc1, pc1] = con.lam
-        
-
-
-        #now add an appropriate number of zeros to Y_l
-        Y_l.append(np.zeros((cums[-1] + len(constraints), 1)))
-        
-        P = np.vstack(P_l)
-        X = np.vstack((diag_concat(X_l), P, I))
-        y = np.vstack(Y_l)
-        
-        #from matplotlib import pyplot as plt
-        #plt.matshow(X.T)
-        #plt.show()
-        
-        Xsp = scipy.sparse.csr_matrix(X)
-        
-        ysp = scipy.sparse.csr_matrix(y)
-        bsp = scipy.sparse.linalg.lsqr(Xsp, y)#returns many things!
-        b = bsp[0][:, None] #god this is annoying
-
-
-        #(b, resid, rank, sing) = np.linalg.lstsq(X, y)        
-        
-        #now we put it all together
-        for co_i in range(len(columns)):
-            co = columns[co_i]
-            start_ind = cums[co_i]
-            end_ind = cums[co_i+1]
-            
-            Bs[co.sub][:, [co.c]] = b[start_ind:end_ind]
-    print ' done solving'
-    return Bs
-
+            for co_i, co in enumerate(cols):
+                (start_ind, end_ind) = b_inds[co_i]
+                Bs[co.sub][:, [co.c]] = b[start_ind:end_ind]
+    
+    return (Bs, alpha_err)
 
 #produces X, y for use in R package ncvreg
 def direct_solve_factor_r(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, adjust=False):
@@ -812,6 +739,7 @@ def direct_solve_factor_r(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, 
 #        ys.append(y)
 
     return Bs
+
 
 def solve_em(Xs, Ys, fuse_con, ridge_con, lamR, lamS, em_it, special_args=None):
     #special_args is a dictionary where 'f': constant to multiply 1/covar_fused by to get lamS; 'uf' is unfused and 'f' is fused
