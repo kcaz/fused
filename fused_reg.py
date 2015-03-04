@@ -469,7 +469,6 @@ def solve_ortho_lasso(organisms, gene_ls, tf_ls, Xs, Ys, Xs_t, Ys_t, orth, prior
     best_alpha_ind = np.argmin(errors)
     alpha = alphas[best_alpha_ind]
     (Bs, _) = lasso_path(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, Xs_t, Ys_t, alphas, return_model=False)
-    
 
 
 #parameters as solve_ortho_direct. 
