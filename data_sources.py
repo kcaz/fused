@@ -601,9 +601,12 @@ def generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, organisms, falsepos,
         
     num_to_remove = int(falseneg * len(orths))
     num_to_add = int(falsepos * len(orths))
-    print 'adding %d fake orths!' % num_to_add
+    
+    random.shuffle(orths)
+    final_real_ind = max(0, len(orths)-num_to_remove)
+    orths_retain = orths[0:final_real_ind]
     orth_genes = set()
-    for orth in orths:
+    for orth in orths_retain:
         orth_genes.add(orth.genes[0])
         orth_genes.add(orth.genes[1])
     
@@ -620,10 +623,10 @@ def generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, organisms, falsepos,
             all_possible_orths.append(possible_orth)
             
     random.shuffle(all_possible_orths)
-    random.shuffle(orths)
     
     to_add = []
     #add potential orthologies until enough have been added
+    #don't add orthologies for orths that we already have
     for candidate_orth in all_possible_orths:
     
         if len(to_add) == num_to_add:
@@ -632,8 +635,10 @@ def generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, organisms, falsepos,
             continue
         to_add.append(candidate_orth)
         
-    final_real_ind = max(0, len(orths)-num_to_remove)
-    return orths[0:final_real_ind] + to_add
+    
+    real_fake_orths = orths_retain + to_add
+    print len(real_fake_orths)
+    return real_fake_orths
 
 
     
