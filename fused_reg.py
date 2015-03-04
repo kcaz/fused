@@ -6,9 +6,16 @@ import time
 import scipy.sparse
 import scipy.sparse.linalg
 from sklearn import mixture
-import rpy2
-import rpy2.robjects.packages as rpackages
-import rpy2.robjects as robjects
+try:
+    import rpy2
+    import rpy2.robjects.packages as rpackages
+    import rpy2.robjects as robjects
+    import rpy2.robjects.numpy2ri
+except ImportError:
+    print 'rpy2 not installed'
+
+
+
 from sklearn import linear_model
 
 #SECTION: -------------------DATA STRUCTURES--------------
@@ -515,11 +522,7 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, ad
         
 
         #we've now solved a b vector that contains potentially several columns of B. figure out what indices go where, and put them into the right B
-        for co_i in range(len(columns)):
-            co = columns[co_i]
-            start_ind = cums[co_i]
-            end_ind = cums[co_i+1]
-            
+
         for co_i, co in enumerate(cols):
             (start_ind, end_ind) = b_inds[co_i]
             Bs[co.sub][:, [co.c]] = b[start_ind:end_ind]
@@ -718,7 +721,7 @@ def direct_solve_factor_r(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, 
         y = np.vstack(Y_l)
  
         F0 = np.array(F.todense())
-        import rpy2.robjects.numpy2ri
+        
         rpy2.robjects.numpy2ri.activate()
 
         fit = ncvreg.ncvreg(F0, y)

@@ -193,9 +193,11 @@ def test_scad2():
     (e2, t2, genes2, tfs2) = ds2.load_data()
     fuse_constraints = fr.orth_to_constraints(organisms, [genes1, genes2], [tfs1, tfs2], orth, lamS)
 
+    k = 1
     for fold in range(k):
         deltabeta = []
         fusionpenalty = []
+        lamS = []
 
         #get conditions for current cross-validation fold
         f1_te_c = folds1[fold]
@@ -217,10 +219,13 @@ def test_scad2():
         priors = priors1 + priors2
 
         Bs_unfused = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP=1.0, lamR=0.1, lamS=0)
+        fuse_constraints = fr.orth_to_constraints(organisms, genes, tfs, orth, lamS)
+        print fuse_constraints
         new_fuse_constraints = fr.scad(Bs_unfused, fuse_constraints, lamS, lamW=None, a=0.5)
 
         #get delta beta for each fusion constraint pair
         for pair in new_fuse_constraints:
+            #print pair
             r1 = pair.c1.r
             c1 = pair.c1.c
             r2 = pair.c2.r
@@ -228,22 +233,21 @@ def test_scad2():
             B1u = Bs_unfused[0][r1][c1]
             B2u = Bs_unfused[1][r2][c2]
             deltabeta.append(B1u-B2u)
-            
-        for pair in new_fuse_constraints:
-            r1 = pair.c1.r
-            c1 = pair.c1.c
             s = pair.lam
-            r2 = pair.c2.r
-            c2 = pair.c2.c
-            B1f = Bs_unfused[0][r1][c1]
-            B2f = Bs_unfused[1][r2][c2]
-            fusionpenalty.append(s*(B1f-B2f)**2)
+            #print s
+            fusionpenalty.append(s*((B1u-B2u)**2))
+            lamS.append(s)
 
-        plt.scatter(deltabeta, fusionpenalty)
-        plt.xlabel('delta beta')
-        plt.ylabel('penalty')
-        plt.savefig(os.path.join(os.path.join('data','fake_data','test_scad2',str(fold))))
-        plt.figure()
+#        plt.scatter(deltabeta, fusionpenalty)
+#        plt.xlabel('delta beta')
+#        plt.ylabel('penalty')
+#        plt.savefig(os.path.join(os.path.join('data','fake_data','test_scad2',str(fold))))
+#        plt.figure()
+#        plt.clf()
+
+#        plt.hist(lamS)
+#        plt.savefig(os.path.join(os.path.join('data','fake_data','test_scad2',str(fold)+'lamS')))
+
 
 
 def test_mcp():
@@ -973,13 +977,14 @@ def plot_betas2():
     Bs_uf = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS=0)
     Bs_fr = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
     s_it = 5
-    special_args={'a':0.2}
-    Bs_fs = fr.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamSe, s_it, special_args=special_args)
+    special_args_fs={'a':0.2, 'orths':None}
+    Bs_fs = fr.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamSe, s_it, special_args=special_args_fs)
     m_it = 5
-    Bs_fm = fr.solve_ortho_direct_mcp(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamSe, m_it, special_args=special_args)
+    special_args_mcp={'orths':None}
+    Bs_fm = fr.solve_ortho_direct_mcp(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamSe, m_it, special_args=special_args_mcp)
     em_it=10
-    special_args={'f':1,'uf':0.1}
-    Bs_em = fr.solve_ortho_direct_em(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, em_it, special_args=special_args)
+    special_args_em={'f':1,'uf':0.1}
+    Bs_em = fr.solve_ortho_direct_em(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, em_it, special_args=special_args_em)
     r1 = Bs_uf[0].shape[0]
     c1 = Bs_uf[0].shape[1]
     r2 = Bs_uf[1].shape[0]
@@ -1007,12 +1012,13 @@ def plot_betas2():
     Bfmu = []
     Bemu = []
 
-    colors = []
+    colors_ufem = []
+    colors_fs = []
+    colors_fm = []
     con_inds = np.random.permutation(range(len(constraints)))
     area_fr = []
     area_fs = []
     area_fm = []
-    area_em = [] 
 
     subs = 1000
     for i in con_inds[0:subs]:
@@ -1024,22 +1030,45 @@ def plot_betas2():
         Bfr1.append(Bs_fr[con.c1.sub][con.c1.r, con.c1.c])
         Bfr2.append(Bs_fr[con.c2.sub][con.c2.r, con.c2.c])
         Bfrd.append(Bs_fr[con.c1.sub][con.c1.r, con.c1.c]-Bs_fr[con.c2.sub][con.c2.r, con.c2.c])
-        Bfs1.append(Bs_fs[con.c1.sub][con.c1.r, con.c1.c])
-        Bfs2.append(Bs_fs[con.c2.sub][con.c2.r, con.c2.c])
-        Bfsd.append(Bs_fs[con.c1.sub][con.c1.r, con.c1.c]-Bs_fs[con.c2.sub][con.c2.r, con.c2.c])
-        Bfm1.append(Bs_fm[con.c1.sub][con.c1.r, con.c1.c])
-        Bfm2.append(Bs_fm[con.c2.sub][con.c2.r, con.c2.c])
-        Bfmd.append(Bs_fm[con.c1.sub][con.c1.r, con.c1.c]-Bs_fm[con.c2.sub][con.c2.r, con.c2.c])
+
         Bem1.append(Bs_em[con.c1.sub][con.c1.r, con.c1.c])
         Bem2.append(Bs_em[con.c2.sub][con.c2.r, con.c2.c])
         Bemd.append(Bs_em[con.c1.sub][con.c1.r, con.c1.c]-Bs_em[con.c2.sub][con.c2.r, con.c2.c])
-        area_fr.append(con.lam*50)
-        area_fs.append(con.lam*50)
-        area_em.append(con.lam*50)
+    
         if mark == 1:
-            colors.append('g')
+            colors_ufem.append('g')
+
         else:
-            colors.append('r')
+            colors_ufem.append('r')
+
+    for i in con_inds[0:subs]:
+        con = special_args_fs['orths'][i]
+        mark = marks[i]
+        Bfs1.append(Bs_fs[con.c1.sub][con.c1.r, con.c1.c])
+        Bfs2.append(Bs_fs[con.c2.sub][con.c2.r, con.c2.c])
+        Bfsd.append(Bs_fs[con.c1.sub][con.c1.r, con.c1.c]-Bs_fs[con.c2.sub][con.c2.r, con.c2.c])
+        if mark == 1:
+            colors_fs.append('g')
+        else:
+            colors_fs.append('r')
+        area_fs.append(con.lam*100)
+
+    for i in con_inds[0:subs]:
+        con = special_args_fs['orths'][i]
+        mark = marks[i]
+        Bfm1.append(Bs_fm[con.c1.sub][con.c1.r, con.c1.c])
+        Bfm2.append(Bs_fm[con.c2.sub][con.c2.r, con.c2.c])
+        Bfmd.append(Bs_fm[con.c1.sub][con.c1.r, con.c1.c]-Bs_fm[con.c2.sub][con.c2.r, con.c2.c])
+        area_fr.append(con.lam)
+        area_fs.append(con.lam)
+        area_fm.append(con.lam)
+
+        if mark == 1:
+            colors_fm.append('g')
+        else:
+            colors_fm.append('r')
+        area_fm.append(con.lam*100)
+
         Buf1.append(Bs_uf[0][random.randrange(0,r1,1)][random.randrange(0,c1,1)])
         Buf2.append(Bs_uf[1][random.randrange(0,r2,1)][random.randrange(0,c2,1)])
         Bufu.append(Bs_uf[0][random.randrange(0,r1,1)][random.randrange(0,c1,1)]-Bs_uf[1][random.randrange(0,r2,1)][random.randrange(0,c2,1)])
@@ -1055,10 +1084,13 @@ def plot_betas2():
         Bem1.append(Bs_em[0][random.randrange(0,r1,1)][random.randrange(0,c1,1)])
         Bem2.append(Bs_em[1][random.randrange(0,r2,1)][random.randrange(0,c2,1)])
         Bemu.append(Bs_em[0][random.randrange(0,r1,1)][random.randrange(0,c1,1)]-Bs_em[1][random.randrange(0,r2,1)][random.randrange(0,c2,1)])
-        colors.append('b')
-        area_fr.append(5)
-        area_fs.append(5)
-        area_em.append(5)
+        colors_ufem.append('b')
+        colors_fs.append('b')
+        colors_fm.append('b')
+
+        area_fr.append(10)
+        area_fs.append(10)
+        area_fm.append(10)
 
     Buf1s = np.array(Buf1)
     Buf2s = np.array(Buf2)
@@ -1070,7 +1102,9 @@ def plot_betas2():
     Bfm2s = np.array(Bfm2)
     Bem1s = np.array(Bem1)
     Bem2s = np.array(Bem2)
-    colors = np.array(colors)
+    colors_ufem = np.array(colors_ufem)
+    colors_fs = np.array(colors_fs)
+    colors_fm = np.array(colors_fm)
 
     plt.close()
     sns.kdeplot(np.array(Bufd), shade=True)
@@ -1094,32 +1128,27 @@ def plot_betas2():
     plt.savefig(os.path.join(out1,'emdist'))
     plt.close()
 
-    plt.hist(np.array(area_fr))
-    plt.savefig(os.path.join(out1, 'ridgelam'))
-    plt.close()
+
     plt.hist(np.array(area_fs))
     plt.savefig(os.path.join(out1, 'scadlam'))
-    plt.close()
+    plt.clf()
     plt.hist(np.array(area_fm))
     plt.savefig(os.path.join(out1, 'mcplam'))
-    plt.close()
-    plt.hist(np.array(area_em))
-    plt.savefig(os.path.join(out1, 'emlam'))
-    plt.close()
+    plt.clf()
 
-    plt.scatter(Buf1s, Buf2s, c=colors, alpha=0.5)
+    plt.scatter(Buf1s, Buf2s, c=colors_ufem, alpha=0.5)
     plt.savefig(os.path.join(out1,'unfused'))
-    plt.close()
-    plt.scatter(Bfr1s, Bfr2s, c=colors, s=area_fr, alpha=0.5)
+    plt.clf()
+    plt.scatter(Bfr1s, Bfr2s, c=colors_ufem, s=area_fr, alpha=0.5)
     plt.savefig(os.path.join(out1,'fused l2'))
-    plt.close()
-    plt.scatter(Bfs1s, Bfs2s, c=colors, s=area_fs, alpha=0.5)
+    plt.clf()
+    plt.scatter(Bfs1s, Bfs2s, c=colors_fs, s=area_fs, alpha=0.5)
     plt.savefig(os.path.join(out1,'scad'))
-    plt.close()
-    plt.scatter(Bfm1s, Bfm2s, c=colors, s=area_fm, alpha=0.5)
+    plt.clf()
+    plt.scatter(Bfm1s, Bfm2s, c=colors_fm, s=area_fm, alpha=0.5)
     plt.savefig(os.path.join(out1,'mcp'))
-    plt.close()
-    plt.scatter(Bem1s, Bem2s, c=colors, s=area_em, alpha=0.5)
+    plt.clf()
+    plt.scatter(Bem1s, Bem2s, c=colors_ufem, alpha=0.5)
     plt.savefig(os.path.join(out1,'em'))
 
     plt.show()
@@ -1928,6 +1957,34 @@ def plot_synthetic_performance(lamP=1.0, lamR=5, lamSs=[0], k=20):
     N_G = 30
     out = os.path.join('data','fake_data','plot_synthatic_performance')
     ds.write_fake_data1(N1 = k*N, N2 = k*N, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.5, fuse_std = 0.0)
+    metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con']
+    err_dict1 = {m : np.zeros((k, len(lamSs))) for m in metrics} #subtilis
+    err_dict2 = {m : np.zeros((k, len(lamSs))) for m in metrics} #anthracis
+
+    
+    for i, lamS in enumerate(lamSs):
+        (errd1, errd2) = fg.cv_model3(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, False), exclude_tfs=False)
+        for metric in metrics:
+            err_dict1[metric][:, [i]] = errd1[metric]
+            err_dict2[metric][:, [i]] = errd2[metric]
+    print err_dict1
+    print err_dict2
+    sns.tsplot(err_dict1['aupr'], time=lamSs, legend='full')
+    plt.figure()
+    sns.tsplot(err_dict1['aupr_con'], time=lamSs, legend='constrained')
+    plt.xlabel('lamS')
+    plt.ylabel('aupr')
+    
+    plt.show()
+
+#plots error dictionaries
+#this one includes lots of incorrect orthology
+def plot_synthetic_performance2(lamP=1.0, lamR=5, lamSs=[0], k=20):
+    N = 10
+    N_TF = 20
+    N_G = 30
+    out = os.path.join('data','fake_data','plot_synthetic_performance2')
+    ds.write_fake_data1(N1 = k*N, N2 = k*N, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.5, fuse_std = 0.0, orth_falsepos=1.0,orth_falseneg=0.0)
     metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con']
     err_dict1 = {m : np.zeros((k, len(lamSs))) for m in metrics} #subtilis
     err_dict2 = {m : np.zeros((k, len(lamSs))) for m in metrics} #anthracis

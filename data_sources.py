@@ -594,14 +594,13 @@ def generate_faulty_priors(B, genes, tfs, falsepos, falseneg):
 
 
 #now also marks orths as real or fake
+#orth_falsepos: number of fake orthologies to add, in units of the original number of orthologies
+#orth_falseneg: fraction of original orthologies to remove
 def generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, organisms, falsepos, falseneg):
     #make a list of sets containing gene fusion groups to prevent from adding false orths that result in unduly large fusion groups
         
     num_to_remove = int(falseneg * len(orths))
-    if falsepos == 1:
-        num_to_add = len(orths)
-    else:
-        num_to_add = int(falsepos*(len(orths) - num_to_remove)/(1-falsepos))
+    num_to_add = int(falsepos * len(orths))
     print 'adding %d fake orths!' % num_to_add
     orth_genes = set()
     for orth in orths:
@@ -624,6 +623,7 @@ def generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, organisms, falsepos,
     random.shuffle(orths)
     
     to_add = []
+    #add potential orthologies until enough have been added
     for candidate_orth in all_possible_orths:
     
         if len(to_add) == num_to_add:
@@ -632,8 +632,8 @@ def generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, organisms, falsepos,
             continue
         to_add.append(candidate_orth)
         
-
-    return orths[0:(len(orths) - num_to_remove)] + to_add
+    final_real_ind = max(0, len(orths)-num_to_remove)
+    return orths[0:final_real_ind] + to_add
 
 
     
