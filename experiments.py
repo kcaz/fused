@@ -1936,6 +1936,11 @@ def eval_mapped_performance(lamP=1.0, lamR=1.0,lamS=0):
 
     print 'performance: aupr %f, auc %f' % (aupr, auc)
 
+    aupr = fg.eval_network_pr(B0, genes1, tfs1, priors1, exclude_tfs=False, constraints=constraints, sub=0)
+    auc = fg.eval_network_roc(B0, genes1, tfs1, priors1, exclude_tfs=False, constraints=constraints, sub=0)
+
+    print 'performance-constr: aupr %f, auc %f' % (aupr, auc)
+
     B0_mapped = np.zeros(B0.shape)
     B0_mapped2 = np.zeros(B0.shape) #same thing but using constraints
     filled = 0
@@ -1981,15 +1986,11 @@ def eval_mapped_performance(lamP=1.0, lamR=1.0,lamS=0):
     aupr = fg.eval_network_pr(B0_mapped2, genes1, tfs1, priors1, exclude_tfs=False, constraints=constraints, sub=0)
     auc = fg.eval_network_roc(B0_mapped2, genes1, tfs1, priors1, exclude_tfs=False, constraints=constraints, sub=0)
 
-    print 'performance, mapped2: aupr %f, auc %f' % (aupr, auc)
-
-
-
+    print 'performance-constr, mapped2: aupr %f, auc %f' % (aupr, auc)
 
     
 def plot_bacteria_performance(lamP=1.0, lamR=5, lamSs=[0,1,2,3], k=20):
     out = 'data/bacteria_standard'
-
     metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con']
     err_dict1 = {m : np.zeros((k, len(lamSs))) for m in metrics} #subtilis
     err_dict2 = {m : np.zeros((k, len(lamSs))) for m in metrics} #anthracis
@@ -2001,13 +2002,13 @@ def plot_bacteria_performance(lamP=1.0, lamR=5, lamSs=[0,1,2,3], k=20):
         for metric in metrics:
             err_dict1[metric][:, [i]] = errd1[metric]
             err_dict2[metric][:, [i]] = errd2[metric]
-    print err_dict1
-    print err_dict2
-    sns.tsplot(err_dict1['aupr'], time=lamSs, legend='full')
-    plt.figure()
-    sns.tsplot(err_dict1['aupr_con'], time=lamSs, legend='constrained')
-    plt.xlabel('lamS')
-    plt.ylabel('aupr')
+
+    to_plot = np.dstack((err_dict1['aupr'], err_dict1['aupr_con']))
+    linedesc = pd.Series(['full','constrained'],name='error type')
+    xs = pd.Series(lamSs, name='lamS')
+    sns.tsplot(to_plot, time=xs, condition=linedesc, value='aupr')
+    with file('err_dict1','w') as f:
+        pickle.dump(err_dict1, f)
     
     plt.show()
 
@@ -2018,8 +2019,9 @@ def plot_synthetic_performance(lamP=1.0, lamR=5, lamSs=[0,1], k=20):
     N = 5
     N_TF = 20
     N_G = 30
-    out = os.path.join('data','fake_data','plot_synthatic_performance')
-    ds.write_fake_data1(N1 = k*N, N2 = k*N, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.5, fuse_std = 0.0)
+    out = os.path.join('data','fake_data','plot_synthetic_performance2')
+    ds.write_fake_data1(N1 = k*N, N2 = 5*k*N, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1,pct_fused=0.8, sparse=0.5, fuse_std = 0.0, orth_falsepos=0.0,orth_falseneg=0.0)
+    
     metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con']
     err_dict1 = {m : np.zeros((k, len(lamSs))) for m in metrics} #subtilis
     err_dict2 = {m : np.zeros((k, len(lamSs))) for m in metrics} #anthracis
@@ -2030,15 +2032,14 @@ def plot_synthetic_performance(lamP=1.0, lamR=5, lamSs=[0,1], k=20):
         for metric in metrics:
             err_dict1[metric][:, [i]] = errd1[metric]
             err_dict2[metric][:, [i]] = errd2[metric]
-    print err_dict1
-    print err_dict2
-    sns.tsplot(err_dict1['aupr'], time=lamSs, legend='full')
-    plt.figure()
-    sns.tsplot(err_dict1['aupr_con'], time=lamSs, legend='constrained')
-    plt.xlabel('lamS')
-    plt.ylabel('aupr')
+
+    to_plot = np.dstack((err_dict1['aupr'], err_dict1['aupr_con']))
+    linedesc = pd.Series(['full','constrained'],name='error type')
+    xs = pd.Series(lamSs, name='lamS')
+    sns.tsplot(to_plot, time=xs, condition=linedesc, value='aupr')
     
     plt.show()
+
 
 #plots error dictionaries
 #this one includes lots of incorrect orthology
@@ -2047,7 +2048,8 @@ def plot_synthetic_performance2(lamP=1.0, lamR=5, lamSs=[0], k=20):
     N_TF = 20
     N_G = 30
     out = os.path.join('data','fake_data','plot_synthetic_performance2')
-    ds.write_fake_data1(N1 = k*N, N2 = k*N, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.5, fuse_std = 0.0, orth_falsepos=1.0,orth_falseneg=0.0)
+    ds.write_fake_data1(N1 = k*N, N2 = 5*k*N, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1,pct_fused=0.8, sparse=0.5, fuse_std = 0.0, orth_falsepos=0.5,orth_falseneg=0.5)
+    
     metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con']
     err_dict1 = {m : np.zeros((k, len(lamSs))) for m in metrics} #subtilis
     err_dict2 = {m : np.zeros((k, len(lamSs))) for m in metrics} #anthracis
@@ -2058,16 +2060,13 @@ def plot_synthetic_performance2(lamP=1.0, lamR=5, lamSs=[0], k=20):
         for metric in metrics:
             err_dict1[metric][:, [i]] = errd1[metric]
             err_dict2[metric][:, [i]] = errd2[metric]
-    print err_dict1
-    print err_dict2
-    sns.tsplot(err_dict1['aupr'], time=lamSs, legend='full')
-    plt.figure()
-    sns.tsplot(err_dict1['aupr_con'], time=lamSs, legend='constrained')
-    plt.xlabel('lamS')
-    plt.ylabel('aupr')
+
+    to_plot = np.dstack((err_dict1['aupr'], err_dict1['aupr_con']))
+    linedesc = pd.Series(['full','constrained'],name='error type')
+    xs = pd.Series(lamSs, name='lamS')
+    sns.tsplot(to_plot, time=xs, condition=linedesc, value='aupr')
     
     plt.show()
-
 
 
 #plots error dictionaries
@@ -2098,3 +2097,76 @@ def plot_synthetic_performance3(lamP=3.0, lamR=5, lamSs=[0,1], k=20):
     plt.ylabel('aupr')
     
     plt.show()
+
+#returns error dictionaries on a simple synthetic dataset across a range of parameter combinations. This function uses the cv code that evaluates every model on each individual fold
+def synthetic_performance_synch(lamPs=[1.0], lamRs=[5], lamSs=[0], k=20):
+    N = 10
+    N_TF = 20
+    N_G = 30
+    out = os.path.join('data','fake_data','plot_synthetic_performance_synch')
+    ds.write_fake_data1(N1 = k*N, N2 = 5*k*N, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1,pct_fused=0.8, sparse=0.5, fuse_std = 0.0, orth_falsepos=0.45,orth_falseneg=0.45)
+    
+    metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con']
+    
+    (errd1, errd2) = fg.cv_model_params(out, lamPs=lamPs, lamRs=lamRs, lamSs=lamSs, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, False), exclude_tfs=False)
+    plot_errd_synch(errd1, lamPs, lamRs, lamSs, primary_ax=2, metric='aupr')
+    plt.figure()
+    plot_errd_synch(errd1, lamPs, lamRs, lamSs, primary_ax=1, metric='aupr')
+    plt.show()
+    return (errd1, errd2)
+
+#returns (and saves) error across a range of parameter combinations on real data. This function uses the cv code that evaluates every model on each individual fold
+def bacteria_performance_synch(lamPs=[1.0], lamRs=[5], lamSs=[0], k=20):
+    out = os.path.join('data','bacteria_standard')
+    
+    
+    metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con']
+    
+    (errd1, errd2) = fg.cv_model_params(out, lamPs=lamPs, lamRs=lamRs, lamSs=lamSs, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, False), exclude_tfs=False)
+    import pickle
+    with file('picklejar','w') as f:
+        pickle.dump( (lamPs, lamRs, lamSs, k, errd1, errd2), f)
+
+#function for making reasonably nice looking plots of error dictionaries 
+def plot_errd_synch(errd, lamPs, lamRs, lamSs, primary_ax, metric):
+    parameters = (lamPs, lamRs, lamSs)
+    #axis 0 is always cv folds
+    lines = []
+    plot_acc = None
+    line_descs = []
+    pnames = ['lamP','lamR','lamS']
+    for Pi in range(len(lamPs)):
+        for Ri in range(len(lamRs)):
+            for Si in range(len(lamSs)):
+                sl_inds = [Pi, Ri, Si]
+                if sl_inds[primary_ax] != 0:
+                    continue
+                
+                sl_inds[primary_ax] = range(len(parameters[primary_ax]))
+                
+                to_plot = errd[metric][:, sl_inds[0], sl_inds[1], sl_inds[2]]
+                if plot_acc == None:
+                    plot_acc = np.dstack((to_plot, ))
+                else:
+                    plot_acc = np.dstack((plot_acc, to_plot))
+                line_desc = []
+                
+                for slindi in range(len(sl_inds)):
+                    slind = sl_inds[slindi]
+                    if slindi != primary_ax: #only use the individual values
+                        line_desc.append(pnames[slindi] + '=%f' % parameters[slindi][slind])
+                line_descs.append('\n'.join(line_desc))
+
+    
+    
+    linedesc = pd.Series(line_descs,name='params')
+    
+    xs = pd.Series(parameters[primary_ax], name=pnames[primary_ax])
+    
+    plot_slice = plot_acc[:,:,:]
+    
+    sns.tsplot(plot_slice, time=xs,condition=linedesc, value='aupr')
+    
+    
+    
+>>>>>>> 127147f1b1701fedff16be5f0ce61a34e2345e17
