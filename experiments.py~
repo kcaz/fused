@@ -129,7 +129,7 @@ def test_scad():
     N_TF = 10
     N_G = 200
     amt_fused = 1.0
-    orth_err = [0,0.3,0.5,1.0]
+    orth_err = [0.3,0.5,0.7]
     lamSs = [0, 0.5]
     if not os.path.exists(os.path.join('data','fake_data','test_scad')):
         os.mkdir(os.path.join('data','fake_data','test_scad'))
@@ -142,22 +142,38 @@ def test_scad():
         lamR = 0.1
         lamP = 1.0 #priors don't matter
         for j, lamS in enumerate(lamSs):
-            errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct_scad', reverse = True, special_args = {'s_it':50}, cv_both = (True, True))
-            errl = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
+            errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct_scad', reverse = False, special_args = {'s_it':50, 'a':0.125}, cv_both = (True, True))
+            errl = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = False, cv_both = (True, True))
             errors_scad[i,j] = errd['mse'][0]
             errors_l2[i,j] = errl['mse'][0]
 
+    orth_error = np.array(orth_err)
     colorlist = [[0,0,1],[0,1,0],[1,0,0],[0.5,0,0.5]]
     for r, amnt in enumerate(orth_err):
-        plt.plot(orth_err, errors_scad[r,:], color = colorlist[r])
+        plt.plot(orth_error, errors_scad[:,r], color = colorlist[r])
     for r, amnt in enumerate(orth_err):
-        plt.plot(orth_err, errors_l2[r,:], '--', color = colorlist[r])
+        plt.plot(orth_error, errors_l2[:,r], '--', color = colorlist[r])
     #plt.legend(lamSs+lamSs)
     plt.xlabel('orth error')
     plt.ylabel('mean squared error')
     plt.savefig(os.path.join(os.path.join('data','fake_data','test_scad','fig3')))
     plt.figure()
 
+def test_scad_quicker():
+    lamS = 2
+    lamP = 1
+    lamR = 2
+    out = os.path.join('data','fake_data','test_scad','dat_0.7')
+    (constraints, marks, orth) = ds.load_constraints(out)
+    (b1, genes1, tfs1) = ds.load_network(os.path.join(out, 'beta1'))
+    (b2, genes2, tfs2) = ds.load_network(os.path.join(out, 'beta2'))
+    errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct_scad', reverse = False, special_args = {'s_it':50, 'a':0.6}, cv_both = (True, True))
+    errl = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = False, cv_both = (True, True))
+    print 'scad error'
+    print errd['mse'][0]
+    print 'l2 error'
+    print errl['mse'][0]
+#lamS =2, lamR=2, a=0.8 gives better scad performance!
 
 def test_scad2():
 #create simulated data set with false orthology and run fused scad + visualize scad penalty at each cv
@@ -172,7 +188,7 @@ def test_scad2():
         os.mkdir(os.path.join('data','fake_data','test_scad2'))
 
     out = os.path.join('data','fake_data','test_scad2','ortherr'+str(orth_err))
-    ds.write_fake_data1(N1 = 10*10, N2 = 10*10, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = orth_err, orth_falseneg = orth_err, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.1)
+    ds.write_fake_data1(N1 = 10, N2 = 10, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = orth_err, orth_falseneg = orth_err, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.1)
     lamR = 0.1
     lamP = 1.0 #priors don't matter
 
@@ -197,7 +213,7 @@ def test_scad2():
     for fold in range(k):
         deltabeta = []
         fusionpenalty = []
-        lamS = []
+        lamSs = []
 
         #get conditions for current cross-validation fold
         f1_te_c = folds1[fold]
@@ -218,9 +234,10 @@ def test_scad2():
         tfs = [tfs1, tfs2]
         priors = priors1 + priors2
 
+
         Bs_unfused = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP=1.0, lamR=0.1, lamS=0)
-        fuse_constraints = fr.orth_to_constraints(organisms, genes, tfs, orth, lamS)
-        print fuse_constraints
+        fuse_constraints = fr.orth_to_constraints(organisms, genes, tfs, orth, 0.5)
+        #print fuse_constraints
         new_fuse_constraints = fr.scad(Bs_unfused, fuse_constraints, lamS, lamW=None, a=0.5)
 
         #get delta beta for each fusion constraint pair
@@ -232,22 +249,22 @@ def test_scad2():
             c2 = pair.c2.c
             B1u = Bs_unfused[0][r1][c1]
             B2u = Bs_unfused[1][r2][c2]
+            print B1u-B2u
             deltabeta.append(B1u-B2u)
             s = pair.lam
-            #print s
+            print s
             fusionpenalty.append(s*((B1u-B2u)**2))
-            lamS.append(s)
+            lamSs.append(s)
 
-#        plt.scatter(deltabeta, fusionpenalty)
-#        plt.xlabel('delta beta')
-#        plt.ylabel('penalty')
-#        plt.savefig(os.path.join(os.path.join('data','fake_data','test_scad2',str(fold))))
-#        plt.figure()
-#        plt.clf()
-
-#        plt.hist(lamS)
-#        plt.savefig(os.path.join(os.path.join('data','fake_data','test_scad2',str(fold)+'lamS')))
-
+        plt.scatter(deltabeta, fusionpenalty)
+        plt.xlabel('delta beta')
+        plt.ylabel('penalty')
+        plt.savefig(os.path.join(os.path.join('data','fake_data','test_scad2',str(fold))))
+        plt.figure()
+        plt.clf()
+        plt.clf()
+        plt.hist(lamSs, 50)
+        plt.savefig(os.path.join(os.path.join('data','fake_data','test_scad2',str(fold)+'lamS')))
 
 
 def test_mcp():
@@ -366,12 +383,31 @@ def test_scad1(lamS=1, a=3.7):
     for i in range(b1.shape[0]):
         con = fr.constraint(fr.coefficient(0,i,0), fr.coefficient(1,i,0), lamS)
         constraints.append(con)
-    new_cons = fr.scad([b1, b2], constraints, lamS, a)
+    new_cons = fr.scad([b1, b2], constraints, lamS, a=a)
     new_con_val = np.array(map(lambda x: x.lam, new_cons))
     plt.plot(b1, new_con_val)
     plt.show()
 
-
+#plots constraints of simulated data after scad adjustment
+def test_scad1b(lamS=2,a=0.3):
+    out = os.path.join('data','fake_data','test_scad','dat_0.5')
+    (constraints, marks, orth) = ds.load_constraints(out)
+    (b1, genes1, tfs1) = ds.load_network(os.path.join(out, 'beta1'))
+    (b2, genes2, tfs2) = ds.load_network(os.path.join(out, 'beta2'))
+#    con_val = np.array(map(lambda x: x.lam, constraints))
+    new_cons = fr.scad([b1, b2], constraints, lamS, a=a)
+    new_con_val = np.array(map(lambda x: x.lam, new_cons))
+    deltabeta = []
+    for con in new_cons:
+        b1_val = b1[con.c1.r, con.c1.c]
+        b2_val = b2[con.c2.r, con.c2.c]
+        deltabeta.append(np.abs(b1_val-b2_val))
+    deltabeta_ar = np.array(deltabeta)
+    plt.scatter(deltabeta_ar, new_con_val)
+    plt.show()
+#    plt.clf()
+#    plt.scatter(deltabeta_ar, con_val)
+#    plt.show()
 
 #tests fusion visually using a pair of similar two-coefficient networks
 def test_2coeff_fuse():
@@ -838,22 +874,18 @@ def increase_data2():
 
     plt.show()
 
-#lets us look at the delta betas for random betas and for betas with fusion constraints, plots them before and after using em and identifies 
-def plot_betas():
-    N_TF = 50
-    N_G = 1000
+
+def plot_betas_scad():
+    N_TF = 20
+    N_G = 50
     lamP = 1.0
     lamR = 1.0
-    lamS = 1.0
+    lamS = 1.5
 
-    out1 = os.path.join('data','fake_data','test_em1')
-    if not os.path.exists(out1):
-        os.mkdir(out1)
-    out2 = os.path.join(out1,'dat')
-    ds.write_fake_data1(N1 = 40, N2 = 40, out_dir = out2, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, orth_falsepos=0.3, orth_falseneg=0.3, fuse_std = 0.1, pct_fused=0.75)
-    ds1 = ds.standard_source(out2,0)
-    ds2 = ds.standard_source(out2,1)
-    orth_fn = os.path.join(out2, 'orth')
+    out = os.path.join('data','fake_data','plot_betas2','dat')
+    ds1 = ds.standard_source(out,0)
+    ds2 = ds.standard_source(out,1)
+    orth_fn = os.path.join(out, 'orth')
     organisms = [ds1.name, ds2.name]
     orth = ds.load_orth(orth_fn, organisms)
     (e1, t1, genes1, tfs1) = ds1.load_data()
@@ -869,11 +901,12 @@ def plot_betas():
 
     Bs_uf = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS=0)
     Bs_fr = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
+#    s_it = 5
+#    special_args_fs={'a':0.2, 'orths':None}
     s_it = 5
-    Bs_fs = fr.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, s_it)
-    em_it=5    
-    special_args={'f':1,'uf':1}
-    Bs_em = fr.solve_ortho_direct_em(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, em_it, special_args=special_args)
+    special_args_fs={'a':0.1, 'orths':None}
+    Bs_fs = fr.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, s_it, special_args=special_args_fs)
+
     r1 = Bs_uf[0].shape[0]
     c1 = Bs_uf[0].shape[1]
     r2 = Bs_uf[1].shape[0]
@@ -884,64 +917,93 @@ def plot_betas():
     Bfr2 = []
     Bfs1 = []
     Bfs2 = []
-    Bem1 = []
-    Bem2 = []
+    Bufd = []
+    Bfrd = []
+    Bfsd = []
+
     colors = []
     con_inds = np.random.permutation(range(len(constraints)))
+    area_fr = []
     area_fs = []
-    area_em = [] 
+    area_fm = []
+    cons = []
+    cons_fs = []
 
-    subs = 300
+    subs = 2000
     for i in con_inds[0:subs]:
         con = constraints[i]
+        cons.append(con.lam)
         mark = marks[i]
         Buf1.append(Bs_uf[con.c1.sub][con.c1.r, con.c1.c])
         Buf2.append(Bs_uf[con.c2.sub][con.c2.r, con.c2.c])
+        Bufd.append(Bs_uf[con.c1.sub][con.c1.r, con.c1.c]-Bs_uf[con.c2.sub][con.c2.r, con.c2.c])
         Bfr1.append(Bs_fr[con.c1.sub][con.c1.r, con.c1.c])
         Bfr2.append(Bs_fr[con.c2.sub][con.c2.r, con.c2.c])
-        Bfs1.append(Bs_fs[con.c1.sub][con.c1.r, con.c1.c])
-        Bfs2.append(Bs_fs[con.c2.sub][con.c2.r, con.c2.c])
-        Bem1.append(Bs_em[con.c1.sub][con.c1.r, con.c1.c])
-        Bem2.append(Bs_em[con.c2.sub][con.c2.r, con.c2.c])
+        Bfrd.append(Bs_fr[con.c1.sub][con.c1.r, con.c1.c]-Bs_fr[con.c2.sub][con.c2.r, con.c2.c])
+        con_fs = special_args_fs['orths'][i]
+        cons_fs.append(con_fs.lam)
+        Bfs1.append(Bs_fs[con_fs.c1.sub][con_fs.c1.r, con_fs.c1.c])
+        Bfs2.append(Bs_fs[con_fs.c2.sub][con_fs.c2.r, con_fs.c2.c])
+        Bfsd.append(Bs_fs[con_fs.c1.sub][con_fs.c1.r, con_fs.c1.c]-Bs_fs[con.c2.sub][con.c2.r, con.c2.c])
 
-        area_fs.append(con.lam)
-        area_em.append(con.lam)
         if mark == 1:
             colors.append('g')
         else:
             colors.append('r')
+
         Buf1.append(Bs_uf[0][random.randrange(0,r1,1)][random.randrange(0,c1,1)])
         Buf2.append(Bs_uf[1][random.randrange(0,r2,1)][random.randrange(0,c2,1)])
         Bfr1.append(Bs_fr[0][random.randrange(0,r1,1)][random.randrange(0,c1,1)])
         Bfr2.append(Bs_fr[1][random.randrange(0,r2,1)][random.randrange(0,c2,1)])
         Bfs1.append(Bs_fs[0][random.randrange(0,r1,1)][random.randrange(0,c1,1)])
         Bfs2.append(Bs_fs[1][random.randrange(0,r2,1)][random.randrange(0,c2,1)])
-        Bem1.append(Bs_em[0][random.randrange(0,r1,1)][random.randrange(0,c1,1)])
-        Bem2.append(Bs_em[1][random.randrange(0,r2,1)][random.randrange(0,c2,1)])
         colors.append('b')
-        area_fs.append(1)
-        area_em.append(1)
+
 
     Buf1s = np.array(Buf1)
     Buf2s = np.array(Buf2)
+    Bufds = np.array(Bufd)
     Bfr1s = np.array(Bfr1)
     Bfr2s = np.array(Bfr2)
+    Bfrds = np.array(Bfrd)
     Bfs1s = np.array(Bfs1)
     Bfs2s = np.array(Bfs2)
-    Bem1s = np.array(Bem1)
-    Bem2s = np.array(Bem2)
-    colors = np.array(colors)
+    Bfsds = np.array(Bfsd)
+
+    plt.close()
+    plt.hist(cons_fs)
+    plt.title('scad lamS dist')    
+    plt.savefig(os.path.join(out,'scad lamS dist'))
+    plt.show(block=False)
+#    return (Bfsds, cons_fs)    
+#    print cons_fs
+#    with sns.axes_style("white"):
+#        sns.jointplot(Bfsds, np.array(cons_fs), kind = "hex");
+#    plt.show()
+
+    plt.figure()
     plt.scatter(Buf1s, Buf2s, c=colors, alpha=0.5)
-    plt.savefig(os.path.join(out1,'unfused'))
+    plt.xlabel('beta network 1')
+    plt.ylabel('beta network 2')
+    plt.title('unfused')
+    plt.savefig(os.path.join(out,'unfused'))
+    
+
+    plt.figure()
     plt.scatter(Bfr1s, Bfr2s, c=colors, alpha=0.5)
-    plt.savefig(os.path.join(out1,'fused l2'))
+    plt.xlabel('beta network 1')
+    plt.ylabel('beta network 2')
+    plt.title('fused l2')
+    plt.savefig(os.path.join(out,'fused l2'))
+    
+    plt.figure()
     plt.scatter(Bfs1s, Bfs2s, c=colors, alpha=0.5)
-    plt.savefig(os.path.join(out1,'scad'))
-    plt.scatter(Bem1s, Bem2s, c=colors, alpha=0.5)
-    plt.savefig(os.path.join(out1,'em'))
-
-    plt.show()
-
+    plt.xlabel('beta network 1')
+    plt.ylabel('beta network 2')
+    plt.title('scad')
+    plt.savefig(os.path.join(out,'scad'))
+   
+    plt.show(block=False)
 
 #lets us look at the delta betas for random betas and for betas with fusion constraints, plots them before and after using em and identifies 
 #uses seaborn
@@ -957,7 +1019,7 @@ def plot_betas2():
     if not os.path.exists(out1):
         os.mkdir(out1)
     out2 = os.path.join(out1,'dat')
-    ds.write_fake_data1(N1 = 15, N2 = 15, out_dir = out2, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, orth_falsepos=0.3, orth_falseneg=0.3, fuse_std = 0.1, pct_fused=0.75)
+    ds.write_fake_data1(N1 = 15, N2 = 15, out_dir = out2, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, orth_falsepos=0.7, orth_falseneg=0.7, fuse_std = 0.1, pct_fused=0.75)
     ds1 = ds.standard_source(out2,0)
     ds2 = ds.standard_source(out2,1)
     orth_fn = os.path.join(out2, 'orth')
@@ -977,7 +1039,7 @@ def plot_betas2():
     Bs_uf = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS=0)
     Bs_fr = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
     s_it = 5
-    special_args_fs={'a':0.2, 'orths':None}
+    special_args_fs={'a':1.5, 'orths':None}
     Bs_fs = fr.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamSe, s_it, special_args=special_args_fs)
     m_it = 5
     special_args_mcp={'orths':None}
@@ -1925,7 +1987,7 @@ def eval_mapped_performance(lamP=1.0, lamR=1.0,lamS=0):
 
 
     
-def plot_bacteria_performance(lamP=1.0, lamR=5, lamSs=[0], k=20):
+def plot_bacteria_performance(lamP=1.0, lamR=5, lamSs=[0,1,2,3], k=20):
     out = 'data/bacteria_standard'
 
     metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con']
@@ -1934,7 +1996,8 @@ def plot_bacteria_performance(lamP=1.0, lamR=5, lamSs=[0], k=20):
 
     
     for i, lamS in enumerate(lamSs):
-        (errd1, errd2) = fg.cv_model3(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, False), exclude_tfs=False)
+        (errd1, errd2) = fg.cv_model4(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse=True, cv_both=(True,False), exclude_tfs=False, pct_priors=0.5)
+#        (errd1, errd2) = fg.cv_model3(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, False), exclude_tfs=False)
         for metric in metrics:
             err_dict1[metric][:, [i]] = errd1[metric]
             err_dict2[metric][:, [i]] = errd2[metric]
@@ -1951,7 +2014,7 @@ def plot_bacteria_performance(lamP=1.0, lamR=5, lamSs=[0], k=20):
 
 #plots error dictionaries
 #this is really for debugging plot_bacteria_performance 
-def plot_synthetic_performance(lamP=1.0, lamR=5, lamSs=[0], k=20):
+def plot_synthetic_performance(lamP=1.0, lamR=5, lamSs=[0,1], k=20):
     N = 5
     N_TF = 20
     N_G = 30
@@ -2005,3 +2068,33 @@ def plot_synthetic_performance2(lamP=1.0, lamR=5, lamSs=[0], k=20):
     
     plt.show()
 
+
+
+#plots error dictionaries
+#this is really for debugging plot_bacteria_performance 
+#uses some priors
+def plot_synthetic_performance3(lamP=3.0, lamR=5, lamSs=[0,1], k=20):
+    N = 5
+    N_TF = 20
+    N_G = 30
+    out = os.path.join('data','fake_data','plot_synthatic_performance3')
+    ds.write_fake_data1(N1 = k*N, N2 = k*N, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.5, fuse_std = 0.0)
+    metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con']
+    err_dict1 = {m : np.zeros((k, len(lamSs))) for m in metrics} #subtilis
+    err_dict2 = {m : np.zeros((k, len(lamSs))) for m in metrics} #anthracis
+
+    
+    for i, lamS in enumerate(lamSs):
+        (errd1, errd2) = fg.cv_model4(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, False), exclude_tfs=False, pct_priors=0.5)
+        for metric in metrics:
+            err_dict1[metric][:, [i]] = errd1[metric]
+            err_dict2[metric][:, [i]] = errd2[metric]
+    print err_dict1
+    print err_dict2
+    sns.tsplot(err_dict1['aupr'], time=lamSs, legend='full')
+    plt.figure()
+    sns.tsplot(err_dict1['aupr_con'], time=lamSs, legend='constrained')
+    plt.xlabel('lamS')
+    plt.ylabel('aupr')
+    
+    plt.show()
