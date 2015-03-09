@@ -42,11 +42,14 @@ def test_bacteria(lamP, lamR, lamS):
 def test_bacteria_subs_subt(lamP, lamRs, lamSs, k=20, eval_con=False):
     out = 'data/bacteria_standard'
     errds = []
+    errds2 = []
     for lamR in lamRs:
         for lamS in lamSs:
             errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, False), exclude_tfs=False, eval_con=True)
             errds.append(errd)
-    return errds
+            (errd1, errd2) = fg.cv_model3(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, False), exclude_tfs=False)
+            errds2.append((errd1, errd2))
+    return (errds, errds2)
 
 
 
@@ -1930,7 +1933,7 @@ def eval_mapped_performance(lamP=1.0, lamR=1.0,lamS=0):
 
 
 
-def plot_bacteria_performance(lamP=1.0, lamR=5, lamSs=[0], k=20):
+def plot_bacteria_performance(lamP=1.0, lamR=5, lamSs=[0,2,4,6], k=20):
     import pickle
     out = 'data/bacteria_standard'
     metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con']
@@ -1944,8 +1947,10 @@ def plot_bacteria_performance(lamP=1.0, lamR=5, lamSs=[0], k=20):
             err_dict1[metric][:, [i]] = errd1[metric]
             err_dict2[metric][:, [i]] = errd2[metric]
 
-    to_plot = np.dstack((err_dict1['aupr'], err_dict1['aupr_con']))
-    linedesc = pd.Series(['full','constrained'],name='error type')
+    to_plot = err_dict1['aupr']#np.dstack((err_dict1['aupr'], err_dict1['aupr_con']))
+
+    #linedesc = pd.Series(['full','constrained'],name='error type')
+    linedesc = pd.Series(['full'],name='error type')
     xs = pd.Series(lamSs, name='lamS')
     sns.tsplot(to_plot, time=xs, condition=linedesc, value='aupr')
     with file('err_dict1','w') as f:
@@ -2023,9 +2028,9 @@ def synthetic_performance_synch(lamPs=[1.0], lamRs=[5], lamSs=[0], k=20):
     
     (errd1, errd2) = fg.cv_model_params(out, lamPs=lamPs, lamRs=lamRs, lamSs=lamSs, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, False), exclude_tfs=False)
     plot_errd_synch(errd1, lamPs, lamRs, lamSs, primary_ax=2, metric='aupr')
-    plt.figure()
+    
     plot_errd_synch(errd1, lamPs, lamRs, lamSs, primary_ax=1, metric='aupr')
-    plt.show()
+    
     return (errd1, errd2)
 
 #returns (and saves) error across a range of parameter combinations on real data. This function uses the cv code that evaluates every model on each individual fold
@@ -2039,7 +2044,10 @@ def bacteria_performance_synch(lamPs=[1.0], lamRs=[5], lamSs=[0], k=20):
     import pickle
     with file('picklejar','w') as f:
         pickle.dump( (lamPs, lamRs, lamSs, k, errd1, errd2), f)
-
+    experiments.plot_errd_synch(errd1, lamPs, lamRs, lamSs, 2, 'aupr')
+    plt.figure()
+    experiments.plot_errd_synch(errd1, lamPs, lamRs, lamSs, 2, 'aupr_con')
+    return (lamPs, lamRs, lamSs, k, errd1, errd2)
 #function for making reasonably nice looking plots of error dictionaries 
 def plot_errd_synch(errd, lamPs, lamRs, lamSs, primary_ax, metric):
     parameters = (lamPs, lamRs, lamSs)
@@ -2080,5 +2088,68 @@ def plot_errd_synch(errd, lamPs, lamRs, lamSs, primary_ax, metric):
     
     sns.tsplot(plot_slice, time=xs,condition=linedesc, value='aupr')
     
+    plt.show(block=False)
     
+
+
+#returns error dictionaries on a simple synthetic dataset across a range of parameter combinations. This function uses the cv code that evaluates every model on each individual fold
+def synthetic_performance_synch_em(lamPs=[1.0], lamRs=[5], lamSs=[0], k=20):
+    N = 5
+    N_TF = 10
+    N_G = 15
+    out = os.path.join('data','fake_data','plot_synthetic_performance_synch')
+    ds.write_fake_data1(N1 = k*N, N2 = 5*k*N, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1,pct_fused=0.5, sparse=0.5, fuse_std = 0.01, orth_falsepos=1.75,orth_falseneg=0.0)
     
+    metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con']
+    (constraints, marks, orths) = ds.load_constraints(out)
+
+    special_args = {'em_it' :3, 'f':5, 'uf' : 5, 'marks' : marks} #arg!
+
+    #(errd1, errd2) = fg.cv_model_params(out, lamPs=lamPs, lamRs=lamRs, lamSs=lamSs, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, False), exclude_tfs=False, special_args = special_args)
+
+    (errd1_em, errd2_em) = fg.cv_model_params(out, lamPs=lamPs, lamRs=lamRs, lamSs=lamSs, k=k, solver='solve_ortho_direct_em', reverse = True, cv_both = (True, False), exclude_tfs=False, special_args = special_args)
+
+    
+
+    #aupr1 = np.squeeze(errd1['aupr'])
+    #aupr2 = np.squeeze(errd1_em['aupr'])
+    #plt.plot(lamSs, aupr1.mean(axis=0), color = (1,0,0,0.5))
+    #plt.plot(lamSs, aupr2.mean(axis=0), color = (1,1,0,0.5))
+    #stdnrm = (aupr1.shape[0])**0.5
+    #plt.fill_between(lamSs, aupr1.mean(axis=0) - np.std(aupr1)/stdnrm, aupr1.mean(axis=0) + np.std(aupr1)/stdnrm, color = (1,0,0,0.5))
+    #plt.fill_between(lamSs, aupr2.mean(axis=0) - np.std(aupr2)/stdnrm, aupr2.mean(axis=0) + np.std(aupr2)/stdnrm, color = (1,1,0,0.5))
+    #plt.legend(['regular','em'])
+    #plt.show()
+
+    
+    #plot_errd_synch(errd1, lamPs, lamRs, lamSs, primary_ax=1, metric='aupr')
+    #plt.show()
+    
+
+#plots distributions of real and fake beta differences, either for some sample data, or for the data contained in the folder out  
+def plot_beta_diffs(out=None):
+
+    N = 10
+    N_TF = 1
+    N_G = 500
+    if out==None:
+        out = os.path.join('data','fake_data','beta_diffs_dist')
+        ds.write_fake_data1(N1 = N, N2 = N, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1,pct_fused=0.5, sparse=0.0, fuse_std = 0.1, orth_falsepos=0.5,orth_falseneg=0.5)
+
+    (B0, _, _) = ds.load_network(os.path.join(out, 'beta1'))
+    (B1, _, _) = ds.load_network(os.path.join(out, 'beta2'))
+    (constraints, marks, orths) = ds.load_constraints(out)
+    marks = np.array(marks)
+    diffs = fr.beta_diff([B0, B1], constraints)
+    print marks
+    if (marks==True).sum():
+        sns.kdeplot(diffs[marks == True], shade=True, label='real')
+    if (marks==False).sum():
+        sns.kdeplot(diffs[marks == False], shade=True, label='fake')
+    plt.legend()
+    #plt.figure()
+    #plt.hist(diffs[marks==True])
+    #print np.std(diffs)
+    plt.show()
+
+    return diffs

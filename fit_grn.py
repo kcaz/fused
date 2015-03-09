@@ -52,7 +52,7 @@ def fit_model(data_fn, lamP, lamR, lamS, solver='solve_ortho_direct',special_arg
 #cv_both: if false, always use all the data for the corresponding species
 #exclude_tfs: don't evaluate on transcription factors. this is useful for generated data, where you can't hope to get them right
 def cv_model1(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_args=None, reverse=False, cv_both=(True,True), exclude_tfs=True, eval_con=False):
-    print special_args
+    
     ds1 = ds.standard_source(data_fn,0)
     ds2 = ds.standard_source(data_fn,1)
     if eval_con:
@@ -112,16 +112,14 @@ def cv_model1(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_
             (e2_tr, t2_tr, genes2, tfs2) = ds2.load_data()
             (e2_te, t2_te, genes2, tfs2) = ds2.load_data()
 
-        print 'training set 1: %d, training set 2: %d' % (e1_tr.shape[0], e2_tr.shape[0])
-        print 'test set 1: %d, test set 2: %d'% (e1_te.shape[0], e2_te.shape[0])
+        
         
         # jam things together
         Xs = [t1_tr, t2_tr]
         Ys = [e1_tr, e2_tr]
-        print 'leng'
+        
         genes = [genes1, genes2]
-        print len(genes1)
-        print len(genes2)
+        
         tfs = [tfs1, tfs2]
         priors = priors1 + priors2
         
@@ -228,7 +226,7 @@ def cv_model1(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_
 #cv_both: if false, always use all the data for the corresponding species
 #exclude_tfs: don't evaluate on transcription factors. this is useful for generated data, where you can't hope to get them right
 def cv_model2(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_args=None, reverse=False, cv_both=(True,True), exclude_tfs=True):
-    errd = cv_model(data_fn, lamP, lamR, lamS, k, solver,special_args, reverse, cv_both, exclude_tfs)
+    errd = cv_model1(data_fn, lamP, lamR, lamS, k, solver,special_args, reverse, cv_both, exclude_tfs)
     err_list = []
     err_list.append(errd['mse'][0])
     err_list.append(errd['mse'][1])
@@ -328,8 +326,7 @@ def cv_model3(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_
         (corr, fused_coeffs) = fused_coeff_corr(organisms, genes, tfs, orth, Bs)
         err_dicts[0]['corr'][fold,0] = corr
         err_dicts[1]['corr'][fold,0] = corr
-        print 'training set 1: %d, training set 2: %d' % (e1_tr.shape[0], e2_tr.shape[0])
-        print 'test set 1: %d, test set 2: %d'% (e1_te.shape[0], e2_te.shape[0])
+        
         
         
         for bi in [0,1]:
@@ -593,13 +590,9 @@ def eval_network_pr(net, genes, tfs, priors, exclude_tfs = False, constraints = 
             scores.append(score)#scores[i] = score
             labels.append(label)#labels[i] = label
             
-    #if constraints != None:
-    #    print 'evaluating on %f percent of network' % (float(len(scores)) / (len(tfs)*len(genes)))
-
-    #print 'evaluation on %d interactions ' % len(scores)
     (precision, recall,t) = precision_recall_curve(labels, scores)#prc(scores, labels)
     aupr = auc(recall, precision)
-    print aupr
+    
     return aupr
 
 #evaluates the area under the roc, with respect to some given priors
@@ -659,7 +652,7 @@ def eval_network_beta(net1, net2):
 def fused_coeff_corr(organisms, genes_l, tfs_l, orth, B_l):
     constraints = fl.orth_to_constraints(organisms, genes_l, tfs_l, orth, 1.0)
     fused_vals = [[],[]]
-    print 'there are %d constraints'%len(constraints)
+    
     if len(constraints) == 0:
         return (np.nan, np.zeros((2,0)))
     for con in constraints:
