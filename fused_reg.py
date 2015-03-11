@@ -978,9 +978,8 @@ def solve_mcp(Xs, Ys, fuse_con, ridge_con, lamR, lamS, m_it, special_args=None):
     
     Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
     for i in range(m_it-1):
-        Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
         fuse_con = mcp(Bs, fuse_con, lamS, a=a)
-    
+        Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
     #plot_scad(Bs, fuse_con2)
     
     if special_args and 'orths' in special_args:
@@ -1019,8 +1018,8 @@ def solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, s_it, special_args=None)
         a = 3.7
     Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
     for i in range(s_it-1):
-        Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
         fuse_con = scad(Bs, fuse_con, lamS, a=a)
+        Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
     
     #plot_scad(Bs, fuse_con2)
     
@@ -1035,11 +1034,11 @@ def scad_prime(theta, lamS, a):
         return max(0, (a*lamS - theta) / (a-1))
     
 def scad2_prime(theta, lamS, a):
-    
+
     if theta < a/2:
         return theta * lamS
-    if theta > a/2:
-        return max(0, lamS * (a/2 - theta))
+    if theta >= a/2:
+        return lamS * max(0, (a - theta))
 
 #returns a new set of fusion constraints corresponding to a saturating penalty
 def scad(Bs_init, fuse_constraints, lamS, lamW=None, a=3.7):
@@ -1055,9 +1054,7 @@ def scad(Bs_init, fuse_constraints, lamS, lamW=None, a=3.7):
             nlamS = lamS
         else:
             nlamS = scad2_prime(theta_init, lamS, a) / theta_init
-        
-        
-        
+             
         new_con = constraint(con.c1, con.c2, nlamS)
         new_fuse_constraints.append(new_con)
     return new_fuse_constraints
