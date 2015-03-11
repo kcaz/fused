@@ -701,10 +701,10 @@ def prediction_error(X, B, Y, metric, exclude_tfs = True):
             r2 = 1 - ((y-yp)**2).sum()/ ((y-y.mean())**2).sum()
             r2a += r2
             
-            #if c == start_ind:
-            #    plt.plot(y)
-            #    plt.plot(yp)
-            #    plt.show()
+#            if c == start_ind:
+#                plt.plot(y)
+#                plt.plot(yp)
+#                plt.show()
         return r2a/(Ypred.shape[1]-start_ind)
     if metric == 'mse':
         msea = 0.0
@@ -862,7 +862,7 @@ def fused_coeff_corr(organisms, genes_l, tfs_l, orth, B_l):
     fused_vals = np.array(fused_vals)
     return (np.corrcoef(fused_vals)[0,1], fused_vals)
 
-#take list of lamP, lamR, lamS values and fin	ds the optimal parameters using cv_model1
+#take list of lamP, lamR, lamS values and finds the optimal parameters using cv_model1
 def grid_search_params(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_args=None, reverse=False, cv_both=(True,True), exclude_tfs=True, eval_metric='mse'):
     grid = dict()
     best_mse = 1000
@@ -909,11 +909,11 @@ def grid_search_params(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct'
                         best_lamR = lamR[r]
                         best_lamS = lamS[s]
     if eval_metric == 'mse':
-        return (best_mse, best_lamP, best_lamR, best_lamS)
+        return (best_mse, best_lamP, best_lamR, best_lamS, grid)
     if eval_metric == 'R2':
-        return (best_R2, best_lamP, best_lamR, best_lamS)
+        return (best_R2, best_lamP, best_lamR, best_lamS, grid)
     if eval_metric == 'aupr':
-        return (best_aupr, best_lamP, best_lamR, best_lamS)
+        return (best_aupr, best_lamP, best_lamR, best_lamS, grid)
     if eval_metric == 'auroc':
-        return (best_auroc, best_lamP, best_lamR, best_lamS)
+        return (best_auroc, best_lamP, best_lamR, best_lamS, grid)
 

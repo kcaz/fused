@@ -128,9 +128,9 @@ def test_scad():
      
     N_TF = 10
     N_G = 200
-    amt_fused = 1.0
-    orth_err = [0.3,0.5,0.7]
-    lamSs = [0, 0.5]
+    amt_fused = 0.5
+    orth_err = [0.25,0.5,0.75,1]
+    lamSs = [0, 2]
     if not os.path.exists(os.path.join('data','fake_data','test_scad')):
         os.mkdir(os.path.join('data','fake_data','test_scad'))
     #iterate over how much fusion
@@ -138,15 +138,16 @@ def test_scad():
     errors_l2 = np.zeros((len(orth_err), len(lamSs)))
     for i, N in enumerate(orth_err):
         out = os.path.join('data','fake_data','test_scad','dat_'+str(N))
-        ds.write_fake_data1(N1 = 10*10, N2 = 10*10, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = N, orth_falseneg = N, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.1)
-        lamR = 0.1
+        ds.write_fake_data1(N1 = 10*10, N2 = 10*10, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = N, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.1)
+        lamR = 2
         lamP = 1.0 #priors don't matter
         for j, lamS in enumerate(lamSs):
-            errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct_scad', reverse = False, special_args = {'s_it':50, 'a':0.125}, cv_both = (True, True))
+            errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct_scad', reverse = False, special_args = {'s_it':50, 'a':1.0}, cv_both = (True, True))
             errl = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = False, cv_both = (True, True))
             errors_scad[i,j] = errd['mse'][0]
             errors_l2[i,j] = errl['mse'][0]
 
+    return (errors_scad, errors_l2)
     orth_error = np.array(orth_err)
     colorlist = [[0,0,1],[0,1,0],[1,0,0],[0.5,0,0.5]]
     for r, amnt in enumerate(orth_err):
@@ -163,11 +164,11 @@ def test_scad_quicker():
     lamS = 2
     lamP = 1
     lamR = 2
-    out = os.path.join('data','fake_data','test_scad','dat_0.7')
+    out = os.path.join('data','fake_data','test_scad','dat_1')
     (constraints, marks, orth) = ds.load_constraints(out)
     (b1, genes1, tfs1) = ds.load_network(os.path.join(out, 'beta1'))
     (b2, genes2, tfs2) = ds.load_network(os.path.join(out, 'beta2'))
-    errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct_scad', reverse = False, special_args = {'s_it':50, 'a':0.6}, cv_both = (True, True))
+    errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct_scad', reverse = False, special_args = {'s_it':50, 'a':0.8}, cv_both = (True, True))
     errl = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = False, cv_both = (True, True))
     print 'scad error'
     print errd['mse'][0]
@@ -1715,33 +1716,67 @@ def test_prior_sign_corr_orth():
 def L2fusiontest():    
     N_TF = 20
     N_G = 200
-    pct_fused = list(np.arange(0,1.0,0.1))
+    pct_fused = list(np.arange(0,1.0,0.4))
+    reps = 10
 
-    lamRs = list(np.arange(0,3.0,0.1))
-    lamSs = list(np.arange(0,3.0,0.1))
+    lamRs = list(np.arange(0,5.0,1.0))
+    lamSs = list(np.arange(0,5.0,1.0))
     lamP = 1.0
     mse_array = np.zeros((len(pct_fused),len(lamSs)))
+    mse_var = np.zeros((len(pct_fused),len(lamSs)))
 
     out1 = os.path.join('data','fake_data','L2fusiontest')
     k = 5#cv folds
     if not os.path.exists(out1):
         os.mkdir(out1)
 
-
-    for j, N in enumerate(pct_fused):
-        out2 = os.path.join(out1,'dat_'+str(N))
-        ds.write_fake_data1(out_dir = out2, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.1, pct_fused=N)        
-        lamP = 1.0 #priors don't matter
-        for i, fused in enumerate(pct_fused):
+    for p in range(reps):
+        for i, N in enumerate(pct_fused):
+            out2 = os.path.join(out1,'dat_'+str(N)+str(p))
+            ds.write_fake_data1(N1=20, N2=20, out_dir = out2, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.1, pct_fused=N)        
+            lamP = 1.0 #priors don't matter
             for j, lamS in enumerate(lamSs):
-                (mse, best_lamP, best_lamR, best_lamS) = fg.grid_search_params(out2, lamP=[lamP], lamR=lamRs, lamS=[lamS], k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
+                (mse, best_lamP, best_lamR, best_lamS, grid) = fg.grid_search_params(out2, lamP=[lamP], lamR=lamRs, lamS=[lamS], k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
                 mse_array[i,j] += mse
+                mse_var += mse**2
+    mse_array /= k
+    mse_var /= k
 
+    return (mse_array, mse_var)
     mse_df = pd.DataFrame(mse_array, index=pct_fused, columns=lamSs)
     sns.heatmap(mse_df)
     plt.show()
 
 
+def plot_L2fusion():
+
+    lamSs = list(np.arange(0,3.0,0.1))
+    lamSss = map(lambda x: float('%.1f' % round(lamSs[x],1)), range(len(lamSs)))
+    mses = np.zeros((10,len(list(np.arange(0,3.0,0.1)))))
+    mses += 4
+    bestRs = np.zeros((10,len(list(np.arange(0,3.0,0.1))))) 
+    pct_fused = list(np.arange(0,1.0,0.1))
+    out1 = os.path.join('data','fake_data','L2fusiontest')
+
+    for i, N in enumerate(pct_fused):
+        print i
+        out2 = os.path.join(out1,'dat_'+str(N),'results')
+        f = file(out2)
+        f2 = f.read().split('\n')[1:-1]
+        f3 = [line for line in f2 if line]
+        f.close()
+        
+        for j in range(len(f2)):
+            params = f2[j].split('\t')[1].split(' ')
+            lamR = params[1].split('=')[1]
+            lamS = params[2].split('=')[1]
+            mse = f2[j].split('\t')[2]
+            lamSind = lamSss.index(float(lamS))
+            if float(mse) < float(mses[i, lamSind]):
+                mses[i, lamSind] = float(mse)
+                bestRs[i, lamSind] = float(lamR)
+
+    return (mses, bestRs)
 
 
 #this looks at the distributions Betas for +/- priors, and an equal number of non-priors in subtilis
@@ -1989,7 +2024,7 @@ def eval_mapped_performance(lamP=1.0, lamR=1.0,lamS=0):
     print 'performance-constr, mapped2: aupr %f, auc %f' % (aupr, auc)
 
     
-def plot_bacteria_performance(lamP=1.0, lamR=5, lamSs=[0,1,2,3], k=20):
+def plot_bacteria_performance(lamP=1.0, lamR=5, lamSs=[0,1,2,3,4], k=20):
     out = 'data/bacteria_standard'
     metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con']
     err_dict1 = {m : np.zeros((k, len(lamSs))) for m in metrics} #subtilis
@@ -2007,8 +2042,8 @@ def plot_bacteria_performance(lamP=1.0, lamR=5, lamSs=[0,1,2,3], k=20):
     linedesc = pd.Series(['full','constrained'],name='error type')
     xs = pd.Series(lamSs, name='lamS')
     sns.tsplot(to_plot, time=xs, condition=linedesc, value='aupr')
-    with file('err_dict1','w') as f:
-        pickle.dump(err_dict1, f)
+    #with file('err_dict1','w') as f:
+    #    pickle.dump(err_dict1, f)
     
     plt.show()
 
@@ -2166,7 +2201,26 @@ def plot_errd_synch(errd, lamPs, lamRs, lamSs, primary_ax, metric):
     plot_slice = plot_acc[:,:,:]
     
     sns.tsplot(plot_slice, time=xs,condition=linedesc, value='aupr')
+
+
+#determines natural variation in solvability of networks 
+def net_var(pct_fused):
+    out1 = os.path.join('data','fake_data','net_var')
+    if not os.path.exists(out1):
+        os.mkdir(os.path.join('data','fake_data','net_var'))
+
+    N_TF = 20
+    N_G = 200
+    k = 2
+    lamP = 1
+    lamR = 2
+    lamS = 1
+    errdict = dict()
+
+    for i in range(10):
+        out2 = os.path.join(out1,'dat_'+str(pct_fused)+str(i))
+        ds.write_fake_data1(out_dir = out2, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.1, pct_fused=pct_fused)        
+        errd = fg.cv_model1(out2, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_args=None, reverse=False, cv_both=(True,True), exclude_tfs=True)
+        errdict[i] = errd
+    return errdict   
     
-    
-    
->>>>>>> 127147f1b1701fedff16be5f0ce61a34e2345e17

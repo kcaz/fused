@@ -351,41 +351,22 @@ def cv_model3(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_
                 aupr = eval_network_pr(Bs[bi], genes_bi, tfs_bi, priors_bi, exclude_tfs=exclude_tfs, constraints = None)
                 err_dicts[bi]['aupr'][fold,0] = aupr
                 aupr_con = eval_network_pr(Bs[bi], genes_bi, tfs_bi, priors_bi, exclude_tfs=exclude_tfs, constraints = constraints, sub=bi)
-                err_dicts[bi]['aupr_con'][fold,0] = aupr_con                
+                err_dicts[bi]['aupr_con'][fold,0] = aupr                
             
                 auc = eval_network_roc(Bs[bi], genes_bi, tfs_bi, priors_bi, exclude_tfs = exclude_tfs, constraints= None)
                 err_dicts[bi]['auc'][fold,0] = auc
-                auc_con = eval_network_roc(Bs[bi], genes_bi, tfs_bi, priors_bi, exclude_tfs = exclude_tfs, constraints= constraints, sub=bi)
+                auc_con = eval_network_roc(Bs[bi], genes_bi, tfs_bi, priors_bi, exclude_tfs = exclude_tfs, constraints= None)
                 err_dicts[bi]['auc_con'][fold,0] = auc_con
     return err_dicts
 
-<<<<<<< HEAD
 #cv_model3, but with pct_priors
 def cv_model4(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_args=None, reverse=False, cv_both=(True,True), exclude_tfs=True, pct_priors=0):
-=======
-# this function does cross-validation across a range of parameter combinations, and returns a dictionary mapping parameter combination tuples to dictionaries that map metric names to vectors of performance across CV folds. On every CV fold, all parameter combinations are run.
-#
-#k: the number of cv folds
-#reverse: train on the little dude (reverse train and test)
-#cv_both: if false, always use all the data for the corresponding species
-#exclude_tfs: don't evaluate on transcription factors. this is useful for generated data, where you can't hope to get them right
-#doesn't output any files
-def cv_model_params(data_fn, lamPs, lamRs, lamSs, k, solver='solve_ortho_direct',special_args=None, reverse=False, cv_both=(True,True), exclude_tfs=True):
->>>>>>> 127147f1b1701fedff16be5f0ce61a34e2345e17
     
     ds1 = ds.standard_source(data_fn,0)
     ds2 = ds.standard_source(data_fn,1)
     
     (constraints, marks, orth) = ds.load_constraints(data_fn)
-<<<<<<< HEAD
     
-=======
-    pinds = [] #list of tuples of parameter indices
-    for lamPi in range(len(lamPs)):
-        for lamRi in range(len(lamRs)):
-            for lamSi in range(len(lamSs)):
-                pinds.append((lamPi, lamRi, lamSi)) 
->>>>>>> 127147f1b1701fedff16be5f0ce61a34e2345e17
 
     orth_fn = os.path.join(data_fn, 'orth')
 
@@ -393,19 +374,15 @@ def cv_model_params(data_fn, lamPs, lamRs, lamSs, k, solver='solve_ortho_direct'
     orth = ds.load_orth(orth_fn, organisms)
     #accumulate metrics
     metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con']
-<<<<<<< HEAD
     err_dict1 = {m : np.zeros((k, 1)) for m in metrics}
     err_dict2 = {m : np.zeros((k, 1)) for m in metrics}
     err_dicts = [err_dict1, err_dict2] #for indexing
-=======
->>>>>>> 127147f1b1701fedff16be5f0ce61a34e2345e17
     folds1 = ds1.partition_data(k)
     folds2 = ds2.partition_data(k)
 
     excl = lambda x,i: x[0:i]+x[(i+1):]
     (priors1, signs1) = ds1.get_priors()
     (priors2, signs2) = ds2.get_priors()
-<<<<<<< HEAD
     conds1 = np.arange(len(priors1))
     random.shuffle(conds1)
     priors1_tr = []
@@ -425,12 +402,6 @@ def cv_model_params(data_fn, lamPs, lamRs, lamSs, k, solver='solve_ortho_direct'
     priors2_te = map(lambda i: priors2[i], conds2[amt_priors_tr2:])
 
 
-=======
-
-    err_dict1 = {m : np.zeros((k, len(lamPs), len(lamRs), len(lamSs))) for m in metrics}
-    err_dict2 = {m : np.zeros((k, len(lamPs), len(lamRs), len(lamSs))) for m in metrics}
-    err_dicts = [err_dict1, err_dict2] #for indexing
->>>>>>> 127147f1b1701fedff16be5f0ce61a34e2345e17
     
     for fold in range(k):
         #get conditions for current cross-validation fold
@@ -448,12 +419,8 @@ def cv_model_params(data_fn, lamPs, lamRs, lamSs, k, solver='solve_ortho_direct'
             tmp = f2_tr_c
             f2_tr_c = f2_te_c
             f2_te_c = tmp
-<<<<<<< HEAD
         
         
-=======
-                    
->>>>>>> 127147f1b1701fedff16be5f0ce61a34e2345e17
         #load train and test data
         if cv_both[0]:
             (e1_tr, t1_tr, genes1, tfs1) = ds1.load_data(f1_tr_c)
@@ -473,7 +440,6 @@ def cv_model_params(data_fn, lamPs, lamRs, lamSs, k, solver='solve_ortho_direct'
         Ys = [e1_tr, e2_tr]
         genes = [genes1, genes2]
         tfs = [tfs1, tfs2]
-<<<<<<< HEAD
         priors_tr = priors1_tr + priors2_tr
         
         #solve the model
@@ -710,58 +676,6 @@ def cv_model5(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_
 
     
     return errd
-=======
-        priors = priors1 + priors2
-        for lamPi, lamRi, lamSi in pinds:
-            lamP = lamPs[lamPi]
-            lamR = lamRs[lamRi]
-            lamS = lamSs[lamSi]
-            
-        #solve the model
-            if solver == 'solve_ortho_direct':
-                Bs = fl.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
-            if solver == 'solve_ortho_direct_scad':
-                Bs = fl.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, s_it = special_args['s_it'], special_args=special_args)
-            if solver == 'solve_ortho_direct_mcp':
-                Bs = fl.solve_ortho_direct_mcp(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, m_it = special_args['m_it'], special_args=special_args)
-            if solver == 'solve_ortho_direct_em':
-                Bs = fl.solve_ortho_direct_em(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, em_it = special_args['em_it'], special_args=special_args)
-
-         #get correlation of fused coefficients, for diagnostic purposes
-        
-            (corr, fused_coeffs) = fused_coeff_corr(organisms, genes, tfs, orth, Bs)
-            err_dicts[0]['corr'][fold,lamPi, lamRi, lamSi] = corr
-            err_dicts[1]['corr'][fold,lamPi, lamRi, lamSi] = corr
-            
-            for bi in [0,1]:
-                if bi==0:
-                    t_te = t1_te
-                    e_te = e1_te
-                    priors_bi = priors1
-                    genes_bi = genes1
-                    tfs_bi = tfs1
-                else:
-                    t_te = t2_te
-                    e_te = e2_te
-                    priors_bi = priors2
-                    genes_bi = genes2
-                    tfs_bi = tfs2
-                mse = prediction_error(t_te, Bs[bi], e_te, 'mse', exclude_tfs=exclude_tfs)
-                err_dicts[bi]['mse'][fold, lamPi, lamRi, lamSi] = mse
-                mse = prediction_error(t_te, Bs[bi], e_te, 'R2', exclude_tfs=exclude_tfs)
-                err_dicts[bi]['R2'][fold, lamPi, lamRi, lamSi] = mse
-                if len(priors_bi):
-                    aupr = eval_network_pr(Bs[bi], genes_bi, tfs_bi, priors_bi, exclude_tfs=exclude_tfs, constraints = None)
-                    err_dicts[bi]['aupr'][fold,lamPi, lamRi, lamSi] = aupr
-                    aupr_con = eval_network_pr(Bs[bi], genes_bi, tfs_bi, priors_bi, exclude_tfs=exclude_tfs, constraints = constraints, sub=bi)
-                    err_dicts[bi]['aupr_con'][fold,lamPi, lamRi, lamSi] = aupr_con                
-                    
-                    auc = eval_network_roc(Bs[bi], genes_bi, tfs_bi, priors_bi, exclude_tfs = exclude_tfs, constraints= None)
-                    err_dicts[bi]['auc'][fold,lamPi, lamRi, lamSi] = auc
-                    auc_con = eval_network_roc(Bs[bi], genes_bi, tfs_bi, priors_bi, exclude_tfs = exclude_tfs, constraints= constraints, sub=bi)
-                    err_dicts[bi]['auc_con'][fold,lamPi, lamRi, lamSi] = auc_con
-    return err_dicts
->>>>>>> 127147f1b1701fedff16be5f0ce61a34e2345e17
 
 
 #SECTION: -------------------------CODE FOR EVALUATING THE OUTPUT
@@ -787,10 +701,14 @@ def prediction_error(X, B, Y, metric, exclude_tfs = True):
             r2 = 1 - ((y-yp)**2).sum()/ ((y-y.mean())**2).sum()
             r2a += r2
             
-            #if c == start_ind:
-            #    plt.plot(y)
-            #    plt.plot(yp)
-            #    plt.show()
+            print y
+            print y.mean()
+            print yp
+            
+#            if c == start_ind:
+#                plt.plot(y)
+#                plt.plot(yp)
+#                plt.show()
         return r2a/(Ypred.shape[1]-start_ind)
     if metric == 'mse':
         msea = 0.0
@@ -871,13 +789,11 @@ def eval_network_pr(net, genes, tfs, priors, exclude_tfs = False, constraints = 
             scores.append(score)#scores[i] = score
             labels.append(label)#labels[i] = label
             
-    #if constraints != None:
-    #    print 'evaluating on %f percent of network' % (float(len(scores)) / (len(tfs)*len(genes)))
-
-    #print 'evaluation on %d interactions ' % len(scores)
+    
+    
     (precision, recall,t) = precision_recall_curve(labels, scores)#prc(scores, labels)
     aupr = auc(recall, precision)
-    print aupr
+    
     return aupr
 
 #evaluates the area under the roc, with respect to some given priors
@@ -950,7 +866,7 @@ def fused_coeff_corr(organisms, genes_l, tfs_l, orth, B_l):
     fused_vals = np.array(fused_vals)
     return (np.corrcoef(fused_vals)[0,1], fused_vals)
 
-#take list of lamP, lamR, lamS values and fin	ds the optimal parameters using cv_model1
+#take list of lamP, lamR, lamS values and finds the optimal parameters using cv_model1
 def grid_search_params(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_args=None, reverse=False, cv_both=(True,True), exclude_tfs=True, eval_metric='mse'):
     grid = dict()
     best_mse = 1000
@@ -997,11 +913,11 @@ def grid_search_params(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct'
                         best_lamR = lamR[r]
                         best_lamS = lamS[s]
     if eval_metric == 'mse':
-        return (best_mse, best_lamP, best_lamR, best_lamS)
+        return (best_mse, best_lamP, best_lamR, best_lamS, grid)
     if eval_metric == 'R2':
-        return (best_R2, best_lamP, best_lamR, best_lamS)
+        return (best_R2, best_lamP, best_lamR, best_lamS, grid)
     if eval_metric == 'aupr':
-        return (best_aupr, best_lamP, best_lamR, best_lamS)
+        return (best_aupr, best_lamP, best_lamR, best_lamS, grid)
     if eval_metric == 'auroc':
-        return (best_auroc, best_lamP, best_lamR, best_lamS)
+        return (best_auroc, best_lamP, best_lamR, best_lamS, grid)
 
