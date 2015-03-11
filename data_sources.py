@@ -69,9 +69,14 @@ class data_source():
 
     #returns a list of k (approximately) equally sized random folds.
     #folds are lists of integers referring to condition numbers 
-    def partition_data(self,k):
+    def partition_data(self,k, seed=None):
+        state = random.getstate() #don't want to set the seed for everything
+        if not seed == None:            
+            random.seed(seed)
         conds = np.arange(self.N)
         random.shuffle(conds)
+        random.setstate(state)
+
         incr = float(self.N)/k
         upper_bounds = np.arange(k+1) * self.N / float(k)
         partitions = []
@@ -531,8 +536,8 @@ def fuse_bs_orth(tfg_count1, tfg_count2, max_grp_size, pct_fused, fuse_std, spar
     #recursively fills everything connected to r,c,organism
     #NOTE: we are relying on the fact that transcription factors are also genes
     def fill(r, c, val, std, organism):
-        
-        fill_val = val + np.random.randn()*std
+        fusion_noise = np.random.randn()*std
+        fill_val = val + fusion_noise
         organism_ind = organisms.index(organism) #blegh
         if not np.isnan(bs[organism_ind][r,c]): #already filled, return
             return           

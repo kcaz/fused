@@ -745,16 +745,176 @@ def direct_solve_factor_r(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, 
 
 def solve_em(Xs, Ys, fuse_con, ridge_con, lamR, lamS, em_it, special_args=None):
     #special_args is a dictionary where 'f': constant to multiply 1/covar_fused by to get lamS; 'uf' is unfused and 'f' is fused
+    verbose=False
+    if verbose:
+        from matplotlib import pyplot as plt
+        import seaborn as sns
+        #plt.figure()
     f = special_args['f']
     uf = special_args['uf']
 
     Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
+    if 'marks' in special_args:
+        marks = np.array(special_args['marks'])
+    else:
+        marks = None
+    if lamS == 0:
+        em_it = 1
     for i in range(em_it-1):
-        fuse_con = em(Bs, fuse_con, lamS, f, uf)
+        if verbose and marks != None and lamS > 1:
+            lams = np.array(map(lambda con: con.lam, fuse_con))
+            #noise up a little bit
+            lams = lams + 0.01*np.random.randn(lams.shape[0])
+            
+            plt.subplot(int('%d%d%d' % (em_it-1, 1, i+1)))
+            
+            sns.kdeplot(lams[marks == True], shade=True, label='real')
+            sns.kdeplot(lams[marks == False], shade=True, label='fake')
+    
+
+        #fuse_con = em(Bs, fuse_con, lamS, f, uf, marks=marks)
+        fuse_con = em(Bs, fuse_con, lamS, 0.5, marks=marks)
         Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
+    if verbose:    
+        plt.show()#lock=False)
     return Bs
 
-def em(Bs_init, fuse_con, lamS, f, uf):
+#computes unbiased weighted sample covariance.
+#assumes that samples are row? vectors
+def weighted_covar(weights, samples):
+    u = samples.mean(axis = 1)
+    acc = 0
+    w_acc = 0
+    for i in range(len(weights)):
+        xi_u = samples[i, :] - u
+        acc += np.dot(xi_u.T, xi_u)
+        w_acc += weights[i]
+    return (1/(w_acc-1.0)) * acc
+
+def beta_diff(Bs, fuse_cons):
+    beta_diffs = np.zeros((len(fuse_cons)))
+    for i, con in enumerate(fuse_cons):
+        b1 = Bs[con.c1.sub][con.c1.r, con.c1.c]
+        b2 = Bs[con.c2.sub][con.c2.r, con.c2.c]
+        beta_diffs[i] = b1 - b2
+    return beta_diffs
+
+def beta_diff_rand(Bs, k):
+    rs0 = np.random.randint(0, Bs[0].shape[0], k)
+    rs1 = np.random.randint(0, Bs[1].shape[0], k)
+    cs0 = np.random.randint(0, Bs[0].shape[1], k)
+    cs1 = np.random.randint(0, Bs[1].shape[1], k)
+    return Bs[0][rs0, cs0] - Bs[1][rs1, cs1]
+    
+        
+def gaussian_density(u, s2, x):
+    nrm = 1.0 / (2*np.pi*s2)**0.5
+    return nrm * np.exp(-1 * (x-u)**2 / (2*s2))
+
+
+
+
+def em(Bs_init, fuse_cons, lamS, pct_fused, marks=None):
+    pct_fused = 0.9
+    beta_diffs = beta_diff(Bs_init, fuse_cons)
+    c_init = np.var(beta_diffs)
+
+    x = beta_diffs
+    w = np.array( (0, 0) )
+    u = np.array( (0, 0) )
+    c = np.array( (0.5*c_init, 2*c_init) )
+
+    h = np.zeros((2, len(beta_diffs)))
+
+    n_iter = 5
+    for i in range(n_iter):
+        for s in (0,1):
+            ps = gaussian_density(u[s], c[s], x)
+            h[s, :] = w[s] * ps
+        h = h / h.sum(axis=0)
+        
+    
+    return fuse_cons
+
+def em_old2(Bs_init, fuse_cons, lamS, f, uf, marks=None):
+    verbose=False
+    if verbose:
+        from matplotlib import pyplot as plt
+        import seaborn as sns
+
+    if len(fuse_cons) == 0 or lamS == 0:
+        return fuse_cons
+    g = mixture.GMM(n_components = 2)
+    beta_diffs = beta_diff(Bs_init, fuse_cons)
+     
+    #disabling update of means seems to be broken
+    g.set_params(params='c')
+    g.init_params = 'w'
+    #g.n_iter = 0
+    #g.fit(beta_diffs)
+    #g.n_iter = 10
+    g.means_ = np.array(((0, ), (0, ))) #vile hack
+
+    cv_init = np.cov(beta_diffs)
+    g.covars_ = cv_init*np.array(((0.5, ), (2.0, ))) #vile hack
+    
+    
+    #artificially symmetrize the data
+    g.fit(np.concatenate((beta_diffs, -1*beta_diffs))) 
+    #get indices for fused/unfused
+    cl_fu = int(g.covars_[1] > g.covars_[0])
+    cl_un = 1-cl_fu
+    scores = g.score_samples(beta_diffs)
+    #normalize weights    
+
+    scores_fu = scores[1][:, cl_fu]
+    scores_un = scores[1][:, cl_un]
+
+    covar_fu = g.covars_[cl_fu]
+    covar_un = g.covars_[cl_un]
+    
+    #go through the fusion constraints, and compute the expected value of covariance across class probabilities
+    new_cons = []
+    pens = 1.0/covar_fu * scores_fu + 1.0/covar_un * scores_un
+    scale = lamS / pens.mean()
+    pens = pens * scale
+    #now, make new fusion constraints
+    for i, con in enumerate(fuse_cons):
+        new_con = constraint(c1=con.c1, c2=con.c2, lam=pens[i])
+        new_cons.append(new_con)
+
+    if verbose:
+        print 'the class covariances are estimated as %f, %f' % (covar_fu, covar_un)
+        print 'the class means are estimated as %f, %f' % (g.means_[cl_fu], g.means_[cl_un])
+        print 'the weights are %f, %f' % (g.weights_[cl_fu], g.weights_[cl_un])
+        pred = g.predict(beta_diffs)        
+        
+        plt.close()
+        plt.subplot(221)
+        sns.kdeplot(beta_diffs, shade=True)
+        
+        
+        plt.subplot(222)
+        if (pred == cl_fu).sum():
+            sns.kdeplot(beta_diffs[pred == cl_fu], shade=True)
+        if (pred == cl_un).sum():
+            sns.kdeplot(beta_diffs[pred == cl_un], shade=True)
+        
+        plt.subplot(223)
+        
+        
+        plt.plot(beta_diffs, pens,'o')
+
+
+        plt.subplot(224)
+        sns.kdeplot(beta_diffs[marks == True], shade=True, label='real')
+        sns.kdeplot(beta_diffs[marks == False], shade=True, label='fake')
+        plt.legend()
+        plt.show()
+        plt.show(block=False)
+    return new_cons
+    
+def em_old(Bs_init, fuse_con, lamS, f, uf):
     if not len(fuse_con):
         print 'no fusion constraints, skipping em adjustment'
         return fuse_con
@@ -818,9 +978,8 @@ def solve_mcp(Xs, Ys, fuse_con, ridge_con, lamR, lamS, m_it, special_args=None):
     
     Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
     for i in range(m_it-1):
-        Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
         fuse_con = mcp(Bs, fuse_con, lamS, a=a)
-    
+        Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
     #plot_scad(Bs, fuse_con2)
     
     if special_args and 'orths' in special_args:

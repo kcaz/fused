@@ -39,13 +39,15 @@ def test_bacteria(lamP, lamR, lamS):
     return Bs
 
 #load all the anthracis data and some of the subtilis data
-def test_bacteria_subs_subt(lamP, lamRs, lamSs, k=20, eval_con=False):
+def test_bacteria_subs_subt(lamP, lamRs, lamSs, k=20, eval_con=False, pct_priors=0, seed=None):
     out = 'data/bacteria_standard'
+    
     errds = []
     for lamR in lamRs:
         for lamS in lamSs:
-            errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, False), exclude_tfs=False, eval_con=True)
-            errds.append(errd)
+            (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, False), exclude_tfs=False, pct_priors=pct_priors, seed=seed)
+            
+            errds.append((errd1, errd2))
     return errds
 
 
@@ -69,8 +71,8 @@ def sanity1():
             lamR = 0.1
             lamP = 1.0 #priors don't matter
             for j, lamS in enumerate(lamSs):
-                errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
-                errors[i, j] += errd['mse'][0]
+                (errd1,errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
+                errors[i, j] += errd1['mse'].mean()
     for i in range(len(data_amnts)):
         for j in range(len(lamSs)):
             errors[i,j] == errors[i,j]/10
@@ -105,8 +107,8 @@ def increase_data():
             lamR = 0.1
             lamP = 1.0 #priors don't matter
             for j, lamS in enumerate(lamSs):
-                errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
-                errors[i, j] += errd['mse'][0]
+                (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
+                errors[i, j] += errd1['mse'].mean()
     for i in range(len(data_amnts)):
         for j in range(len(lamSs)):
             errors[i,j] = errors[i,j]/k
@@ -142,10 +144,10 @@ def test_scad():
         lamR = 2
         lamP = 1.0 #priors don't matter
         for j, lamS in enumerate(lamSs):
-            errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct_scad', reverse = False, special_args = {'s_it':50, 'a':1.0}, cv_both = (True, True))
-            errl = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = False, cv_both = (True, True))
-            errors_scad[i,j] = errd['mse'][0]
-            errors_l2[i,j] = errl['mse'][0]
+            (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct_scad', reverse = False, special_args = {'s_it':50, 'a':0.125}, cv_both = (True, True))
+            (errd1l, errd2l) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = False, cv_both = (True, True))
+            errors_scad[i,j] = errd1['mse'].mean()
+            errors_l2[i,j] = errd1l['mse'].mean()
 
     return (errors_scad, errors_l2)
     orth_error = np.array(orth_err)
@@ -168,12 +170,12 @@ def test_scad_quicker():
     (constraints, marks, orth) = ds.load_constraints(out)
     (b1, genes1, tfs1) = ds.load_network(os.path.join(out, 'beta1'))
     (b2, genes2, tfs2) = ds.load_network(os.path.join(out, 'beta2'))
-    errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct_scad', reverse = False, special_args = {'s_it':50, 'a':0.8}, cv_both = (True, True))
-    errl = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = False, cv_both = (True, True))
+    (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct_scad', reverse = False, special_args = {'s_it':50, 'a':0.6}, cv_both = (True, True))
+    (errd1l, errd2l) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = False, cv_both = (True, True))
     print 'scad error'
-    print errd['mse'][0]
+    print errd1['mse']
     print 'l2 error'
-    print errl['mse'][0]
+    print errd1l['mse']
 #lamS =2, lamR=2, a=0.8 gives better scad performance!
 
 def test_scad2():
@@ -364,8 +366,8 @@ def studentseminar():
         out = os.path.join('data','bacteria_standard')
         lamR = 0.1
         lamP = 1.0 #priors don't matter
-        errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=N, k=10, solver='solve_ortho_direct', reverse = True, cv_both = (True, False))
-        errors[i] = errd['aupr'][0]
+        (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=N, k=10, solver='solve_ortho_direct', reverse = True, cv_both = (True, False))
+        errors[i] = errd1['aupr'].mean()
     
     plt.plot(lamSs, errors, 'ro')
     plt.savefig(os.path.join(os.path.join('data','bacteria_standard','studentseminar','fig1')))
@@ -429,7 +431,7 @@ def test_2coeff_fuse():
     
     for lamS in lamSs:
     
-    #fg.cv_model1(data_fn = out, lamP=lamPs[0], lamR=lamRs[0], lamS=lamSs[i], k= 10)
+    
         (b1, b2) = fg.fit_model(out, lamPs[0], lamRs[0], lamS)
         plt.plot(b1[0,2], b1[1,2], 'or',markersize=5+10*lamS)
         plt.plot(b2[0,2], b2[1,2], 'ob',markersize=5+10*lamS)
@@ -470,7 +472,7 @@ def test_2coeff_fuse_H():
     
     for lamS in lamSs:
     
-        #fg.cv_model1(data_fn = out, lamP=lamPs[0], lamR=lamRs[0], lamS=lamSs[i], k= 10)
+        
         (b1, b2) = fg.fit_model(out, lamPs[0], lamRs[0], lamS)
         plt.plot(b1[0,2], b1[1,2], 'or',markersize=5+10*lamS)
         plt.plot(b2[0,2], b2[1,2], 'ob',markersize=5+10*lamS)
@@ -508,7 +510,7 @@ def test_2coeff_fuse1B():
     
     for lamS in lamSs:
     
-    #fg.cv_model1(data_fn = out, lamP=lamPs[0], lamR=lamRs[0], lamS=lamSs[i], k= 10)
+    
         (b1, b2) = fg.fit_model(out, lamPs[0], lamRs[0], lamS)
         plt.plot(b1[0,2], b1[1,2], 'or',markersize=5+10*lamS)
         plt.plot(b2[0,2], b2[1,2], 'ob',markersize=5+10*lamS)
@@ -554,7 +556,7 @@ def test_2coeff_fuse_HS():
         print fusemat
     for lamS in lamSs:
         print 'SOLVING'
-        #fg.cv_model1(data_fn = out, lamP=lamPs[0], lamR=lamRs[0], lamS=lamSs[i], k= 10)
+        
         special_args = {'s_it':5, 'orths':None, 'a':0.1}
         (b1, b2) = fg.fit_model(out, lamPs[0], lamRs[0], lamS, solver='solve_ortho_direct_scad',special_args = special_args)
         plt.plot(b1[0,2], b1[1,2], 'or',markersize=0.5*(10+20*lamS))
@@ -647,7 +649,7 @@ def test_2coeff_fuse_HS2():
     plt.plot(br2[ax1r2,ax1c2], br2[ax2r2,ax2c2], '*',c=[0,0,1.0],markersize=30)
     for lamS in lamSs:
         print 'SOLVING'
-        #fg.cv_model1(data_fn = out, lamP=lamPs[0], lamR=lamRs[0], lamS=lamSs[i], k= 10)
+        
         special_args = {'s_it':5, 'orths':None, 'a':1.50}
         (b1, b2) = fg.fit_model(out, lamPs[0], lamRs[0], lamS, solver='solve_ortho_direct_scad',special_args = special_args)
         plt.plot(b1[ax1r1,ax1c1], b1[ax2r1,ax2c1], 'or',markersize=0.5*(10+20*lamS))
@@ -719,45 +721,16 @@ def check_structure1():
     solver='solve_ortho_direct'
     reverse=False
     cv_both = (True, True)
-    errd1 = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = False, cv_both = (True, True))
+    (errd11, errd12) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = False, cv_both = (True, True))
     lamP = 0.01
-    errd2 = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = False, cv_both = (True, True))
-    print errd1
-    print errd2
+    (errd21, errd22) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = False, cv_both = (True, True))
+    
+    print errd11
+    print errd21
     (b1, b2) = fg.fit_model(out, lamP, lamR, lamS, solver='solve_ortho_direct')
     (b1r, g, t) = ds.load_network(os.path.join(out, 'beta1'))
     return (b1, b2)
 
-#solves a simple model and computes aupr, then does it again with fusion turned on
-#also looks at the beta error
-def check_structure2():
-    N_TF = 20
-    N_G = 50
-    N1 = 10
-    N2 = 10
-    sparse = 0.5
-    out = os.path.join('data','fake_data','struct2')
-    ds.write_fake_data1(N1 = N1, N2 = N2, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=sparse, fuse_std = 0.0)
-    
-    lamP = 1.0
-    lamR = 1
-    lamS = 0.0
-    k=5
-    solver='solve_ortho_direct'
-    reverse=False
-    cv_both = (True, True)
-    errd1 = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = False, cv_both = (True, True))
-    lamS = 1
-    
-    errd2 = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = False, cv_both = (True, True))
-    print errd1
-    print errd2
-    (b1, b2) = fg.fit_model(out, lamP, lamR, lamS=0, solver='solve_ortho_direct')
-    (b1S, b2S) = fg.fit_model(out, lamP, lamR, lamS=lamS, solver='solve_ortho_direct')
-    (b1r, g, t) = ds.load_network(os.path.join(out, 'beta1'))
-    print 'beta error 1 %f'% fg.eval_network_beta(b1, b1r)
-    print 'beta error 2 %f'% fg.eval_network_beta(b1S, b1r)
-#return (b1, b2)
 
 #generates simple model, then inspects priors
 def make_sure_priors_are_right():
@@ -791,42 +764,6 @@ def make_sure_priors_are_right():
     r_roc = fg.eval_network_roc(b1r, d1.genes, d1.tfs, p1, exclude_tfs=True)
     print 'roc is %f' % r_roc
 
-#look at unfused performance varying with lamR
-def vary_lamR():
-    repeats = 5
-    N_TF = 25
-    N_G = 50
-    
-    N = 100
-    lamRs = np.linspace(0.00001,10,7)
-    lamSs = [0,0.5]
-    out1 = os.path.join('data','fake_data','vary_lamR')
-    k = 5#cv folds
-    if not os.path.exists(out1):
-        os.mkdir(out1)
-    #iterate over how much data to use
-    errors = np.zeros((2, len(lamRs)))
-    for r in range(repeats):
-        
-        out2 = os.path.join(out1,'dat_'+str(N))
-        ds.write_fake_data1(N1 = k*N, N2 = k*N, out_dir = out2, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.0)
-            
-        lamP = 1.0 #priors don't matter
-        for j, lamR in enumerate(lamRs):
-            for i, lamS in enumerate(lamSs):
-                errd = fg.cv_model1(out2, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
-                errors[i, j] += errd['mse'][0]
-    
-    errors = errors / k
-    
-    plt.close()
-    
-    plt.plot(lamRs, errors[0,:])
-    plt.plot(lamRs, errors[1,:])
-    
-    plt.savefig(os.path.join(out2, 'fig'))
-    plt.show()
-
 
 #we want to show performance as a function of data amount for lamS=0, lamS=1
 #we are going to try and set lamR to its optimum
@@ -854,8 +791,8 @@ def increase_data2():
             
             lamP = 1.0 #priors don't matter
             for i, lamS in enumerate(lamSs):
-                errd = fg.cv_model1(out2, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
-                errors[i, j] += errd['R2'][0]
+                (errd1, errd2) = fg.cv_model_m(out2, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
+                errors[i, j] += errd1['R2'].mean()
     
     errors = errors / k
     
@@ -1841,7 +1778,7 @@ def test_prior_sign_betas(lamP=1.0, lamR=1.0,lamS=0):
     sns.kdeplot(acti_interactions, shade=True, label = 'activation, %f'% np.mean(acti_interactions))
     sns.kdeplot(rand_interactions, shade=True, label = 'non-priors, %f' % np.mean(rand_interactions))
     
-    plt.xlabel('beta')
+    plt.xlabel('beta x 1000')
     plt.legend()
     plt.ylabel('frequency')    
     
@@ -1954,18 +1891,31 @@ def eval_mapped_performance(lamP=1.0, lamR=1.0,lamS=0):
     (priors1, signs1) = ds1.get_priors()
     
     
+    constraints_touch = set()
+    
     (constraints, marks, orths) = ds.load_constraints(bactf)
     
+    for con in constraints:
+        constraints_touch.add(con.c1)
+        constraints_touch.add(con.c2)
+
+    p1c = fr.priors_to_constraints([ds1.name],[ds1.genes],[ds1.tfs],priors1,0.5)
+    mappable_priors = filter(lambda x: x.c1 in constraints_touch, p1c)
+
     (e1_tr, t1_tr, genes1, tfs1) = ds1.load_data()
     (e2_tr, t2_tr, genes2, tfs2) = ds2.load_data()
 
     subt_to_anth = {orths[x].genes[0].name : orths[x].genes[1].name for x in range(len(orths))}
     anthracis_gene_inds = {genes2[i] : i for i in range(len(genes2))}
     subtilis_gene_inds = {genes1[i] : i for i in range(len(genes1))}
-    
+    print 'there are %d priors, of which %d map' % (len(priors1), len(mappable_priors))
+    print 'there are %d orthology mappings, and %d constraints' % (len(orths), len(constraints)/2)
+    print '%f percent of the subtilis network is constrained' % ((len(constraints)/2.0)/(len(genes1)*len(tfs1)))
+    print '%f percent of the anthracis network is constrained' % ((len(constraints)/2.0)/(len(genes2)*len(tfs2)))
     
     (B0, B1) = test_bacteria(lamP, lamR, lamS)
     
+
     aupr = fg.eval_network_pr(B0, genes1, tfs1, priors1, exclude_tfs=False)
     auc = fg.eval_network_roc(B0, genes1, tfs1, priors1, exclude_tfs=False)
 
@@ -2011,7 +1961,8 @@ def eval_mapped_performance(lamP=1.0, lamR=1.0,lamS=0):
                 print B0_mapped2[con.c1.r, con.c1.c]
                 print 'cons (%d, %d) to (%d, %d)' % (con.c1.r, con.c1.c, con.c2.r, con.c2.c)
                 print 'omap (%d, %d) to (%d, %d)' % (subtilis_gene_inds[con_fr_tf], subtilis_gene_inds[con_fr_g], anthracis_gene_inds[con_to_tf], anthracis_gene_inds[con_to_g])
-    print 'there are %d different entries' % (B0_mapped != B0_mapped2).sum()
+    #print 'there are %d different entries' % (B0_mapped != B0_mapped2).sum()
+    
     aupr = fg.eval_network_pr(B0_mapped, genes1, tfs1, priors1, exclude_tfs=False)
     auc = fg.eval_network_roc(B0_mapped, genes1, tfs1, priors1, exclude_tfs=False)
 
@@ -2022,24 +1973,59 @@ def eval_mapped_performance(lamP=1.0, lamR=1.0,lamS=0):
     auc = fg.eval_network_roc(B0_mapped2, genes1, tfs1, priors1, exclude_tfs=False, constraints=constraints, sub=0)
 
     print 'performance-constr, mapped2: aupr %f, auc %f' % (aupr, auc)
-
     
 def plot_bacteria_performance(lamP=1.0, lamR=5, lamSs=[0,1,2,3,4], k=20):
+
     out = 'data/bacteria_standard'
     metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con']
     err_dict1 = {m : np.zeros((k, len(lamSs))) for m in metrics} #subtilis
     err_dict2 = {m : np.zeros((k, len(lamSs))) for m in metrics} #anthracis
 
-    
+    rseed = random.random()
     for i, lamS in enumerate(lamSs):
-        (errd1, errd2) = fg.cv_model4(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse=True, cv_both=(True,False), exclude_tfs=False, pct_priors=0.5)
-#        (errd1, errd2) = fg.cv_model3(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, False), exclude_tfs=False)
+        (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse=True, cv_both=(True,False), exclude_tfs=False, pct_priors=0.0, verbose=True, seed=rseed)
+
         for metric in metrics:
             err_dict1[metric][:, [i]] = errd1[metric]
             err_dict2[metric][:, [i]] = errd2[metric]
 
+    #to_plot = err_dict1['aupr']#
     to_plot = np.dstack((err_dict1['aupr'], err_dict1['aupr_con']))
+
+
     linedesc = pd.Series(['full','constrained'],name='error type')
+    #linedesc = pd.Series(['full'],name='error type')
+    xs = pd.Series(lamSs, name='lamS')
+    sns.tsplot(to_plot, time=xs, condition=linedesc, value='aupr')
+    #with file('err_dict1','w') as f:
+    #    pickle.dump(err_dict1, f)
+    
+    plt.show()
+
+#functions as plot_bacteria_performance, plotting aupr (on constrained interactions) as a function of lamS, but does so with half the priors used in training, and compares lamP= supplied lamP to lamP=1
+def plot_bacteria_performance_priors(lamP=1.0, lamR=5, lamSs=[0,2,4,6], k=20):
+
+    out = 'data/bacteria_standard'
+    metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con']
+
+    no_pr = {m : np.zeros((k, len(lamSs))) for m in metrics} #subtilis
+    yes_pr = {m : np.zeros((k, len(lamSs))) for m in metrics} #subtilis
+    pct_priors = 0.5
+    rseed = random.random()
+    for i, lamS in enumerate(lamSs):
+        (errd1, errd2) = fg.cv_model_m(out, lamP=1.0, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse=True, cv_both=(True,False), exclude_tfs=False, pct_priors=pct_priors, verbose=True, seed=rseed)
+        for metric in metrics:
+            no_pr[metric][:, [i]] = errd1[metric]
+
+        (errd1, errd2) = fg.cv_model_m(out, lamP=0.1, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse=True, cv_both=(True,False), exclude_tfs=False, pct_priors=pct_priors, verbose=True, seed=rseed)
+        for metric in metrics:
+            yes_pr[metric][:, [i]] = errd1[metric]
+
+    to_plot = np.dstack((no_pr['aupr_con'], yes_pr['aupr_con']))
+
+
+    linedesc = pd.Series(['no priors','priors'],name='error type')
+    
     xs = pd.Series(lamSs, name='lamS')
     sns.tsplot(to_plot, time=xs, condition=linedesc, value='aupr')
     #with file('err_dict1','w') as f:
@@ -2063,7 +2049,7 @@ def plot_synthetic_performance(lamP=1.0, lamR=5, lamSs=[0,1], k=20):
 
     
     for i, lamS in enumerate(lamSs):
-        (errd1, errd2) = fg.cv_model3(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, False), exclude_tfs=False)
+        (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, False), exclude_tfs=False)
         for metric in metrics:
             err_dict1[metric][:, [i]] = errd1[metric]
             err_dict2[metric][:, [i]] = errd2[metric]
@@ -2091,7 +2077,7 @@ def plot_synthetic_performance2(lamP=1.0, lamR=5, lamSs=[0], k=20):
 
     
     for i, lamS in enumerate(lamSs):
-        (errd1, errd2) = fg.cv_model3(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, False), exclude_tfs=False)
+        (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, False), exclude_tfs=False)
         for metric in metrics:
             err_dict1[metric][:, [i]] = errd1[metric]
             err_dict2[metric][:, [i]] = errd2[metric]
@@ -2119,7 +2105,7 @@ def plot_synthetic_performance3(lamP=3.0, lamR=5, lamSs=[0,1], k=20):
 
     
     for i, lamS in enumerate(lamSs):
-        (errd1, errd2) = fg.cv_model4(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, False), exclude_tfs=False, pct_priors=0.5)
+        (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, False), exclude_tfs=False, pct_priors=0.5)
         for metric in metrics:
             err_dict1[metric][:, [i]] = errd1[metric]
             err_dict2[metric][:, [i]] = errd2[metric]
@@ -2133,34 +2119,79 @@ def plot_synthetic_performance3(lamP=3.0, lamR=5, lamSs=[0,1], k=20):
     
     plt.show()
 
-#returns error dictionaries on a simple synthetic dataset across a range of parameter combinations. This function uses the cv code that evaluates every model on each individual fold
-def synthetic_performance_synch(lamPs=[1.0], lamRs=[5], lamSs=[0], k=20):
+
+#plots distributions of real and fake beta differences, either for some sample data, or for the data contained in the folder out  
+def plot_beta_diffs(out=None):
+
     N = 10
+    N_TF = 1
+    N_G = 500
+    if out==None:
+        out = os.path.join('data','fake_data','beta_diffs_dist')
+        ds.write_fake_data1(N1 = N, N2 = N, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1,pct_fused=0.5, sparse=0.0, fuse_std = 0.1, orth_falsepos=0.5,orth_falseneg=0.5)
+
+    (B0, _, _) = ds.load_network(os.path.join(out, 'beta1'))
+    (B1, _, _) = ds.load_network(os.path.join(out, 'beta2'))
+    (constraints, marks, orths) = ds.load_constraints(out)
+    marks = np.array(marks)
+    diffs = fr.beta_diff([B0, B1], constraints)
+    print marks
+    if (marks==True).sum():
+        sns.kdeplot(diffs[marks == True], shade=True, label='real')
+    if (marks==False).sum():
+        sns.kdeplot(diffs[marks == False], shade=True, label='fake')
+    plt.legend()
+    #plt.figure()
+    #plt.hist(diffs[marks==True])
+    #print np.std(diffs)
+    plt.show()
+
+    return diffs
+
+
+
+#plots performance as a function of the number of CV folds being used
+def synthetic_performance_by_k(lamP=1, lamR=2, lamS=0, ks=[20,15,10,5,2]):
+
+    N = 5
     N_TF = 20
     N_G = 30
-    out = os.path.join('data','fake_data','plot_synthetic_performance_synch')
-    ds.write_fake_data1(N1 = k*N, N2 = 5*k*N, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1,pct_fused=0.8, sparse=0.5, fuse_std = 0.0, orth_falsepos=0.45,orth_falseneg=0.45)
-    
-    metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con']
-    
-    (errd1, errd2) = fg.cv_model_params(out, lamPs=lamPs, lamRs=lamRs, lamSs=lamSs, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, False), exclude_tfs=False)
-    plot_errd_synch(errd1, lamPs, lamRs, lamSs, primary_ax=2, metric='aupr')
-    plt.figure()
-    plot_errd_synch(errd1, lamPs, lamRs, lamSs, primary_ax=1, metric='aupr')
-    plt.show()
-    return (errd1, errd2)
+    out = os.path.join('data','fake_data','synthetic_performance_by_k')
+    k = max(ks)
+    ds.write_fake_data1(N1 = k*N, N2 = k*N, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.5, fuse_std = 0.0)
 
-#returns (and saves) error across a range of parameter combinations on real data. This function uses the cv code that evaluates every model on each individual fold
-def bacteria_performance_synch(lamPs=[1.0], lamRs=[5], lamSs=[0], k=20):
-    out = os.path.join('data','bacteria_standard')
-    
-    
+
+    auprs = np.zeros(len(ks))
+    stes = np.zeros(len(ks))
+
+        
+    for i, k in enumerate(ks):
+        (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse=True, cv_both=(True,False), exclude_tfs=False, pct_priors=0.0, verbose=True)
+        aupr = errd1['aupr']
+        auprs[i] = aupr.mean()
+        stes[i] = np.std(aupr) / k**0.5
+    ks = 1.0 / np.array(ks)
+    pretty_plot_err(ks, auprs, stes, (1, 0.5, 0, 0.25))
+    plt.xlabel('fraction of data used')
+    plt.ylabel('aupr')
+    plt.show()
+
+#plots performance as a function of the number of CV folds being used
+def bacteria_performance_by_k(lamP=1, lamR=2, lamS=0, ks=[20,15,10,5,2]):
+    out = 'data/bacteria_standard'
     metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con']
     
-    (errd1, errd2) = fg.cv_model_params(out, lamPs=lamPs, lamRs=lamRs, lamSs=lamSs, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, False), exclude_tfs=False)
-    import pickle
-    with file('picklejar','w') as f:
-        pickle.dump( (lamPs, lamRs, lamSs, k, errd1, errd2), f)
+    for i, k in enumerate(ks):
+        (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse=True, cv_both=(True,False), exclude_tfs=False, pct_priors=0.0, verbose=True)
+        aupr = errd1['aupr']
+        auprs[i] = aupr.mean()
+        stes[i] = np.std(aupr) / k**0.5
+
+    ks = 1.0 / np.array(ks)
+    pretty_plot_err(ks, auprs, stes, (1, 0.5, 0, 0.25))
+    plt.xlabel('fraction of data used')
+    plt.ylabel('aupr')
+    plt.show()
 
 #function for making reasonably nice looking plots of error dictionaries 
 def plot_errd_synch(errd, lamPs, lamRs, lamSs, primary_ax, metric):
@@ -2209,6 +2240,7 @@ def net_var(pct_fused):
     if not os.path.exists(out1):
         os.mkdir(os.path.join('data','fake_data','net_var'))
 
+    seed = random.random()
     N_TF = 20
     N_G = 200
     k = 2
@@ -2220,7 +2252,12 @@ def net_var(pct_fused):
     for i in range(10):
         out2 = os.path.join(out1,'dat_'+str(pct_fused)+str(i))
         ds.write_fake_data1(out_dir = out2, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.1, pct_fused=pct_fused)        
-        errd = fg.cv_model1(out2, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_args=None, reverse=False, cv_both=(True,True), exclude_tfs=True)
+        (errd1, errd2) = fg.cv_model_m(out2, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_args=None, reverse=False, cv_both=(True,True), exclude_tfs=True, seed=seed)
         errdict[i] = errd
-    return errdict   
-    
+    return errdict  
+
+
+def pretty_plot_err(x, y, errbar, color=(1,0,0,1)):
+    plt.plot(x, y, color=color)
+    plt.fill_between(x, y-errbar, y+errbar, color=color)
+
