@@ -1969,6 +1969,7 @@ def plot_bacteria_performance(lamP=1.0, lamR=5, lamSs=[0,1,2,3], k=20):
     
     plt.show()
 
+#plots performance as a function of R
 def plot_bacteria_performanceR(lamP=1.0, lamRs=[1,4,7,10,13], lamS=0, k=20):
 
     out = 'data/bacteria_standard'
@@ -2199,6 +2200,7 @@ def pretty_plot_err(x, y, errbar, color=(1,0,0,1)):
     plt.fill_between(x, y-errbar, y+errbar, color=color)
 
 
+# shows penalty weight, fusion penalty, and ddx fusion penalty for an arbitrary pair of variances under EM penalty
 def em_sillytest():
     var1 = 1.0
     var2 = 20.0
