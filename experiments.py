@@ -1256,18 +1256,17 @@ def test_em():
         ds.write_fake_data1(N1 = N_cond*k, N2 = N_cond*k, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = N, orth_falseneg = N, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.1)
         lamR = 1
         lamP = 1.0 #priors don't matter
-        errd = fg.cv_model2(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct_em', reverse = True, special_args = {'em_it':5, 'f':1, 'uf':1}, cv_both = (True, True))[0]
-        errl = fg.cv_model2(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))[0]
-        erru = fg.cv_model2(out, lamP=lamP, lamR=lamR, lamS=0, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))[0]
-        errors_em = np.hstack((errors_em, errd))
-        errors_l2 = np.hstack((errors_l2, errl))
-        errors_uf = np.hstack((errors_uf, erru))
+        (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct_em', reverse = True, special_args = {'em_it':5, 'f':1, 'uf':1}, cv_both = (True, True))
+
+        (errl1, errl2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
+
+        (erru1, erru2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=0, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
+        errors_em = np.hstack((errors_em, errd1['aupr']))
+        errors_l2 = np.hstack((errors_l2, errl['aupr']))
+        errors_uf = np.hstack((errors_uf, erru['aupr']))
     
     errors = np.dstack((errors_em, errors_l2, errors_uf))
-    print errors[:,:,0]
-    print errors[:,:,1]
-    print errors[:,:,2]
-    print errors.shape
+    
     step = pd.Series(orth_err)
     solver = pd.Series(["EM", "fused L2", "L2"], name="solver")
     plt.close()
@@ -1276,107 +1275,8 @@ def test_em():
     plt.show()
     return errors
 
-def test_em2():
-#create simulated data set with false orthology and run fused L2 and fused scad 
-     
-    N_TF = 5
-    N_G = 20
-    amt_fused = 1.0
-    orth_err = [0,0.3,0.5,0.7,0.9]
-    lamS = 1
-    k = 10
-    if not os.path.exists(os.path.join('data','fake_data','test_em2')):
-        os.mkdir(os.path.join('data','fake_data','test_em2'))
-    #iterate over how much fusion 
-    errors_em = np.zeros((k,0))
-    errors_l2 = np.zeros((k,0))
-    errors_uf = np.zeros((k,0))
-    for i, N in enumerate(orth_err):
-        out = os.path.join('data','fake_data','test_em2','dat_'+str(N))
-        ds.write_fake_data1(N1 = 10*10, N2 = 10*10, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = N, orth_falseneg = N, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.1)
-        lamR = 0.1
-        lamP = 1.0 #priors don't matter
-        errd1 = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct_em', reverse = True, special_args = {'em_it':5, 'f':1, 'uf':1}, cv_both = (True, True))
-        errl1 = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
-        erru1 = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=0, k=10, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
-        errd = fg.cv_model2(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct_em', reverse = True, special_args = {'em_it':5, 'f':1, 'uf':1}, cv_both = (True, True))[0]
-        errl = fg.cv_model2(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))[0]
-        erru = fg.cv_model2(out, lamP=lamP, lamR=lamR, lamS=0, k=10, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))[0]
-        errors_em = np.hstack((errors_em, errd))
-        errors_l2 = np.hstack((errors_l2, errl))
-        errors_uf = np.hstack((errors_uf, erru))
-    
-    errors = np.dstack((errors_em, errors_l2, errors_uf))
-    print errors[:,:,0]
-    print errors[:,:,1]
-    print errors[:,:,2]
-    print errors.shape
-    step = pd.Series(orth_err)
-    solver = pd.Series(["EM", "fused L2", "L2"], name="solver")
-    plt.close()
-    sns.tsplot(errors, time=step, condition=solver, value="mean squared error")
-    plt.savefig(os.path.join(os.path.join('data','fake_data','test_em1','fig4')))
-    plt.show()
-    return (errors,errd1, errl1, erru1)
 
 
-def test_em3():
-#create simulated data set with false orthology and run fused L2 and fused scad 
-     
-    N_TF = 10
-    N_G = 200
-    amt_fused = 1.0
-    orth_err = [0,0.3,0.5,0.7,0.9]
-    lamS = 1.0
-    if not os.path.exists(os.path.join('data','fake_data','test_em4')):
-        os.mkdir(os.path.join('data','fake_data','test_em4'))
-    #iterate over how much fusion
-    errors_em = np.zeros(len(orth_err))
-    errors_l2 = np.zeros(len(orth_err))
-    errors_uf = np.zeros(len(orth_err))
-    for i, N in enumerate(orth_err):
-        out = os.path.join('data','fake_data','test_em4','dat_'+str(N))
-        ds.write_fake_data1(N1 = 10*10, N2 = 10*10, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = N, orth_falseneg = N, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.1)
-        lamR = 0.1
-        lamP = 1.0 #priors don't matter
-        errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct_em', reverse = True, special_args = {'em_it':5, 'f':1, 'uf':1}, cv_both = (True, True))
-        errl = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
-        erru = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=0, k=10, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
-#        errors_em[i] = errd['mse'][0]
-#        errors_l2[i] = errl['mse'][0]
-#        errors_uf[i] = erru['mse']
-
-#    colorlist = [[0,0,1],[0,1,0],[1,0,0],[0.5,0,0.5]]
-#    for r, amnt in enumerate(orth_err):
-#        plt.plot(orth_err, errors_em[r,:], color = colorlist[r])
-#    for r, amnt in enumerate(orth_err):
-#        plt.plot(orth_err, errors_l2[r,:], '--', color = colorlist[r])
-#    #plt.legend(lamSs+lamSs)
-#    plt.xlabel('orth error')
-#    plt.ylabel('mean squared error')
-#    plt.savefig(os.path.join(os.path.join('data','fake_data','test_em3','fig3')))
-#    plt.figure()
-
-def test_mcp_2():
-    N_TF = 10
-    N_G = 200
-    amt_fused = 1.0
-    orth_err = [0,0.3,0.5,0.7,0.9]
-    lamS = 1.0
-    if not os.path.exists(os.path.join('data','fake_data','test_mcp_2')):
-        os.mkdir(os.path.join('data','fake_data','test_mcp_2'))
-    #iterate over how much fusion
-    errors_em = np.zeros(len(orth_err))
-    errors_l2 = np.zeros(len(orth_err))
-    errors_uf = np.zeros(len(orth_err))
-    for i, N in enumerate(orth_err):
-        out = os.path.join('data','fake_data','test_mcp_2','dat_'+str(N))
-        ds.write_fake_data1(N1 = 10, N2 = 10, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = N, orth_falseneg = N, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.1)
-        lamR = 0.1
-        lamP = 1.0 #priors don't matter
-        #errmr = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct_mcp_r', reverse = True, cv_both = (True, True))
-        errd = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
-        errm = fg.cv_model1(out, lamP=lamP, lamR=lamR, lamS=0, k=10, solver='solve_ortho_direct_mcp', reverse = True, cv_both = (True, True),special_args={'m_it':5, 'a':0.5})
 
 #looks at the distribution of absolute values of correlations for prior interactions, and an equally sized set of random interactions
 def test_prior_corr():
