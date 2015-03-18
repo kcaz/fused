@@ -10,6 +10,7 @@ from matplotlib import pyplot as plt
 import random
 import pandas as pd
 import seaborn as sns
+import scipy.stats
 sns.set(palette="Set2")
 #This file is just a list of experiments. Only code that is used nowhere else is appropriate (ie general plotting code should go somewhere else
 
@@ -1968,6 +1969,35 @@ def plot_bacteria_performance(lamP=1.0, lamR=5, lamSs=[0,1,2,3], k=20):
     
     plt.show()
 
+def plot_bacteria_performanceR(lamP=1.0, lamRs=[1,4,7,10,13], lamS=0, k=20):
+
+    out = 'data/bacteria_standard'
+    metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con']
+    err_dict1 = {m : np.zeros((k, len(lamRs))) for m in metrics} #subtilis
+    err_dict2 = {m : np.zeros((k, len(lamRs))) for m in metrics} #anthracis
+
+    rseed = random.random()
+    for i, lamR in enumerate(lamRs):
+        (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse=True, cv_both=(True,False), exclude_tfs=False, pct_priors=0.0, verbose=True, seed=rseed)
+
+        for metric in metrics:
+            err_dict1[metric][:, [i]] = errd1[metric]
+            err_dict2[metric][:, [i]] = errd2[metric]
+
+    #to_plot = err_dict1['aupr']#
+    to_plot = np.dstack((err_dict1['aupr'], err_dict1['aupr_con']))
+
+
+    linedesc = pd.Series(['full','constrained'],name='error type')
+    #linedesc = pd.Series(['full'],name='error type')
+    xs = pd.Series(lamRs, name='lamR')
+    sns.tsplot(to_plot, time=xs, condition=linedesc, value='aupr')
+    #with file('err_dict1','w') as f:
+    #    pickle.dump(err_dict1, f)
+    
+    plt.show()
+
+
 #functions as plot_bacteria_performance, plotting aupr (on constrained interactions) as a function of lamS, but does so with half the priors used in training, and compares lamP= supplied lamP to lamP=1
 def plot_bacteria_performance_priors(lamP=1.0, lamR=5, lamSs=[0,2,4,6], k=20):
 
@@ -2167,3 +2197,39 @@ def bacteria_performance_by_k(lamP=1, lamR=2, lamS=0, ks=[20,15,10,5,2]):
 def pretty_plot_err(x, y, errbar, color=(1,0,0,1)):
     plt.plot(x, y, color=color)
     plt.fill_between(x, y-errbar, y+errbar, color=color)
+
+
+def em_sillytest():
+    var1 = 1.0
+    var2 = 20.0
+
+    delta_bs = np.linspace(0,5,100)
+    
+    p1 = scipy.stats.norm.pdf(delta_bs, loc=0, scale=var1**0.5)
+    p2 = scipy.stats.norm.pdf(delta_bs, loc=0, scale=var2**0.5)
+    
+
+    lam1 = p1 / (p1 + p2) * (1/var1)
+    lam2 =  p2 / (p1 + p2) * (1/var2)
+    pen1 = lam1 * delta_bs**2
+    pen2 = lam2 * delta_bs**2
+
+    pen = pen1 + pen2
+    lam = lam1 + lam2
+    plt.subplot(311)
+    plt.plot(delta_bs, lam)
+    plt.xlabel('delta beta')
+    plt.ylabel('fusion penalty weight')
+    #plt.show()
+
+    plt.subplot(312)
+    plt.plot(delta_bs, pen)
+    plt.xlabel('delta beta')
+    plt.ylabel('fusion penalty')
+    #plt.show()
+
+    plt.subplot(313)
+    plt.plot(delta_bs[0:-1], np.diff(pen))
+    plt.xlabel('delta beta')
+    plt.ylabel('derivative of penalty')
+    plt.show()

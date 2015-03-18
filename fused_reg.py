@@ -814,7 +814,7 @@ def gaussian_density(u, s2, x):
 
 
 
-def em(Bs_init, fuse_cons, lamS, pct_fused, marks=None):
+def em_old(Bs_init, fuse_cons, lamS, pct_fused, marks=None):
     pct_fused = 0.9
     beta_diffs = beta_diff(Bs_init, fuse_cons)
     c_init = np.var(beta_diffs)
@@ -836,8 +836,8 @@ def em(Bs_init, fuse_cons, lamS, pct_fused, marks=None):
     
     return fuse_cons
 
-def em_old2(Bs_init, fuse_cons, lamS, f, uf, marks=None):
-    verbose=False
+def em(Bs_init, fuse_cons, lamS, f, uf, marks=None):
+    verbose=True
     if verbose:
         from matplotlib import pyplot as plt
         import seaborn as sns
