@@ -70,8 +70,7 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special
     organisms = [ds1.name, ds2.name]
     orth = ds.load_orth(orth_fn, organisms)
     
-    folds = [ds1.partition_data(k), ds2.partition_data]
-    
+    folds = [ds1.partition_data(k), ds2.partition_data(k)]
     
     (priors1, signs1) = ds1.get_priors()
     (priors2, signs2) = ds2.get_priors()
@@ -92,7 +91,7 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special
 
     priors_tr = [priors1_tr, priors2_tr]
     priors_te = [priors1_te, priors2_te]
-    
+
     f_te = [None, None]
     f_tr = [None, None]
     genes = [None, None]
@@ -230,10 +229,10 @@ def prediction_error(X, B, Y, metric, exclude_tfs = True):
             r2 = 1 - ((y-yp)**2).sum()/ ((y-y.mean())**2).sum()
             r2a += r2
             
-            #if c == start_ind:
-            #    plt.plot(y)
-            #    plt.plot(yp)
-            #    plt.show()
+#            if c == start_ind:
+#                plt.plot(y)
+#                plt.plot(yp)
+#                plt.show()
         return r2a/(Ypred.shape[1]-start_ind)
     if metric == 'mse':
         msea = 0.0
@@ -315,9 +314,12 @@ def eval_network_pr(net, genes, tfs, priors, exclude_tfs = False, constraints = 
             
             scores.append(score)#scores[i] = score
             labels.append(label)#labels[i] = label
+    if len(scores):
             
-    (precision, recall,t) = precision_recall_curve(labels, scores)#prc(scores, labels)
-    aupr = auc(recall, precision)
+        (precision, recall,t) = precision_recall_curve(labels, scores)#prc(scores, labels)
+        aupr = auc(recall, precision)
+    else:
+        aupr = np.nan
     
     return aupr
 
@@ -360,16 +362,17 @@ def eval_network_roc(net, genes, tfs, priors, exclude_tfs = True, constraints = 
             if (fl.one_gene(g, org), fl.one_gene(tf, org)) in priors_set:
                 label = 1
             scores.append(score)
-            labels.append(label)
-            
-            #scores[i] = score
-            #labels[i] = label
+            labels.append(label)            
             i += 1
-    (fpr, tpr, t) = roc_curve(labels, scores)
-    if any(np.isnan(fpr)) or any(np.isnan(tpr)):
-        return 0.0 #no false positives
-    
-    auroc = auc(fpr, tpr)
+
+    if len(scores):
+        (fpr, tpr, t) = roc_curve(labels, scores)
+        if any(np.isnan(fpr)) or any(np.isnan(tpr)):
+            return 0.0 #no false positives        
+        auroc = auc(fpr, tpr)
+    else:
+        auroc = np.nan
+
     return auroc
 
 def eval_network_beta(net1, net2):
@@ -392,8 +395,10 @@ def fused_coeff_corr(organisms, genes_l, tfs_l, orth, B_l):
     fused_vals = np.array(fused_vals)
     return (np.corrcoef(fused_vals)[0,1], fused_vals)
 
-#take list of lamP, lamR, lamS values and fin	ds the optimal parameters using cv_model1
+#take list of lamP, lamR, lamS values and finds the optimal parameters using cv_model1
 def grid_search_params(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_args=None, reverse=False, cv_both=(True,True), exclude_tfs=True, eval_metric='mse'):
+
+    seed = random.random()
     grid = dict()
     best_mse = 1000
     best_R2 = 0
@@ -405,45 +410,46 @@ def grid_search_params(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct'
     for r in range(len(lamR)):
         for s in range(len(lamS)):
             for p in range(len(lamP)):
-                errd = cv_model1(data_fn, lamP[p], lamR[r], lamS[s], k, solver='solve_ortho_direct',special_args=None, reverse=False, cv_both=(True,True), exclude_tfs=True)
+                (errd1, errd2) = cv_model_m(data_fn, lamP[p], lamR[r], lamS[s], k, solver='solve_ortho_direct',special_args=None, reverse=False, cv_both=(True,True), exclude_tfs=True, seed=seed, verbose=True)
+
                 if eval_metric == 'mse':
-                    grid[str(lamR[r])+'_'+str(lamS[s])+'_'+str(lamP[p])] = errd['mse']
-                    score = 0.5*(errd['mse'][0]+errd['mse'][1])
+                    grid[str(lamR[r])+'_'+str(lamS[s])+'_'+str(lamP[p])] = errd1['mse']
+                    score = errd1['mse'].mean()
                     if score < best_mse:
                         best_mse = score
                         best_lamP = lamP[p]
                         best_lamR = lamR[r]
                         best_lamS = lamS[s]
                 if eval_metric == 'R2':
-                    grid[str(lamR[r])+'_'+str(lamS[s])+'_'+str(lamP[p])] = errd['R2']   
-                    score = 0.5*(errd['R2'][0]+errd['R2'][1])
+                    grid[str(lamR[r])+'_'+str(lamS[s])+'_'+str(lamP[p])] = errd1['R2']   
+                    score = errd1['R2'].mean()
                     if score > best_R2:
                         best_R2 = score
                         best_lamP = lamP[p]
                         best_lamR = lamR[r]
                         best_lamS = lamS[s]
                 if eval_metric == 'aupr':
-                    grid[str(lamR[r])+'_'+str(lamS[s])+'_'+str(lamP[p])] = errd['aupr']
-                    score = 0.5*(errd['aupr'][0]+errd['aupr'][1])
+                    grid[str(lamR[r])+'_'+str(lamS[s])+'_'+str(lamP[p])] = errd1['aupr']
+                    score = errd1['aupr'].mean()
                     if score > best_aupr:
                         best_aupr = score
                         best_lamP = lamP[p]
                         best_lamR = lamR[r]
                         best_lamS = lamS[s]
                 if eval_metric == 'auroc':
-                    grid[str(lamR[r])+'_'+str(lamS[s])+'_'+str(lamP[p])] = errd['auroc']
-                    score = 0.5*(errd['auroc'][0]+errd['auroc'][1])
+                    grid[str(lamR[r])+'_'+str(lamS[s])+'_'+str(lamP[p])] = errd1['auroc']
+                    score = errd1['auroc'].mean()
                     if score > best_auroc:
                         best_auroc = score
                         best_lamP = lamP[p]
                         best_lamR = lamR[r]
                         best_lamS = lamS[s]
     if eval_metric == 'mse':
-        return (best_mse, best_lamP, best_lamR, best_lamS)
+        return (best_mse, best_lamP, best_lamR, best_lamS, grid)
     if eval_metric == 'R2':
-        return (best_R2, best_lamP, best_lamR, best_lamS)
+        return (best_R2, best_lamP, best_lamR, best_lamS, grid)
     if eval_metric == 'aupr':
-        return (best_aupr, best_lamP, best_lamR, best_lamS)
+        return (best_aupr, best_lamP, best_lamR, best_lamS, grid)
     if eval_metric == 'auroc':
-        return (best_auroc, best_lamP, best_lamR, best_lamS)
+        return (best_auroc, best_lamP, best_lamR, best_lamS, grid)
 

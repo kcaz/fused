@@ -1043,18 +1043,18 @@ def scad2_prime(theta, lamS, a):
 #returns a new set of fusion constraints corresponding to a saturating penalty
 def scad(Bs_init, fuse_constraints, lamS, lamW=None, a=3.7):
     new_fuse_constraints = []
-    
+    import math    
     for i in range(len(fuse_constraints)):
         con = fuse_constraints[i]
         b_init_1 = Bs_init[con.c1.sub][con.c1.r, con.c1.c]
         b_init_2 = Bs_init[con.c2.sub][con.c2.r, con.c2.c]
         theta_init = np.abs(b_init_1 - b_init_2)
         #if theta_init is too small, don't want to cause numerical problems
-        if theta_init < 0.001 * (np.abs(b_init_1) + np.abs(b_init_2)):
+        if theta_init <= 0.001 * (np.abs(b_init_1) + np.abs(b_init_2)):
             nlamS = lamS
         else:
             nlamS = scad2_prime(theta_init, lamS, a) / theta_init
-             
+
         new_con = constraint(con.c1, con.c2, nlamS)
         new_fuse_constraints.append(new_con)
     return new_fuse_constraints
