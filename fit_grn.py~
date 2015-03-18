@@ -85,13 +85,13 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special
         p1 = map(lambda i: x[i], inds[0:t])
         p2 = map(lambda i: x[i], inds[t:])
         return (p1, p2)
-
+    print pct_priors
     (priors1_tr, priors1_te) = r_partition(priors1, int(pct_priors*len(priors1)))
     (priors2_tr, priors2_te) = r_partition(priors2, int(pct_priors*len(priors2)))
 
     priors_tr = [priors1_tr, priors2_tr]
-#    priors_te = [priors1_te, priors2_te]
-    priors_te = [priors1_tr, priors2_tr]
+    priors_te = [priors1_te, priors2_te]
+
     f_te = [None, None]
     f_tr = [None, None]
     genes = [None, None]

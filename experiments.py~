@@ -323,6 +323,31 @@ def test_scad2():
         plt.hist(lamSs, 50)
         plt.savefig(os.path.join(os.path.join('data','fake_data','test_scad2',str(fold)+'lamS')))
 
+def test_mcp3():
+#create simulated data set with false orthology and run fused L2 and fused scad; based off of test_scad()
+     
+    N_TF = 10
+    N_G = 200
+    amt_fused = 0.5
+    orth_err = [0.25,0.5,0.75,1]
+    lamSs = [0, 2, 4]
+    if not os.path.exists(os.path.join('data','fake_data','test_mcp3')):
+        os.mkdir(os.path.join('data','fake_data','test_mcp3'))
+    #iterate over how much fusion
+    errors_mcp = np.zeros((len(orth_err), len(lamSs)))
+    errors_l2 = np.zeros((len(orth_err), len(lamSs)))
+    for i, N in enumerate(orth_err):
+        out = os.path.join('data','fake_data','test_mcp3','dat_'+str(N))
+        ds.write_fake_data1(N1 = 20, N2 = 20, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = N, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.1)
+        lamR = 4
+        lamP = 1.0 #priors don't matter
+        for j, lamS in enumerate(lamSs):
+            (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct_mcp', reverse = False, special_args = {'m_it':50, 'a':0.6}, cv_both = (True, True))
+            (errd1l, errd2l) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = False, cv_both = (True, True))
+            errors_mcp[i,j] = errd1['mse'].mean()
+            errors_l2[i,j] = errd1l['mse'].mean()
+
+    return (errors_mcp, errors_l2)
 
 def test_mcp():
 #create simulated data set with false orthology and run fused scad + visualize mcp penalty at each cv
@@ -2072,7 +2097,7 @@ def plot_bacteria_performance_opt_param():
 
     rseed = random.random()
     for i, lamS in enumerate(lamSs):
-        (aupr, best_lamP, best_lamR, best_lamS, grid) = fg.grid_search_params(data_fn, [lamP], lamRs, [lamS], k, solver='solve_ortho_direct',special_args=None, reverse=False, cv_both=(True,False), exclude_tfs=False, eval_metric='aupr')
+        (aupr, best_lamP, best_lamR, best_lamS, grid) = fg.grid_search_params(out, [lamP], lamRs, [lamS], k, solver='solve_ortho_direct',special_args=None, reverse=False, cv_both=(True,False), exclude_tfs=False, eval_metric='aupr')
         aupr_array[i,0] = aupr
         lamR_array[i,0] = best_lamR
     
@@ -2123,17 +2148,21 @@ def plot_bacteria_performance_priors(lamP=1.0, lamR=5, lamSs=[0,2,4,6], k=20):
 
 #doesn't use fusion and varies the amount of priors used in training
 def plot_bacteria_performance_priors2():
-    lamP = 3
-    lamR = 5
+    lamP1 = 0.3
+    lamP2 = 0.1
+    lamP3 = 0.05
+    lamR = 10
     lamS = 0
     k = 10
+    pct_priors = np.arange(0.2,0.8,0.2)
 
     out = 'data/bacteria_standard'
     metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con']
 
-    no_pr = {m : np.zeros((k, len(pct_priors))) for m in metrics} #subtilis
-    yes_pr = {m : np.zeros((k, len(pct_priors))) for m in metrics} #subtilis
-    pct_priors = np.arange(0,0.8,0.2)
+    pr1 = {m : np.zeros((k, len(pct_priors))) for m in metrics}
+    pr2 = {m : np.zeros((k, len(pct_priors))) for m in metrics}
+    pr3 = {m : np.zeros((k, len(pct_priors))) for m in metrics}
+    no_pr = {m : np.zeros((k, len(pct_priors))) for m in metrics} 
     rseed = random.random()
 
 
@@ -2142,17 +2171,27 @@ def plot_bacteria_performance_priors2():
         for metric in metrics:
             no_pr[metric][:, [i]] = errd1[metric]
 
-        (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse=True, cv_both=(True,False), exclude_tfs=False, pct_priors=pct_priors, verbose=True, seed=rseed)
+        (errd1, errd2) = fg.cv_model_m(out, lamP=lamP1, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse=True, cv_both=(True,False), exclude_tfs=False, pct_priors=priors, verbose=True, seed=rseed)
         for metric in metrics:
-            yes_pr[metric][:, [i]] = errd1[metric]
+            pr1[metric][:, [i]] = errd1[metric]
 
-    to_plot = np.dstack((no_pr['aupr_con'], yes_pr['aupr_con']))
+        (errd1, errd2) = fg.cv_model_m(out, lamP=lamP2, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse=True, cv_both=(True,False), exclude_tfs=False, pct_priors=priors, verbose=True, seed=rseed)
+        for metric in metrics:
+            pr2[metric][:, [i]] = errd1[metric]
 
 
-    linedesc = pd.Series(['no priors','priors'],name='error type')
+        (errd1, errd2) = fg.cv_model_m(out, lamP=lamP3, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse=True, cv_both=(True,False), exclude_tfs=False, pct_priors=priors, verbose=True, seed=rseed)
+        for metric in metrics:
+            pr3[metric][:, [i]] = errd1[metric]
+
+
+    to_plot = np.dstack((no_pr['R2'], pr1['R2'], pr2['R2'], pr3['R2']))
+
+
+    linedesc = pd.Series(['lamP = 1', 'lamP = 0.3', 'lamP = 0.1', 'lamP = 0.05'],name='lamP')
     
-    xs = pd.Series(lamSs, name='lamS')
-    sns.tsplot(to_plot, time=xs, condition=linedesc, value='aupr')
+    xs = pd.Series(pct_priors, name='pct priors')
+    sns.tsplot(to_plot, time=xs, condition=linedesc, value='R2')
     #with file('err_dict1','w') as f:
     #    pickle.dump(err_dict1, f)
     
@@ -2430,9 +2469,42 @@ def net_var():
     sns.tsplot(to_plot, time=xs, value='mse')
     plt.show()
 
-
-
 def pretty_plot_err(x, y, errbar, color=(1,0,0,1)):
     plt.plot(x, y, color=color)
     plt.fill_between(x, y-errbar, y+errbar, color=color)
 
+
+#uses data from test_mcp3; plots lamS for scad and mcp  for true and false orths
+def plot_lamS():
+    a = 0.5
+    lamS = 3
+    out = os.path.join('data','fake_data','test_mcp3','dat_1')
+    (constraints, marks, orth) = ds.load_constraints(out)
+    (b1, genes1, tfs1) = ds.load_network(os.path.join(out, 'beta1'))
+    (b2, genes2, tfs2) = ds.load_network(os.path.join(out, 'beta2'))
+#    con_val = np.array(map(lambda x: x.lam, constraints))
+    true_cons = []
+    false_cons = []
+
+    for i in range(len(constraints)):
+        if marks[i] == 1:
+            true_cons.append(constraints[i])
+        else:
+            false_cons.append(constraints[i])
+
+    scad_cons_t = fr.scad([b1, b2], true_cons, lamS, a=a)
+    return scad_cons_t
+    scad_con_t_val = np.array(map(lambda x: x.lam, scad_cons_t))
+    scad_cons_f = fr.scad([b1, b2], false_cons, lamS, a=a)
+    scad_con_f_val = np.array(map(lambda x: x.lam, scad_cons_f))
+
+    mcp_cons_t = fr.mcp([b1, b2], true_cons, lamS, a=a)
+    mcp_con_t_val = np.array(map(lambda x: x.lam, mcp_cons_t))
+    mcp_cons_f = fr.mcp([b1, b2], false_cons, lamS, a=a)
+    mcp_con_f_val = np.array(map(lambda x: x.lam, mcp_cons_f))
+
+    return (scad_con_t_val, scad_con_f_val, mcp_con_t_val, mcp_con_f_val)
+    plt.hist(scad_con_val)
+    plt.show()
+    plt.hist(mcp_con_val)
+    plt.show()
