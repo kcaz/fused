@@ -147,17 +147,17 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special
             err_dicts[si]['R2'][fold, 0] = R2
 
             
-            aupr = eval_network_pr(Bs[si], genes[si], tfs[si], priors_te[si], exclude_tfs=exclude_tfs, constraints = None)
+            aupr = eval_network_pr(Bs[si], genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = None)
             err_dicts[si]['aupr'][fold,0] = aupr
             
-            aupr_con = eval_network_pr(Bs[si], genes[si], tfs[si], priors_te[si], exclude_tfs=exclude_tfs, constraints = constraints, sub = si)
+            aupr_con = eval_network_pr(Bs[si], genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, sub = si)
             err_dicts[si]['aupr_con'][fold,0] = aupr_con                
 
-            auc = eval_network_roc(Bs[si], genes[si], tfs[si], priors_te[si], exclude_tfs=exclude_tfs, constraints = None)
-            err_dicts[si]['auc'][fold,0] = aupr
+            auc = eval_network_roc(Bs[si], genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = None)
+            err_dicts[si]['auc'][fold,0] = auc
             
-            auc_con = eval_network_roc(Bs[si], genes[si], tfs[si], priors_te[si], exclude_tfs=exclude_tfs, constraints = constraints, sub = si)
-            err_dicts[si]['auc_con'][fold,0] = aupr_con                
+            auc_con = eval_network_roc(Bs[si], genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, sub = si)
+            err_dicts[si]['auc_con'][fold,0] = auc_con
     return err_dicts
 
 
@@ -222,7 +222,7 @@ def prediction_error(X, B, Y, metric, exclude_tfs = True):
     
     if metric == 'R2':
         r2a = 0.0
-        from matplotlib import pyplot as plt
+        #from matplotlib import pyplot as plt
         for c in range(start_ind, Ypred.shape[1]):
             y = Y[:, c]
             yp = Ypred[:, c]
@@ -252,16 +252,15 @@ def prediction_error(X, B, Y, metric, exclude_tfs = True):
             corra += corr
         return corra / (Ypred.shape[1] - start_ind)
 
-#evaluates the area under the precision recall curve, with respect to some given priors
-# exclude_tfs: do not evaluate on tf x tf interactions
-# constraints: if not None, evaluates only on interactions which have fusion constraints
-#sub: name of subproblem. used if constraints != None
-def eval_network_pr(net, genes, tfs, priors, exclude_tfs = False, constraints = None, sub=None):
+
+#returns scores/labels for aupr or auc
+def get_scores_labels(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False, constraints = None, sub=None):
     #from matplotlib import pyplot as plt
-    if len(priors) == 0:
-        return np.nan
+    if len(priors)==0:
+        return ([], [])
     org = priors[0][0].organism
     priors_set = set(priors)
+    tr_priors_set = set(tr_priors)
     gene_to_ind = {genes[x] : x for x in range(len(genes))}
     
     tf_to_ind = {tfs[x] : x for x in range(len(tfs))}
@@ -296,16 +295,19 @@ def eval_network_pr(net, genes, tfs, priors, exclude_tfs = False, constraints = 
         for gi in range(len(genes)):
             if exclude_tfs and gi < len(tfs):
                 continue
-            if constraints != None:
-                coeff = fl.coefficient(sub=sub, r=tfi, c=gi) #potential coefficient
-                
+            coeff = fl.coefficient(sub=sub, r=tfi, c=gi) #potential coefficient
+            if constraints != None:                
                 if not coeff in con_set:
                     continue
-
+            
             tf = tfs[tfi]
             g = genes[gi]
             score = np.abs(net[tfi, gi])
             label = 0
+            if (fl.one_gene(tf, org), fl.one_gene(g, org)) in tr_priors_set:
+                continue            
+            if (fl.one_gene(g, org), fl.one_gene(tf, org)) in tr_priors_set:
+                continue
             if (fl.one_gene(tf, org), fl.one_gene(g, org)) in priors_set:
                 label = 1
             if (fl.one_gene(g, org), fl.one_gene(tf, org)) in priors_set:
@@ -314,6 +316,15 @@ def eval_network_pr(net, genes, tfs, priors, exclude_tfs = False, constraints = 
             
             scores.append(score)#scores[i] = score
             labels.append(label)#labels[i] = label
+    return (scores, labels)
+
+#evaluates the area under the precision recall curve, with respect to some given priors
+# exclude_tfs: do not evaluate on tf x tf interactions
+# constraints: if not None, evaluates only on interactions which have fusion constraints
+#sub: name of subproblem. used if constraints != None
+#tr_priors are the training set priors
+def eval_network_pr(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False, constraints = None, sub=None):
+    (scores, labels) = get_scores_labels(net, genes, tfs, priors, tr_priors, exclude_tfs, constraints, sub)
     if len(scores):
             
         (precision, recall,t) = precision_recall_curve(labels, scores)#prc(scores, labels)
@@ -325,46 +336,8 @@ def eval_network_pr(net, genes, tfs, priors, exclude_tfs = False, constraints = 
 
 #evaluates the area under the roc, with respect to some given priors
 
-def eval_network_roc(net, genes, tfs, priors, exclude_tfs = True, constraints = None, sub=None):
-    if len(priors) == 0:
-        return np.nan
-    org = priors[0][0].organism
-    priors_set = set(priors)
-    scores = []#np.zeros(len(genes)*len(tfs))
-    labels = []#np.zeros(len(genes)*len(tfs))
-    i=0
-    if constraints != None:
-        con_set = set()
-        for con in constraints:
-            if con.c1.sub == sub:
-                con_set.add(con.c1)
-            if con.c2.sub == sub:
-                con_set.add(con.c2)
-        
-    for tfi in range(len(tfs)):
-        for gi in range(len(genes)):
-            if exclude_tfs and gi < len(tfs):
-                continue
-            if constraints != None:
-                coeff = fl.coefficient(sub=sub, r=tfi, c=gi) #potential coefficient
-
-                if not coeff in con_set:
-                    continue
-
-            tf = tfs[tfi]
-            g = genes[gi]
-            score = np.abs(net[tfi, gi])
-            label = 0
-            
-            
-            if (fl.one_gene(tf, org), fl.one_gene(g, org)) in priors_set:
-                label = 1
-            if (fl.one_gene(g, org), fl.one_gene(tf, org)) in priors_set:
-                label = 1
-            scores.append(score)
-            labels.append(label)            
-            i += 1
-
+def eval_network_roc(net, genes, tfs, priors, tr_priors=[], exclude_tfs = True, constraints = None, sub=None):
+    (scores, labels) = get_scores_labels(net, genes, tfs, priors, tr_priors, exclude_tfs, constraints, sub)
     if len(scores):
         (fpr, tpr, t) = roc_curve(labels, scores)
         if any(np.isnan(fpr)) or any(np.isnan(tpr)):
@@ -372,7 +345,7 @@ def eval_network_roc(net, genes, tfs, priors, exclude_tfs = True, constraints = 
         auroc = auc(fpr, tpr)
     else:
         auroc = np.nan
-
+    print auroc
     return auroc
 
 def eval_network_beta(net1, net2):

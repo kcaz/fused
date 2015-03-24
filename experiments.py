@@ -32,7 +32,7 @@ def test_bacteria(lamP, lamR, lamS):
     genes = [bs_genes, ba_genes]
     tfs = [bs_tfs, ba_tfs]
     priors = bs_priors + ba_priors
-    orth = ds.load_orth('data/bacteria_standard/orth',[anthr.name, subt.name])
+    orth = ds.load_orth('data/bacteria_standard/orth',[subt.name, anthr.name])
     organisms = [subt.name, anthr.name]
 
     Bs = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
@@ -2001,6 +2001,9 @@ def plot_bacteria_performanceR(lamP=1.0, lamRs=[1,4,7,10,13], lamS=0, k=20):
             err_dict1[metric][:, [i]] = errd1[metric]
             err_dict2[metric][:, [i]] = errd2[metric]
 
+    auprs = err_dict1['aupr'].mean(axis=0)
+    stes = err_dict1['aupr'].std(axis=0) / err_dict1['aupr'].shape[0]**0.5
+    pretty_plot_err(lamRs, auprs, stes, (1, 0.5, 0, 0.25))
 
 def plot_bacteria_performance_opt_param():
 
@@ -2160,19 +2163,70 @@ def plot_synthetic_performance_priors(lamP=1.0, lamR=5, lamSs=[0,2,4,6,8,10,12],
     #sns.tsplot(to_plot, time=xs, condition=linedesc, value='aupr')
     #with file('err_dict1','w') as f:
     #    pickle.dump(err_dict1, f)
-    plt.plot(lamSs, no_pr['mse'].mean(axis=0), label='no prior')
-    plt.plot(lamSs, yes_pr['mse'].mean(axis=0), label='prior')
+    plt.plot(lamSs, no_pr['aupr'].mean(axis=0), label='no prior')
+    plt.plot(lamSs, yes_pr['aupr'].mean(axis=0), label='prior')
+    plt.xlabel('lamS')
     plt.legend()
     plt.show()
 
+def solve_both_ways(out, lamP, lamR, lamS):
+    d1 = ds.standard_source(out,0)
+    d2 = ds.standard_source(out,1)
+    (e1, t1, genes1, tfs1) = d1.load_data()
+    (e2, t2, genes2, tfs2) = d2.load_data()
+    (constraints, marks, orths) = ds.load_constraints(out)
+    
+    Bs0 = fr.solve_ortho_direct(['uno'],[genes1],[tfs1],[t1],[e1],[],[],lamP, lamR, lamS)
+    Bs1 = fr.solve_ortho_direct(['uno','dos'],[genes1,genes2],[tfs1,tfs2],[t1,t2],[e1,e2],orths,[],lamP, lamR, lamS)
+    plt.matshow(e2)
+    plt.show()
+    plt.matshow(t2)
+    plt.show()
+    return (Bs0[0], Bs1[0])
+    
+def plot_synthetic_beta_err(N = 10, lamP=1, lamR=5,lamSs=[0,1]):
+    
+    N_TF = 20
+    N_G = 30
+    out = os.path.join('data','fake_data','plot_synthetic_beta_err')
 
+    ds.write_fake_data1(N1 = N, N2 = N*3+5, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, pct_fused=1.0, sparse=0.5, fuse_std = 0.0, orth_falsepos=0.0,orth_falseneg=0.0)
+    
+    net1 = ds.load_network(out+'/beta1')[0]
+    net2 = ds.load_network(out+'/beta2')[0]
+    k=2
+    net_errs = []
+    auprs = []
+    for i, lamS in enumerate(lamSs):
+        (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, False), exclude_tfs=False)
+        auprs.append(errd1['aupr'].mean())
+
+        (est1, est2) = fg.fit_model(out, lamP=lamP, lamR=lamR, lamS=lamS)
+        
+        (a, b) = solve_both_ways(out, lamP, lamR, lamS)
+        print 'wtf is going on'
+        print ((a-b)**2).mean()
+        print ((a-est1)**2).mean()
+        print ((est1-net1)**2).mean()
+        print ((est2-net2)**2).mean()
+        plt.matshow(est2)
+        plt.colorbar()
+        plt.show()
+        err = 0
+        err += ( (est1 - net1)**2 ).mean()
+        err += ( (est2 - net2)**2 ).mean()
+        net_errs.append(err)
+    plt.plot(lamSs, net_errs)
+    plt.show()
+    plt.plot(lamSs, auprs)
+    plt.show()
 #plots error dictionaries
 #this is really for debugging plot_bacteria_performance 
 def plot_synthetic_performance(lamP=1.0, lamR=5, lamSs=[0,1], k=20):
-    N = 5
+    N = 10
     N_TF = 20
     N_G = 30
-    out = os.path.join('data','fake_data','plot_synthetic_performance2')
+    out = os.path.join('data','fake_data','plot_synthetic_performance')
     ds.write_fake_data1(N1 = k*N, N2 = 5*k*N, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1,pct_fused=0.8, sparse=0.5, fuse_std = 0.0, orth_falsepos=0.0,orth_falseneg=0.0)
     
     metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con']
@@ -2185,10 +2239,11 @@ def plot_synthetic_performance(lamP=1.0, lamR=5, lamSs=[0,1], k=20):
             err_dict1[metric][:, [i]] = errd1[metric]
             err_dict2[metric][:, [i]] = errd2[metric]
 
-    to_plot = np.dstack((err_dict1['aupr'], err_dict1['aupr_con']))
-    linedesc = pd.Series(['full','constrained'],name='error type')
+    measures = ('auc','auc_con')
+    to_plot = np.dstack((err_dict1[measures[0]], err_dict1[measures[1]]))
+    linedesc = pd.Series(measures,name='error type')
     xs = pd.Series(lamSs, name='lamS')
-    sns.tsplot(to_plot, time=xs, condition=linedesc, value='aupr')
+    sns.tsplot(to_plot, time=xs, condition=linedesc, value=measures[0])
     
     plt.show()
 
@@ -2209,6 +2264,35 @@ def plot_synthetic_performance2(lamP=1.0, lamR=5, lamSs=[0,1], k=20):
     
     for i, lamS in enumerate(lamSs):
         (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, False), exclude_tfs=False)
+        for metric in metrics:
+            err_dict1[metric][:, [i]] = errd1[metric]
+            err_dict2[metric][:, [i]] = errd2[metric]
+
+    to_plot = np.dstack((err_dict1['aupr'], err_dict1['aupr_con']))
+    linedesc = pd.Series(['full','constrained'],name='error type')
+    xs = pd.Series(lamSs, name='lamS')
+    sns.tsplot(to_plot, time=xs, condition=linedesc, value='aupr')
+    
+    plt.show()
+
+#plots error dictionaries
+#this one includes lots of incorrect orthology, and solves using em
+def plot_synthetic_performance_em(lamP=1.0, lamR=5, lamSs=[0,1], k=20):
+    N = 10
+    N_TF = 5
+    N_G = 30
+    out = os.path.join('data','fake_data','plot_synthetic_performance_em')
+    ds.write_fake_data1(N1 = k*N, N2 = 5*k*N, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1,pct_fused=0.8, sparse=0.5, fuse_std = 0.0, orth_falsepos=0.75,orth_falseneg=0.0)
+    (constraints, marks, orths) = ds.load_constraints(out)
+
+    metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con']
+    err_dict1 = {m : np.zeros((k, len(lamSs))) for m in metrics} #subtilis
+    err_dict2 = {m : np.zeros((k, len(lamSs))) for m in metrics} #anthracis
+
+    
+    for i, lamS in enumerate(lamSs):
+        sargs={'em_it': 5,'f':1,'uf':1,'marks':marks}
+        (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct_em', reverse = True, cv_both = (True, False), exclude_tfs=False, special_args=sargs)
         for metric in metrics:
             err_dict1[metric][:, [i]] = errd1[metric]
             err_dict2[metric][:, [i]] = errd2[metric]
@@ -2252,8 +2336,7 @@ def plot_synthetic_performance3(lamP=3.0, lamR=5, lamSs=[0,1], k=20):
 
 
 #plots distributions of real and fake beta differences, either for some sample data, or for the data contained in the folder out  
-def plot_beta_diffs(out=None):
-
+def plot_beta_diffs(out=None, B0=None, B1=None, add_fake=False,scale=1.0):
     N = 10
     N_TF = 1
     N_G = 500
@@ -2261,21 +2344,49 @@ def plot_beta_diffs(out=None):
         out = os.path.join('data','fake_data','beta_diffs_dist')
         ds.write_fake_data1(N1 = N, N2 = N, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1,pct_fused=0.5, sparse=0.0, fuse_std = 0.1, orth_falsepos=0.5,orth_falseneg=0.5)
 
-    (B0, _, _) = ds.load_network(os.path.join(out, 'beta1'))
-    (B1, _, _) = ds.load_network(os.path.join(out, 'beta2'))
+    if B0==None:
+        (B0, _, _) = ds.load_network(os.path.join(out, 'beta1'))
+    if B1==None:
+        (B1, _, _) = ds.load_network(os.path.join(out, 'beta2'))
     (constraints, marks, orths) = ds.load_constraints(out)
     marks = np.array(marks)
     diffs = fr.beta_diff([B0, B1], constraints)
-    print marks
-    if (marks==True).sum():
-        sns.kdeplot(diffs[marks == True], shade=True, label='real')
-    if (marks==False).sum():
-        sns.kdeplot(diffs[marks == False], shade=True, label='fake')
+    
+    real_diffs =diffs[marks == True] 
+    fake_diffs = diffs[marks == False]
+    print len(real_diffs)
+
+    if add_fake:
+        fakes = np.zeros(real_diffs.shape)
+        for i in range(len(real_diffs)/2): #constraints are doubled
+            r1 = random.randint(0,B0.shape[0]-1)
+            r2 = random.randint(0,B1.shape[0]-1)
+            c1 = random.randint(0,B0.shape[1]-1)
+            c2 = random.randint(0,B1.shape[1]-1)
+            
+            diff = B0[r1, c1] - B1[r2, c2]
+            fakes[i] = diff
+            fakes[i + len(real_diffs)/2] = -diff
+        fake_diffs = np.hstack((fake_diffs, fakes))
+    
+    real_diffs *= scale
+    fake_diffs *= scale
+    #bins = np.linspace(-0.1, 0.1, 100)
+    if len(real_diffs):
+        #plt.hist(real_diffs, bins, histtype="stepfilled",alpha=0.5,label='real')
+        sns.kdeplot(real_diffs, shade=True, label='real')
+    if len(fake_diffs):
+        #plt.hist(fake_diffs, bins, histtype="stepfilled",alpha=0.5,label='fake')
+        sns.kdeplot(fake_diffs, shade=True, label='fake')
+    plt.xlabel('Delta Beta')
+    
+        
     plt.legend()
     #plt.figure()
     #plt.hist(diffs[marks==True])
     #print np.std(diffs)
     plt.show()
+    
 
     return diffs
 
@@ -2476,3 +2587,42 @@ def plot_lamS():
     plt.hist(mcp_con_val)
     plt.show()
 
+def show_penalty():
+    lamS = 1
+    a=1.0
+    def miniscad_dx(theta):
+        theta = np.abs(theta)
+        if theta < a/2:
+            return theta * lamS
+        if theta >= a/2:
+            return lamS * max(0, (a - theta))
+    def miniL2dx(theta):
+        return theta*lamS
+
+    xs = np.linspace(0,1.5,100)
+    dms = map(miniscad_dx, xs)
+    dl2 = map(miniL2dx, xs)
+    plt.plot(xs, dms)
+    plt.plot(xs, dl2,'--')
+    plt.legend(('SCAD-like penalty','L2'))
+    plt.xlabel('|B0 - B1|')
+    plt.ylabel('derivative of penalty')
+    plt.plot([a/2,a/2],[0,0.3],color=(0.5,0.5,0.5))
+    plt.show()
+    plt.plot(xs, (xs[1]-xs[0])*np.cumsum(dms))
+    #plt.show()
+    plt.plot(xs, (xs[1]-xs[0])*np.cumsum(dl2),'--')
+    
+    plt.legend(('SCAD-like penalty', 'L2'))
+    plt.xlabel('|B0 - B1|')
+    plt.ylabel('penalty')
+    plt.show()
+
+    plt.plot(xs, (xs[1]-xs[0])*np.cumsum(dms))
+    #plt.show()
+    plt.plot(xs, (xs[1]-xs[0])*np.cumsum(dl2),'--')
+    plt.plot([a/2,a/2],[0,0.3],color=(0.5,0.5,0.5))
+    plt.legend(('SCAD-like penalty', 'L2'))
+    plt.xlabel('|B0 - B1|')
+    plt.ylabel('penalty')
+    plt.show()

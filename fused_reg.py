@@ -772,8 +772,8 @@ def solve_em(Xs, Ys, fuse_con, ridge_con, lamR, lamS, em_it, special_args=None):
             sns.kdeplot(lams[marks == False], shade=True, label='fake')
     
 
-        #fuse_con = em(Bs, fuse_con, lamS, f, uf, marks=marks)
-        fuse_con = em(Bs, fuse_con, lamS, 0.5, marks=marks)
+        fuse_con = em(Bs, fuse_con, lamS, f, uf, marks=marks)
+        #fuse_con = em(Bs, fuse_con, lamS, 0.5, marks=marks)
         Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
     if verbose:    
         plt.show()#lock=False)
@@ -848,7 +848,7 @@ def em(Bs_init, fuse_cons, lamS, f, uf, marks=None):
     beta_diffs = beta_diff(Bs_init, fuse_cons)
      
     #disabling update of means seems to be broken
-    g.set_params(params='c')
+    g.set_params(params='wc')
     g.init_params = 'w'
     #g.n_iter = 0
     #g.fit(beta_diffs)
@@ -892,24 +892,29 @@ def em(Bs_init, fuse_cons, lamS, f, uf, marks=None):
         plt.close()
         plt.subplot(221)
         sns.kdeplot(beta_diffs, shade=True)
-        
+        plt.xlabel('fused penalty difference')
         
         plt.subplot(222)
         if (pred == cl_fu).sum():
             sns.kdeplot(beta_diffs[pred == cl_fu], shade=True)
         if (pred == cl_un).sum():
             sns.kdeplot(beta_diffs[pred == cl_un], shade=True)
-        
+        plt.xlabel('fused penalty difference')
         plt.subplot(223)
         
+        sns.kdeplot(pens[marks == True], shade=True, label='real')
+        sns.kdeplot(pens[marks == False], shade=True, label='fake')
+        plt.xlabel('lambda')
+        #plt.plot(beta_diffs, pens,'o')
         
-        plt.plot(beta_diffs, pens,'o')
-
 
         plt.subplot(224)
         sns.kdeplot(beta_diffs[marks == True], shade=True, label='real')
         sns.kdeplot(beta_diffs[marks == False], shade=True, label='fake')
+        plt.xlabel('fused penalty difference')
         plt.legend()
+
+
         plt.show()
         plt.show(block=False)
     return new_cons
