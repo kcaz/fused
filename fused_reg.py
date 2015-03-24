@@ -997,12 +997,14 @@ def mcp(Bs_init, fuse_constraints, lamS, lamW=None, a=2):
         theta_init = np.abs(b_init_1 - b_init_2)
 
         if np.abs(theta_init) <= lamS*a:
-            nlamS = np.abs(lamS-1/a)
+            nlamS = lamS*theta_init - (theta_init**2)/(2*a)
+            #nlamS = np.abs(lamS-1/a)
             #nlamS = (lamS*theta_init - theta_init/a) / theta_init
             #nlamS = lamS*(theta_init**2) - (theta_init**2)/(2*a) / theta_init
 
         else:
-            nlamS = ((a*lamS**2)/(2*theta_init**2)) #/ theta_init
+            nlamS = (a*lamS**2)/2
+            #nlamS = ((a*lamS**2)/(2*theta_init**2)) #/ theta_init
 
         new_con = constraint(con.c1, con.c2, nlamS)
         new_fuse_constraints.append(new_con)

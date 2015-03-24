@@ -1054,8 +1054,7 @@ def scad(Bs_init, fuse_constraints, lamS, lamW=None, a=3.7):
             nlamS = lamS
         else:
             nlamS = scad2_prime(theta_init, lamS, a) / theta_init
-            if math.isnan(nlamS):
-                print theta_init
+
         new_con = constraint(con.c1, con.c2, nlamS)
         new_fuse_constraints.append(new_con)
     return new_fuse_constraints

@@ -185,7 +185,7 @@ def test_scad_opt_params():
         for i, N in enumerate(orth_err):
             out = os.path.join('data','fake_data','test_scad','dat_'+str(N)+str(p))
             ds.write_fake_data1(N1 = 20, N2 = 20, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = N, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.1)
-            lamR = 2
+            lamR = 5
             lamP = 1.0 #priors don't matter
             for j, lamS in enumerate(lamSs):
                 (errd1l, errd2l) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = False, cv_both = (True, True))
@@ -354,19 +354,19 @@ def test_mcp():
      
     N_TF = 10
     N_G = 200
-    amt_fused = 1.0
-    orth_err = 0.3
-    lamS = 0.25
+    amt_fused = 0.5
+    orth_err = 1.0
+    lamS = 2
 
     if not os.path.exists(os.path.join('data','fake_data','test_mcp')):
         os.mkdir(os.path.join('data','fake_data','test_mcp'))
 
     out = os.path.join('data','fake_data','test_mcp','ortherr'+str(orth_err))
-    ds.write_fake_data1(N1 = 10*10, N2 = 10*10, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = orth_err, orth_falseneg = orth_err, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.1)
-    lamR = 0.1
+    ds.write_fake_data1(N1 = 2, N2 = 20, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = orth_err, orth_falseneg = orth_err, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.1)
+    lamR = 5
     lamP = 1.0 #priors don't matter
 
-    k = 10
+    k = 2
     ds1 = ds.standard_source(out,0)
     ds2 = ds.standard_source(out,1)
     organisms = [ds1.name, ds2.name]
@@ -1735,7 +1735,7 @@ def L2fusiontest():
     pct_fused = list(np.arange(0,1.0,0.1))
     reps = 50
 
-    lamRs = list(np.arange(0,10.0,1.0))
+    lamRs = list(np.arange(0,5.0,0.5))
     lamSs = list(np.arange(0,10.0,1.0)) 
     lamP = 1.0
     mse_array = np.zeros((len(pct_fused),len(lamSs)))
@@ -1743,14 +1743,14 @@ def L2fusiontest():
     best_Rs = np.zeros((len(pct_fused),len(lamSs)))
 
     out1 = os.path.join('data','fake_data','L2fusiontest')
-    k = 5#cv folds
+    k = 2#cv folds
     if not os.path.exists(out1):
         os.mkdir(out1)
 
     for p in range(reps):
         for i, N in enumerate(pct_fused):
             out2 = os.path.join(out1,'dat_'+str(N)+str(p))
-            ds.write_fake_data1(N1=20, N2=20, out_dir = out2, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.1, pct_fused=N)        
+            ds.write_fake_data1(N1=10, N2=10, out_dir = out2, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.1, pct_fused=N)        
             lamP = 1.0 #priors don't matter
             for j, lamS in enumerate(lamSs):
                 (mse, best_lamP, best_lamR, best_lamS, grid) = fg.grid_search_params(out2, lamP=[lamP], lamR=lamRs, lamS=[lamS], k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
@@ -1765,36 +1765,37 @@ def L2fusiontest():
     sns.heatmap(mse_df)
     plt.show()
 
-
-def plot_L2fusion():
-
-    lamSs = list(np.arange(0,3.0,0.1))
-    lamSss = map(lambda x: float('%.1f' % round(lamSs[x],1)), range(len(lamSs)))
-    mses = np.zeros((10,len(list(np.arange(0,3.0,0.1)))))
-    mses += 4
-    bestRs = np.zeros((10,len(list(np.arange(0,3.0,0.1))))) 
+#makes heatmap showing effect of lamS on networks in L2 fusion; does not use optimal lamR
+def L2fusion_quick():    
+    N_TF = 20
+    N_G = 200
     pct_fused = list(np.arange(0,1.0,0.1))
-    out1 = os.path.join('data','fake_data','L2fusiontest')
+
+    lamR = 2
+    lamSs = list(np.linspace(0,10,10)) 
+    lamP = 1.0
+    aupr_array = np.zeros((len(pct_fused),len(lamSs)))
+
+    out1 = os.path.join('data','fake_data','L2fusion_quick')
+    k = 2#cv folds
+    if not os.path.exists(out1):
+        os.mkdir(out1)
 
     for i, N in enumerate(pct_fused):
-        print i
-        out2 = os.path.join(out1,'dat_'+str(N),'results')
-        f = file(out2)
-        f2 = f.read().split('\n')[1:-1]
-        f3 = [line for line in f2 if line]
-        f.close()
-        
-        for j in range(len(f2)):
-            params = f2[j].split('\t')[1].split(' ')
-            lamR = params[1].split('=')[1]
-            lamS = params[2].split('=')[1]
-            mse = f2[j].split('\t')[2]
-            lamSind = lamSss.index(float(lamS))
-            if float(mse) < float(mses[i, lamSind]):
-                mses[i, lamSind] = float(mse)
-                bestRs[i, lamSind] = float(lamR)
+        out2 = os.path.join(out1,'dat_'+str(N))
+        ds.write_fake_data1(N1=10, N2=10, out_dir = out2, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.1, pct_fused=N)        
+        lamP = 1.0 #priors don't matter
+        seed = 10
+        for j, lamS in enumerate(lamSs):
+            (errd1, errd2) = fg.cv_model_m(out2, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_args=None, reverse=False, cv_both=(True,True), exclude_tfs=True, pct_priors=0, seed=seed, verbose=False)
+            #print errd1['corr'].mean()
+            print errd1['mse'].mean()
+            aupr_array[i,j] = errd1['mse'].mean()
 
-    return (mses, bestRs)
+    return (aupr_array)
+    mse_df = pd.DataFrame(mse_array, index=pct_fused, columns=lamSs)
+    sns.heatmap(mse_df)
+    plt.show()
 
 
 #this looks at the distributions Betas for +/- priors, and an equal number of non-priors in subtilis
@@ -2353,25 +2354,29 @@ def plot_beta_diffs(out=None):
 #plots performance as a function of the number of CV folds being used
 def synthetic_performance_by_k(lamP=1, lamR=2, lamS=0, ks=[20,15,10,5,2]):
 
-    N = 5
+    N = 2
     N_TF = 20
-    N_G = 30
+    N_G = 200
     out = os.path.join('data','fake_data','synthetic_performance_by_k')
     k = max(ks)
     ds.write_fake_data1(N1 = k*N, N2 = k*N, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.5, fuse_std = 0.0)
-    auprs = np.zeros(len(ks))
+    #auprs = np.zeros(len(ks))
+    mses = np.zeros(len(ks))
     stes = np.zeros(len(ks))
 
         
     for i, k in enumerate(ks):
         (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse=True, cv_both=(True,False), exclude_tfs=False, pct_priors=0.0, verbose=True)
-        aupr = errd1['aupr']
-        auprs[i] = aupr.mean()
-        stes[i] = np.std(aupr) / k**0.5
+        #aupr = errd1['aupr']
+        #auprs[i] = aupr.mean()
+        #stes[i] = np.std(aupr) / k**0.5
+        mse = errd1['mse']
+        mses[i] = mse.mean()
+        stes[i] = np.std(mse) / k**0.5
     ks = 1.0 / np.array(ks)
-    pretty_plot_err(ks, auprs, stes, (1, 0.5, 0, 0.25))
+    pretty_plot_err(ks, mses, stes, (1, 0.5, 0, 0.25))
     plt.xlabel('fraction of data used')
-    plt.ylabel('aupr')
+    plt.ylabel('mean squared error')
     plt.show()
 
 #plots performance as a function of the number of CV folds being used
@@ -2493,17 +2498,16 @@ def plot_lamS():
             false_cons.append(constraints[i])
 
     scad_cons_t = fr.scad([b1, b2], true_cons, lamS, a=a)
-    return scad_cons_t
-    scad_con_t_val = np.array(map(lambda x: x.lam, scad_cons_t))
+    scad_t = np.array(map(lambda x: x.lam, scad_cons_t))
     scad_cons_f = fr.scad([b1, b2], false_cons, lamS, a=a)
-    scad_con_f_val = np.array(map(lambda x: x.lam, scad_cons_f))
+    scad_f = np.array(map(lambda x: x.lam, scad_cons_f))
 
-    mcp_cons_t = fr.mcp([b1, b2], true_cons, lamS, a=a)
-    mcp_con_t_val = np.array(map(lambda x: x.lam, mcp_cons_t))
-    mcp_cons_f = fr.mcp([b1, b2], false_cons, lamS, a=a)
-    mcp_con_f_val = np.array(map(lambda x: x.lam, mcp_cons_f))
+    mcp_cons_t = fr.mcp([b1, b2], true_cons, lamS, a=0.2)
+    mcp_t = np.array(map(lambda x: x.lam, mcp_cons_t))
+    mcp_cons_f = fr.mcp([b1, b2], false_cons, lamS, a=0.2)
+    mcp_f = np.array(map(lambda x: x.lam, mcp_cons_f))
 
-    return (scad_con_t_val, scad_con_f_val, mcp_con_t_val, mcp_con_f_val)
+    return (scad_t, scad_f, mcp_t, mcp_f)
     plt.hist(scad_con_val)
     plt.show()
     plt.hist(mcp_con_val)
