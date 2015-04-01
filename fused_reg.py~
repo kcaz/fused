@@ -475,7 +475,8 @@ def solve_ortho_lasso(organisms, gene_ls, tf_ls, Xs, Ys, Xs_t, Ys_t, orth, prior
 #s_it defines the number of scad-like iterations to do
 def solve_ortho_direct_scad(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS, s_it, special_args=None):
     ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)    
-    fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
+    #fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
+    fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS=0)
     Bs = solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, s_it=s_it,special_args=special_args)
     return Bs
 
@@ -772,8 +773,8 @@ def solve_em(Xs, Ys, fuse_con, ridge_con, lamR, lamS, em_it, special_args=None):
             sns.kdeplot(lams[marks == False], shade=True, label='fake')
     
 
-        #fuse_con = em(Bs, fuse_con, lamS, f, uf, marks=marks)
-        fuse_con = em(Bs, fuse_con, lamS, 0.5, marks=marks)
+        fuse_con = em(Bs, fuse_con, lamS, f, uf, marks=marks)
+        #fuse_con = em(Bs, fuse_con, lamS, 0.5, marks=marks)
         Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
     if verbose:    
         plt.show()#lock=False)
@@ -814,7 +815,7 @@ def gaussian_density(u, s2, x):
 
 
 
-def em(Bs_init, fuse_cons, lamS, pct_fused, marks=None):
+def em_old(Bs_init, fuse_cons, lamS, pct_fused, marks=None):
     pct_fused = 0.9
     beta_diffs = beta_diff(Bs_init, fuse_cons)
     c_init = np.var(beta_diffs)
@@ -836,8 +837,8 @@ def em(Bs_init, fuse_cons, lamS, pct_fused, marks=None):
     
     return fuse_cons
 
-def em_old2(Bs_init, fuse_cons, lamS, f, uf, marks=None):
-    verbose=False
+def em(Bs_init, fuse_cons, lamS, f, uf, marks=None):
+    verbose=True
     if verbose:
         from matplotlib import pyplot as plt
         import seaborn as sns
@@ -848,7 +849,7 @@ def em_old2(Bs_init, fuse_cons, lamS, f, uf, marks=None):
     beta_diffs = beta_diff(Bs_init, fuse_cons)
      
     #disabling update of means seems to be broken
-    g.set_params(params='c')
+    g.set_params(params='wc')
     g.init_params = 'w'
     #g.n_iter = 0
     #g.fit(beta_diffs)
@@ -892,24 +893,29 @@ def em_old2(Bs_init, fuse_cons, lamS, f, uf, marks=None):
         plt.close()
         plt.subplot(221)
         sns.kdeplot(beta_diffs, shade=True)
-        
+        plt.xlabel('fused penalty difference')
         
         plt.subplot(222)
         if (pred == cl_fu).sum():
             sns.kdeplot(beta_diffs[pred == cl_fu], shade=True)
         if (pred == cl_un).sum():
             sns.kdeplot(beta_diffs[pred == cl_un], shade=True)
-        
+        plt.xlabel('fused penalty difference')
         plt.subplot(223)
         
+        sns.kdeplot(pens[marks == True], shade=True, label='real')
+        sns.kdeplot(pens[marks == False], shade=True, label='fake')
+        plt.xlabel('lambda')
+        #plt.plot(beta_diffs, pens,'o')
         
-        plt.plot(beta_diffs, pens,'o')
-
 
         plt.subplot(224)
         sns.kdeplot(beta_diffs[marks == True], shade=True, label='real')
         sns.kdeplot(beta_diffs[marks == False], shade=True, label='fake')
+        plt.xlabel('fused penalty difference')
         plt.legend()
+
+
         plt.show()
         plt.show(block=False)
     return new_cons
@@ -997,12 +1003,14 @@ def mcp(Bs_init, fuse_constraints, lamS, lamW=None, a=2):
         theta_init = np.abs(b_init_1 - b_init_2)
 
         if np.abs(theta_init) <= lamS*a:
-            nlamS = np.abs(lamS-1/a)
+            nlamS = lamS*theta_init - (theta_init**2)/(2*a)
+            #nlamS = np.abs(lamS-1/a)
             #nlamS = (lamS*theta_init - theta_init/a) / theta_init
             #nlamS = lamS*(theta_init**2) - (theta_init**2)/(2*a) / theta_init
 
         else:
-            nlamS = ((a*lamS**2)/(2*theta_init**2)) #/ theta_init
+            nlamS = (a*lamS**2)/2
+            #nlamS = ((a*lamS**2)/(2*theta_init**2)) #/ theta_init
 
         new_con = constraint(con.c1, con.c2, nlamS)
         new_fuse_constraints.append(new_con)
@@ -1012,11 +1020,14 @@ def mcp(Bs_init, fuse_constraints, lamS, lamW=None, a=2):
 
 #iteratively adjusts fusion constraint weight to approximate saturating penalty
 def solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, s_it, special_args=None):    
+    Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
     if special_args and 'a' in special_args:
         a = special_args['a']
+    elif special_args and 'per' in special_args:
+        a = pick_a(Bs, fuse_con, special_args['per'])
+        print lamS
     else:
         a = 3.7
-    Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
     for i in range(s_it-1):
         fuse_con = scad(Bs, fuse_con, lamS, a=a)
         Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
@@ -1058,6 +1069,17 @@ def scad(Bs_init, fuse_constraints, lamS, lamW=None, a=3.7):
         new_con = constraint(con.c1, con.c2, nlamS)
         new_fuse_constraints.append(new_con)
     return new_fuse_constraints
+
+def pick_a(Bs_init, fuse_constraints, percentile):
+    import seaborn as sns
+    from matplotlib import pyplot as plt
+    deltabetas = beta_diff(Bs_init, fuse_constraints)
+    a = np.percentile(deltabetas, percentile)
+    print percentile
+    print a
+    #sns.kdeplot(deltabetas, shade=True)
+    #plt.show()
+    return a
 
 
 #solves W = argmin_W ((XW - Y)**2).sum() + constraint related terms iteratively

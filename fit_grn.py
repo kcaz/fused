@@ -57,7 +57,7 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special
     dss = [ds1, ds2]
 
     #set up containers for results
-    metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con']
+    metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con', 'B_mse']
     err_dict1 = {m : np.zeros((k, 1)) for m in metrics}
     err_dict2 = {m : np.zeros((k, 1)) for m in metrics}
     err_dicts = [err_dict1, err_dict2] #for indexing
@@ -145,7 +145,6 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special
 
             R2 = prediction_error(Xs_te[si], Bs[si], Ys_te[si], 'R2', exclude_tfs=exclude_tfs)
             err_dicts[si]['R2'][fold, 0] = R2
-
             
             aupr = eval_network_pr(Bs[si], genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = None)
             err_dicts[si]['aupr'][fold,0] = aupr
@@ -158,6 +157,13 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special
             
             auc_con = eval_network_roc(Bs[si], genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, sub = si)
             err_dicts[si]['auc_con'][fold,0] = auc_con
+
+            betafile = os.path.join(data_fn, 'beta%d' % (si+1))
+            if os.path.exists(betafile):
+                B_mse = mse_B(Bs[si], betafile)
+                err_dicts[si]['B_mse'][fold,0] = B_mse
+            else:
+                print 'hi'
     return err_dicts
 
 
@@ -207,6 +213,21 @@ def cv_model5(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_
     print 'DEPRACATED cv_model5'
 
 #SECTION: -------------------------CODE FOR EVALUATING THE OUTPUT
+
+def mse_B(Bpred, net_fn, exclude_tfs = True):
+    (B, genes, tfs) = ds.load_network(net_fn)
+    num_tfs = len(tfs)
+    if exclude_tfs:
+        start_ind = num_tfs
+    else:
+        start_ind = 0
+    msea = 0.0
+    for c in range(start_ind, B.shape[1]):
+        bp = Bpred[:,c]
+        b = B[:,c]
+        mse = ((bp - b)**2).mean()
+        msea += mse
+    return msea/(B.shape[1] - start_ind)
 
 #model prediction error, using one of several metrics
 #exclude_tfs doesn't evaluate predictions of the tfs, and assumes that TFs come before all other genes.
@@ -345,7 +366,6 @@ def eval_network_roc(net, genes, tfs, priors, tr_priors=[], exclude_tfs = True, 
         auroc = auc(fpr, tpr)
     else:
         auroc = np.nan
-    print auroc
     return auroc
 
 def eval_network_beta(net1, net2):

@@ -124,7 +124,7 @@ def generate_timeseries(tf_mat, exp_mat, td, tc):
     td_exp_mat = np.zeros((td.shape[0], exp_mat.shape[1]))
     
     for td_row in range(td.shape[0]):
-        (fr, to, s) = td[td_row, :]
+        (to, fr, s) = td[td_row, :]
         #print 'current: %d, preceding: %d' % (to, fr)
         T1 = tf_mat[int(fr), :]
         X1 = exp_mat[int(fr), :]

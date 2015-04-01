@@ -2,13 +2,13 @@ import numpy as np
 import fused_reg as fr
 import random
 import os
-
+import collections
 #SECTION: -------------UTILITY FUNCTIONS------------------------------
 #quantile normalizes conditions AND scales to mean zero/unit variance
 #AND DOES NOT divides expression matrices by the square root of the sample size
 #CHANGED! mean subtract after quantile normalizing
 def normalize(exp_a, mean_zero = False):
-        
+    
     canonical_dist = np.sort(exp_a, axis=1).mean(axis=0)
     #if mean_zero:
     #    canonical_dist = canonical_dist - canonical_dist.mean()
@@ -69,9 +69,14 @@ class data_source():
 
     #returns a list of k (approximately) equally sized random folds.
     #folds are lists of integers referring to condition numbers 
-    def partition_data(self,k):
+    def partition_data(self,k, seed=None):
+        state = random.getstate() #don't want to set the seed for everything
+        if not seed == None:            
+            random.seed(seed)
         conds = np.arange(self.N)
         random.shuffle(conds)
+        random.setstate(state)
+
         incr = float(self.N)/k
         upper_bounds = np.arange(k+1) * self.N / float(k)
         partitions = []
@@ -95,83 +100,112 @@ class data_source():
         print 'NOT IMPLEMENTED!'
         return None
 
+#rearranges genes (and corresponding expression matrices) so that tfs appear first, in the order that they appear within genes
+def arrange_tfs_first(tfs, genes, tf_mat, exp_mat):
+    tfs_set = set(tfs)
+            #compute the (gene) indices of tfs and non-tfs
+    tf_indices = filter(lambda x: genes[x] in tfs_set, range(len(genes)))
+    ntf_indices = filter(lambda x: not genes[x] in tfs_set, range(len(genes)))
+
+    new_order = tf_indices + ntf_indices
+            
+    tfs = map(lambda x: genes[x], tf_indices)            
+    genes = map(lambda x: genes[x], new_order)
+    
+    tf_mat = exp_mat[:, tf_indices]            
+    exp_mat = exp_mat[:, new_order]
+    return (tfs, genes, tf_mat, exp_mat)
+
+#turns expression matrices along with time-difference arrays that specify
+#cond1, cond2, gap into time difference approximations of the derivative according to
+# [X(t_2) - X(t_1)] / (t_2 - t_1) + x(t_1)/ tc
+def generate_timeseries(tf_mat, exp_mat, td, tc):
+    td_tf_mat = np.zeros((td.shape[0], tf_mat.shape[1]))
+    td_exp_mat = np.zeros((td.shape[0], exp_mat.shape[1]))
+    
+    for td_row in range(td.shape[0]):
+        (fr, to, s) = td[td_row, :]
+        #print 'current: %d, preceding: %d' % (to, fr)
+        T1 = tf_mat[int(fr), :]
+        X1 = exp_mat[int(fr), :]
+        X2 = exp_mat[int(to), :]
+        #print X2
+        #print X1
+        Xdt = (X2 - X1)/s
+        Xtc = X1 / tc
+        #print Xdt
+        #print Xtc
+        td_tf_mat[td_row, :] = T1
+        td_exp_mat[td_row, :] = Xdt + Xtc
+        #print 'using for row %d' % td_row
+        #print Xdt + Xtc
+    return (td_tf_mat, td_exp_mat)
+
 #this class assumes directory layout we use for generated data
 class standard_source(data_source):
     def __init__(self, datadir, org_ind):
         #strip last separator
         if datadir[-1] == os.sep:
             datadir = datadir[0:-1]
-        if org_ind == 0:
-            expr_f = file(datadir + os.sep + 'expression1')
-            prior_fn = os.path.join(datadir,'priors1')
-            tfs_f = file(datadir + os.sep + 'tfnames1')
-            name_key = 'organism1'
-        else:
-            expr_f = file(datadir + os.sep + 'expression2')
-            prior_fn = os.path.join(datadir,'priors2')
-            tfs_f = file(datadir + os.sep + 'tfnames2')
-            name_key = 'organism2'
-        #first get the name by scanning the description
-        descr_f = file(datadir + os.sep + 'description')
-        fslt = map(lambda x: x.split('\t'), descr_f.read().split('\n'))
+        
+        expr_fn = os.path.join(datadir, 'expression%d' % (org_ind+1))
+        prior_fn = os.path.join(datadir,'priors%d') % (org_ind+1)
+        tfs_fn = os.path.join(datadir, 'tfnames%d') % (org_ind+1)
+        time_diff_fn = os.path.join(datadir,'time_diffs%d' % (org_ind+1))
+        name_key = 'organism%d' % (org_ind+1)
+        tc_key = 'tc%d' % (org_ind+1)
+        
         name = 'dunno'
-        for entry in fslt:
-            if len(entry) == 2:
-                if entry[0] == name_key:
-                    name = entry[1]
-        descr_f.close()
+        
+        def spl_ln_t(s):
+            return map(lambda x: x.split('\t'), filter(len, s.split('\n')))
+        #scan description file for keys
+        with file(os.path.join(datadir, 'description')) as descr_f:
+            fslt = spl_ln_t(descr_f.read())
+            for entry in fslt:
+                if len(entry) == 2:
+                    if entry[0] == name_key:
+                        name = entry[1]
+                    if entry[0] == tc_key:
+                        tc = float(entry[1])
         #now get the expression data
-        expr_fs = expr_f.read()
-        expr_f.close()
-        expr_fsn = filter(len, expr_fs.split('\n'))
-        expr_fsnt = map(lambda x: x.split('\t'), expr_fsn)
-        
-        genes = expr_fsnt[0]
-        nconds = len(expr_fsnt)-1
-        
-        exp_mat = np.zeros((nconds, len(genes)))
-        for row in range(nconds):
-            expr = expr_fsnt[row + 1]
-            expr_arr = np.array(expr)
-            exp_mat[row,:] = expr_arr
+        with file(expr_fn) as expr_f:
+            expr_fsnt = spl_ln_t(expr_f.read())
+            genes = expr_fsnt[0]
+            nconds = len(expr_fsnt)-1
+            exp_mat = np.zeros((nconds, len(genes)))
+            for row in range(nconds):
+                expr = expr_fsnt[row + 1]
+                expr_arr = np.array(expr)
+                exp_mat[row,:] = expr_arr
         #now get the tf names
-        tfs_fs = tfs_f.read()
-        tfs_f.close()
-        tfs_fsn = filter(len, tfs_fs.split('\n'))
+        with file(tfs_fn) as tfs_f:
+            tfs_fs = tfs_f.read()
+            tfs = filter(len, tfs_fs.split('\n'))
         
-        tfs = tfs_fsn
-        #create a map from gene to its index
+        #read the time difference file
+        with file(time_diff_fn) as time_diff_f:
+            tdlt = spl_ln_t(time_diff_f.read())
+            td = np.array(tdlt).astype(float)
+
+        
+        #now we extract the transcription factor expression matrix
         gene_to_ind = {genes[i] : i for i in range(len(genes))}
         tf_inds = map(lambda x: gene_to_ind[x], tfs)
-
-        #now pull out the tfs        
-        
-        
         tf_mat = exp_mat[:, np.array(tf_inds)]
         
-        tfs_come_first = True
-        #rearrange the gene indices and tf indices so that tfs come first, in the order that they appear in the original list of genes, followed by genes in the order of the original list of genes. This should not affect network inference performance, but simplifies some secondary tests
+        #rearrange order so that tfs appear first
+        (tfs, genes, tf_mat, exp_mat) = arrange_tfs_first(tfs, genes, tf_mat, exp_mat)
 
-        if tfs_come_first:
-            tfs_set = set(tfs)
-            #compute the (gene) indices of tfs and non-tfs
-            tf_indices = filter(lambda x: genes[x] in tfs_set, range(len(genes)))
-            ntf_indices = filter(lambda x: not genes[x] in tfs_set, range(len(genes)))
-            new_order = tf_indices + ntf_indices
-            
-            tfs = map(lambda x: genes[x], tf_indices)            
-            genes = map(lambda x: genes[x], new_order)
-            
-            exp_mat = exp_mat[:, new_order]
-            
-
->>>>>>> 775931ac00355373b6e9b25efe3579444ce14107
-        #note: adding normalization 
-        self.exp_mat = normalize(exp_mat, True)
-        self.tf_mat = normalize(tf_mat, False)
+        (tf_mat, exp_mat) = generate_timeseries(tf_mat, exp_mat, td, tc)
+        #DO NOT normalize here
+        #exp_mat = normalize(exp_mat, True)
+        #tf_mat = normalize(tf_mat, False)
+    
+        self.exp_mat = exp_mat
+        self.tf_mat = tf_mat
         self.datadir = datadir
-        #self.exp_mat = exp_mat
-        #self.tf_mat = tf_mat
+        
         self.genes = genes
         self.tfs = tfs
         self.N = exp_mat.shape[0]
@@ -244,9 +278,9 @@ class ba_timeseries(data_source):
     
         tf_mat = tf_mat_t.T
 
-        self.exp_mat = exp_mat
-        self.tf_mat = tf_mat
-        #NOTE: why was there no normalization here?
+        self.exp_mat = normalize(exp_mat, True)
+        self.tf_mat = normalize(tf_mat, False)
+        
         self.genes = genes
         self.tfs = tfs
         self.N = exp_mat.shape[0]
@@ -299,16 +333,16 @@ class ba_iron(data_source):
 
         tf_mat = tf_mat_t.T
         #NOTE removing normalization here
-        #self.exp_mat = normalize(exp_mat, True)
-        #self.tf_mat = normalize(tf_mat, False)
-        self.exp_mat = exp_mat
-        self.tf_mat = tf_mat
+        #NOTE: adding back in, removed from standard source
+        self.exp_mat = normalize(exp_mat, True)
+        self.tf_mat = normalize(tf_mat, False)
+        #self.exp_mat = exp_mat
+        #self.tf_mat = tf_mat
         self.genes = genes
         self.tfs = tfs
         self.N = exp_mat.shape[0]
-        
         self.name = 'ba_time'
-             
+        
     #returns a list of priors associated with this data source
     def get_priors(self):
         return ([],[])
@@ -350,10 +384,11 @@ class subt(data_source):
         exp_mat = exp_mat_t.T
         tf_mat = tf_mat_t.T
         #NOTE: removed normalization
-        #self.exp_mat = normalize(exp_mat, True)
-        #self.tf_mat = normalize(tf_mat, False)
-        self.exp_mat = exp_mat
-        self.tf_mat = tf_mat
+        #NOTE: adding back in, removed from standard source
+        self.exp_mat = normalize(exp_mat, True)
+        self.tf_mat = normalize(tf_mat, False)
+        #self.exp_mat = exp_mat
+        #self.tf_mat = tf_mat
         self.genes = genes
         self.tfs = tfs
         self.N = exp_mat.shape[0]
@@ -450,9 +485,13 @@ ba_bs_orth = lambda: load_orth('data/bacteria1/bs_ba_ortho_804',['B_anthracis','
 #input noise_std: std of noise!
 #returns: (X, Y)
 def generate_from_linear(N, B, noise_std):
-    X = 1-2*np.random.random((N, B.shape[0]))
-    Y = np.dot(X,B) + noise_std*np.random.randn(N, B.shape[1])
-    return (X, Y)    
+    X_pre = np.random.randn(N, B.shape[0])#
+    #X_pre = 1-2*np.random.random((N, B.shape[0]))
+    Y_pre = np.hstack((X_pre, np.zeros((N, B.shape[1]-B.shape[0]))))
+
+    Y = Y_pre + np.dot(X_pre,B) + noise_std*np.random.randn(N, B.shape[1])
+    X = Y[:, 0:B.shape[0]]
+    return (X, Y, X_pre, Y_pre)    
 
 #turns a dictionary mapping genes to lists of orthologs into a list of orthology objects, marked as real
  
@@ -468,7 +507,7 @@ def omap_to_orths(omap, real):
 #this works by generating orthology groups of random size from 2 to max_grp_size (inclusive). Each organism must contribute at least one gene to the orthology group (this could change later). This process continues until the total number of genes in orthology groups is approximately pct_fused percent of the total genes. 
 #what goes into the orthology mapping! well.... it seems to be a dictionary mapping organism name/gene tuples to lists of organism name/gene tuples. This could be rewritten to use one_gene objects, because that's what they're for, but really the whole thing should be burned to the ground
 def build_orth(genes1, genes2, max_grp_size, pct_fused, omap, organisms, shuffle=True):
-    
+    shuffle=False
     if shuffle:
         random.shuffle(genes1)
         random.shuffle(genes2)
@@ -493,11 +532,9 @@ def build_orth(genes1, genes2, max_grp_size, pct_fused, omap, organisms, shuffle
                 
                 sub1c = fr.one_gene(genes1[i], organism = organisms[0])
                 sub2c = fr.one_gene(genes2[j], organism = organisms[1])
+                omap[sub1c].append(sub2c)
                 
-                if sub1c in omap:
-                    omap[sub1c].append(sub2c)
-                else:
-                    omap[sub1c] = [sub2c]
+                
         ind1 += grp1_size
         ind2 += grp2_size
     
@@ -507,54 +544,62 @@ def build_orth(genes1, genes2, max_grp_size, pct_fused, omap, organisms, shuffle
 #shuffle - do you shuffle the order of genes??
 def fuse_bs_orth(tfg_count1, tfg_count2, max_grp_size, pct_fused, fuse_std, sparse, organisms,shuffle=False):
     #create empty expression matrices
-    b1 = np.nan * np.ones(tfg_count1)
-    b2 = np.nan * np.ones(tfg_count2)
+    
+    b1 = np.nan * np.ones((tfg_count1[0], tfg_count1[0] + tfg_count1[1]))
+    b2 = np.nan * np.ones((tfg_count2[0], tfg_count2[0] + tfg_count2[1]))
+    
+#b1 = np.nan * np.ones(tfg_count1)
+    #b2 = np.nan * np.ones(tfg_count2)
+    
     tfs1 = map(lambda x: organisms[0]+'t'+str(x), range(b1.shape[0]))
     tfs2 = map(lambda x: organisms[1]+'t'+str(x), range(b2.shape[0]))   
     #THESE ARE GENES THAT ARE NOT ALSO TFS
     #This is done so that we can generate orthologies between genes and tfs separately
-    genes1 = map(lambda x: organisms[0]+'g'+str(x), range(b1.shape[0], b1.shape[0]+b1.shape[1]))
-    genes2 = map(lambda x: organisms[1]+'g'+str(x), range(b2.shape[0], b2.shape[0]+b2.shape[1]))
-    omap = dict()
+    non_tf_genes1 = map(lambda x: organisms[0]+'g'+str(x), range(tfg_count1[1]))
+    non_tf_genes2 = map(lambda x: organisms[1]+'g'+str(x), range(tfg_count2[1]))
+    
+    
+    
+    omap = collections.defaultdict(lambda: [])#dict()
     build_orth(tfs1, tfs2, max_grp_size, pct_fused, omap, organisms,shuffle=shuffle)
-    build_orth(genes1, genes2, max_grp_size, pct_fused, omap, organisms,shuffle=shuffle)
+    build_orth(non_tf_genes1, non_tf_genes2, max_grp_size, pct_fused, omap, organisms,shuffle=shuffle)
+    
+    #now we append the tfs
+    genes1 = tfs1 + non_tf_genes1
+    genes2 = tfs2 + non_tf_genes2
     orths = omap_to_orths(omap, True)
     
     bs = [b1, b2]
     genes = [genes1, genes2]
     tfs = [tfs1, tfs2]
+
     gene_inds = [{genes1[i] : i for i in range(len(genes1))}, {genes2[i] : i for i in range(len(genes2))}]
     tf_inds = [{tfs1[i] : i for i in range(len(tfs1))}, {tfs2[i] : i for i in range(len(tfs2))}]
-
     orths_query = set(orths)
     
     #recursively fills everything connected to r,c,organism
     #NOTE: we are relying on the fact that transcription factors are also genes
     def fill(r, c, val, std, organism):
-        
-        fill_val = val + np.random.randn()*std
+        fusion_noise = np.random.randn()*std
+        fill_val = val + fusion_noise
         organism_ind = organisms.index(organism) #blegh
         if not np.isnan(bs[organism_ind][r,c]): #already filled, return
             return           
         bs[organism_ind][r,c] = fill_val
         
-        for orth1 in orths:
-            #find an ortholog for row and an ortholog for column
-            #do this in both directions - i don't want to require that orthologies be listed both ways
-            
-            for rep in [0,1]:
-                
-                if tfs[organism_ind][r] == orth1.genes[0].name and organism == orth1.genes[0].organism:
-                    for orth2 in orths:
-                        
-                        if genes[organism_ind][c] == orth2.genes[0].name and organism == orth2.genes[0].organism:
-                            organism_r_orth_ind = organisms.index(orth1.genes[1].organism)
-                            organism_c_orth_ind = organisms.index(orth2.genes[1].organism)
-                            if organism_r_orth_ind == organism_c_orth_ind:
-                                r_orth = tf_inds[organism_r_orth_ind][orth1.genes[1].name]
-                                c_orth = gene_inds[organism_c_orth_ind][orth2.genes[1].name]
-                                fill(r_orth, c_orth, val, std, organisms[organism_r_orth_ind])
-                orth1 = fr.orthology(genes=(orth1.genes[1], orth1.genes[0]), real = orth1.real) #repeat in reverse
+        tf_fill = fr.one_gene(tfs[organism_ind][r], organism)
+        gene_fill = fr.one_gene(genes[organism_ind][c], organism)
+
+        for tf_orth in omap[tf_fill]:
+            for g_orth in omap[gene_fill]:
+                #we need to verify that both orths are in the same organism as each other
+                if tf_orth.organism == g_orth.organism:
+                    orth_org_ind = organisms.index(tf_orth.organism)
+                    
+                    orth_r = tf_inds[orth_org_ind][tf_orth.name]
+                    orth_c = gene_inds[orth_org_ind][g_orth.name]
+                    fill(orth_r, orth_c, val, std, organisms[orth_org_ind])
+
     #go through each value in each beta matrix and, if not yet filled, fill it in along with all of its linked values
     for organism_ind, b in enumerate(bs):
         for r in range(b.shape[0]):
@@ -594,17 +639,19 @@ def generate_faulty_priors(B, genes, tfs, falsepos, falseneg):
 
 
 #now also marks orths as real or fake
+#orth_falsepos: number of fake orthologies to add, in units of the original number of orthologies
+#orth_falseneg: fraction of original orthologies to remove
 def generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, organisms, falsepos, falseneg):
     #make a list of sets containing gene fusion groups to prevent from adding false orths that result in unduly large fusion groups
         
     num_to_remove = int(falseneg * len(orths))
-    if falsepos == 1:
-        num_to_add = len(orths)
-    else:
-        num_to_add = int(falsepos*(len(orths) - num_to_remove)/(1-falsepos))
-    print 'adding %d fake orths!' % num_to_add
+    num_to_add = int(falsepos * len(orths))
+    
+    random.shuffle(orths)
+    final_real_ind = max(0, len(orths)-num_to_remove)
+    orths_retain = orths[0:final_real_ind]
     orth_genes = set()
-    for orth in orths:
+    for orth in orths_retain:
         orth_genes.add(orth.genes[0])
         orth_genes.add(orth.genes[1])
     
@@ -621,9 +668,10 @@ def generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, organisms, falsepos,
             all_possible_orths.append(possible_orth)
             
     random.shuffle(all_possible_orths)
-    random.shuffle(orths)
     
     to_add = []
+    #add potential orthologies until enough have been added
+    #don't add orthologies for orths that we already have
     for candidate_orth in all_possible_orths:
     
         if len(to_add) == num_to_add:
@@ -632,8 +680,10 @@ def generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, organisms, falsepos,
             continue
         to_add.append(candidate_orth)
         
-
-    return orths[0:(len(orths) - num_to_remove)] + to_add
+    
+    real_fake_orths = orths_retain + to_add
+    
+    return real_fake_orths
 
 
     
@@ -647,19 +697,16 @@ def write_fake_data1(out_dir=None, tfg_count1=(5,10), tfg_count2=(5,10), N1=10, 
 
     (B1, B2, orths, genes1, tfs1, genes2, tfs2) = fuse_bs_orth(tfg_count1, tfg_count2, max_grp_size, pct_fused, fuse_std, sparse, organisms)
     
-    (x1, y1) = generate_from_linear(N1, B1, measure_noise1)
-    (x2, y2) = generate_from_linear(N2, B2, measure_noise2)
-    orths = generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, organisms, orth_falsepos, orth_falseneg)
-    (genes1c, expr1) = concat_tfs_genes(genes1, tfs1, x1, y1)
-    (genes2c, expr2) = concat_tfs_genes(genes2, tfs2, x2, y2)
-    #(genes1c, expr1) = (genes1, x1)
-    #(genes2c, expr2) = (genes2, x2)
-    #maybe someday TFs can be some left-eigenvector with eigenvalue 1 of an interesting B, but not today
-    B1 = np.hstack((np.eye(B1.shape[0]), B1))
-    B2 = np.hstack((np.eye(B2.shape[0]), B2))
+    (x1, y1, x1_pre, y1_pre) = generate_from_linear(N1, B1, measure_noise1)
+    (x2, y2, x2_pre, y2_pre) = generate_from_linear(N2, B2, measure_noise2)
     
-    priors1 = generate_faulty_priors(B1, genes1c, tfs1, prior_falsepos, prior_falseneg)
-    priors2 = generate_faulty_priors(B2, genes2c, tfs2, prior_falsepos, prior_falseneg)
+    orths = generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, organisms, orth_falsepos, orth_falseneg)
+    
+    expr1 = np.vstack( (y1, y1_pre) )
+    expr2 = np.vstack( (y2, y2_pre) )
+    
+    priors1 = generate_faulty_priors(B1, genes1, tfs1, prior_falsepos, prior_falseneg)
+    priors2 = generate_faulty_priors(B2, genes2, tfs2, prior_falsepos, prior_falseneg)
 
     
     if out_dir == None:
@@ -669,9 +716,10 @@ def write_fake_data1(out_dir=None, tfg_count1=(5,10), tfg_count2=(5,10), N1=10, 
     if not os.path.isdir(out_dir):
         os.mkdir(out_dir)
     
-    
-    write_expr_mat(out_dir+os.sep+'expression1', expr1, genes1c)
-    write_expr_mat(out_dir+os.sep+'expression2', expr2, genes2c)
+    write_fake_td(os.path.join(out_dir, 'time_diffs1'), expr1)
+    write_fake_td(os.path.join(out_dir, 'time_diffs2'), expr2)
+    write_expr_mat(out_dir+os.sep+'expression1', expr1, genes1)
+    write_expr_mat(out_dir+os.sep+'expression2', expr2, genes2)
     write_priors(out_dir+os.sep+'priors1',priors1)
     write_priors(out_dir+os.sep+'priors2',priors2)
     write_tfnames(out_dir+os.sep+'tfnames1',tfs1)
@@ -679,15 +727,17 @@ def write_fake_data1(out_dir=None, tfg_count1=(5,10), tfg_count2=(5,10), N1=10, 
     #since this is simulated data the first part of B is an identity matrix. That is, the TF expressions appear out of nowhere.
     #does this make me happy? no it does not.
     
-    write_network(genes1c, tfs1, B1, os.path.join(out_dir, 'beta1'))
-    write_network(genes2c, tfs2, B2, os.path.join(out_dir, 'beta2'))
+    write_network(genes1, tfs1, B1, os.path.join(out_dir, 'beta1'))
+    write_network(genes2, tfs2, B2, os.path.join(out_dir, 'beta2'))
 
 
 
     write_orth(out_dir+os.sep+'orth', orths)
-    f = file(out_dir+os.sep+'description', 'w')
-    f.write('tfg_count1: %s\ntfg_count2\t%s\nN1\t%d\nN2\t%d\nmax_grp_size\t%d\npct_fused\t%f\nfuse_std:%f\nsparse\t%f\norganism1\t%s\norganism2\t%s\nprior_falsepos\t%f\nprior_falseneg\t%f\nmeasure_noise1\t%f\nmeasure_noise2\t%f\n' % (str(tfg_count1), str(tfg_count2), N1, N2, max_grp_size, pct_fused, fuse_std, sparse, organisms[0], organisms[1], prior_falsepos, prior_falseneg, measure_noise1, measure_noise2))
-    f.close()
+    descr_dict = {'tfg_count' : str(tfg_count1), 'tfg_count2':str(tfg_count2), 'N1':N1,'N2':N2, 'max_grp_size':max_grp_size,'pct_fused':pct_fused,'fuse_std':fuse_std,'sparse':sparse,'organism1':organisms[0],'organism2':organisms[1],'prior_falsepos':prior_falsepos,'prior_falseneg':prior_falseneg,'measure_noise1':measure_noise1,'measure_noise2':measure_noise2,'tc1':'inf','tc2':'inf'}
+
+    with file(out_dir+os.sep+'description', 'w') as f:
+        for k in sorted(descr_dict.keys()):
+            f.write('%s\t%s\n' % (k, str(descr_dict[k])))
     return out_dir
 
 #adds tf expressions to the gene expression matrix, and tfs to the list of genes. This better matches the real data, in which tfs are genes.
@@ -704,6 +754,20 @@ def concat_tfs_genes(genes, tfs, x, y):
     return (genes, expr_mat)
 
 #SECTION: code for writing things that may or may not be fake
+
+#writes a td file with gap time of 1 appropriate for steady state experiments
+def write_ss_td(outf, expr):
+    N = expr.shape[0]
+    with file(outf,'w') as f:
+        for i in range(N):
+            f.write('%d\t%d\t%f\n' % (i, i, 1.0))
+
+#writes a td file with a gap time of 1, and each of N/2 conditions i preceded by condition i+N/2
+def write_fake_td(outf, expr):
+    N = expr.shape[0]
+    with file(outf,'w') as f:
+        for i in range(N/2):
+            f.write('%d\t%d\t%f\n' % (i, i+N/2, 1.0))
 
 #write an expression matrix
 #format is: line 1, gene names. line 2-(N+1) expressions.
@@ -759,7 +823,7 @@ def write_tfnames(outf, tfnames):
 
 #writes a network
 def write_network(genes, tfs, B, outf):
-    
+        
     Bs_str_l = []
     Bs_str_l.append('\t'.join(tfs))
     for gi in range(len(genes)):
@@ -835,13 +899,17 @@ def voodoo():
         os.mkdir(out_dir)
     write_expr_mat(out_dir+os.sep+'expression1', bs_e, bs_genes)
     write_expr_mat(out_dir+os.sep+'expression2', ba_e, ba_genes)
+    write_ss_td(os.path.join(out_dir, 'time_diffs1'), bs_e)
+    write_ss_td(os.path.join(out_dir, 'time_diffs2'), ba_e)
+
     write_priors_voodoo(out_dir+os.sep+'priors1',bs_priors, bs_sign)
     write_priors_voodoo(out_dir+os.sep+'priors2',ba_priors, ba_sign)
     write_tfnames(out_dir+os.sep+'tfnames1',bs_tfs)
     write_tfnames(out_dir+os.sep+'tfnames2',ba_tfs)
     write_orth(out_dir+os.sep+'orth', orths)
-    f = file(out_dir+os.sep+'description', 'w')
-    f.write('organism1\t%s\norganism2\t%s' % ('B_subtilis','B_anthracis'))
-    f.close()
+    with file(out_dir+os.sep+'description', 'w') as f:
+        f.write('organism1\t%s\norganism2\t%s\n' % ('B_subtilis','B_anthracis'))
+        f.write('tc1\t%s\ntc2\t%s\n' %('1','1'))
+    
 
     
