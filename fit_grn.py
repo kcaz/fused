@@ -366,6 +366,7 @@ def eval_network_roc(net, genes, tfs, priors, tr_priors=[], exclude_tfs = True, 
         auroc = auc(fpr, tpr)
     else:
         auroc = np.nan
+
     return auroc
 
 def eval_network_beta(net1, net2):
