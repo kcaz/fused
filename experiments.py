@@ -2169,6 +2169,7 @@ def plot_synthetic_performance_priors(lamP=1.0, lamR=5, lamSs=[0,2,4,6,8,10,12],
     plt.legend()
     plt.show()
 
+#solves a model on its own, then simultaneously with no lamS
 def solve_both_ways(out, lamP, lamR, lamS):
     d1 = ds.standard_source(out,0)
     d2 = ds.standard_source(out,1)
@@ -2178,10 +2179,10 @@ def solve_both_ways(out, lamP, lamR, lamS):
     
     Bs0 = fr.solve_ortho_direct(['uno'],[genes1],[tfs1],[t1],[e1],[],[],lamP, lamR, lamS)
     Bs1 = fr.solve_ortho_direct(['uno','dos'],[genes1,genes2],[tfs1,tfs2],[t1,t2],[e1,e2],orths,[],lamP, lamR, lamS)
-    plt.matshow(e2)
-    plt.show()
-    plt.matshow(t2)
-    plt.show()
+    #plt.matshow(e2)
+    #plt.show()
+    #plt.matshow(t2)
+    #plt.show()
     return (Bs0[0], Bs1[0])
     
 def plot_synthetic_beta_err(N = 10, lamP=1, lamR=5,lamSs=[0,1]):
@@ -2190,7 +2191,7 @@ def plot_synthetic_beta_err(N = 10, lamP=1, lamR=5,lamSs=[0,1]):
     N_G = 30
     out = os.path.join('data','fake_data','plot_synthetic_beta_err')
 
-    ds.write_fake_data1(N1 = N, N2 = N*3+5, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, pct_fused=1.0, sparse=0.5, fuse_std = 0.0, orth_falsepos=0.0,orth_falseneg=0.0)
+    ds.write_fake_data1(N1 = N, N2 = N*10, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, pct_fused=1.0, sparse=0.5, fuse_std = 0.0, orth_falsepos=0.0,orth_falseneg=0.0)
     
     net1 = ds.load_network(out+'/beta1')[0]
     net2 = ds.load_network(out+'/beta2')[0]
@@ -2209,9 +2210,9 @@ def plot_synthetic_beta_err(N = 10, lamP=1, lamR=5,lamSs=[0,1]):
         print ((a-est1)**2).mean()
         print ((est1-net1)**2).mean()
         print ((est2-net2)**2).mean()
-        plt.matshow(est2)
-        plt.colorbar()
-        plt.show()
+        #plt.matshow(est2)
+        #plt.colorbar()
+        #plt.show()
         err = 0
         err += ( (est1 - net1)**2 ).mean()
         err += ( (est2 - net2)**2 ).mean()
@@ -2251,7 +2252,7 @@ def plot_synthetic_performance(lamP=1.0, lamR=5, lamSs=[0,1], k=20):
 #plots error dictionaries
 #this one includes lots of incorrect orthology
 def plot_synthetic_performance2(lamP=1.0, lamR=5, lamSs=[0,1], k=20):
-    N = 10
+    N = 5
     N_TF = 20
     N_G = 30
     out = os.path.join('data','fake_data','plot_synthetic_performance2')
@@ -2626,3 +2627,21 @@ def show_penalty():
     plt.xlabel('|B0 - B1|')
     plt.ylabel('penalty')
     plt.show()
+
+
+#makes sure that XB = Y for generated data
+
+def verify_data_integrity(N=100, N_TF=10, N_G=10):
+    out = os.path.join('data','fake_data','verify_data_integrity')
+    ds.write_fake_data1(N1=N, N2=N, out_dir = 'data/fake_data/simpletest', tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.0, measure_noise2 = 0.0, sparse=0.0, fuse_std = 0.0, pct_fused=1.0)
+    
+    (n1, g1, t1) = ds.load_network('data/fake_data/simpletest/beta1')
+    (n2, g2, t2) = ds.load_network('data/fake_data/simpletest/beta2')
+
+    d1 = ds.standard_source('data/fake_data/simpletest/', 0)
+    d2 = ds.standard_source('data/fake_data/simpletest/', 1)
+
+    err1 = ((np.dot(d1.tf_mat, n1) - d1.exp_mat)**2).mean()
+    err2 = ((np.dot(d2.tf_mat, n2) - d2.exp_mat)**2).mean()
+    print err1
+    print err2

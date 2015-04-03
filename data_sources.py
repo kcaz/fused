@@ -702,8 +702,8 @@ def write_fake_data1(out_dir=None, tfg_count1=(5,10), tfg_count2=(5,10), N1=10, 
     
     orths = generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, organisms, orth_falsepos, orth_falseneg)
     
-    expr1 = np.vstack( (y1, y1_pre) )
-    expr2 = np.vstack( (y2, y2_pre) )
+    expr1 = np.vstack( (y1_pre, y1) )
+    expr2 = np.vstack( (y2_pre, y2) )
     
     priors1 = generate_faulty_priors(B1, genes1, tfs1, prior_falsepos, prior_falseneg)
     priors2 = generate_faulty_priors(B2, genes2, tfs2, prior_falsepos, prior_falseneg)
@@ -767,7 +767,7 @@ def write_fake_td(outf, expr):
     N = expr.shape[0]
     with file(outf,'w') as f:
         for i in range(N/2):
-            f.write('%d\t%d\t%f\n' % (i+N/2, i, 1.0))
+            f.write('%d\t%d\t%f\n' % (i, i+N/2, 1.0))
 
 #write an expression matrix
 #format is: line 1, gene names. line 2-(N+1) expressions.
@@ -912,4 +912,19 @@ def voodoo():
         f.write('tc1\t%s\ntc2\t%s\n' %('1','1'))
     
 
+#makes sure that XB = Y for generated data
+
+def verify_data_integrity(N=100, N_TF=10, N_G=10):
+    out = os.path.join('data','fake_data','verify_data_integrity')
+    ds.write_fake_data1(N1=N, N2=N, out_dir = 'data/fake_data/simpletest', tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.0, measure_noise2 = 0.0, sparse=0.0, fuse_std = 0.0, pct_fused=1.0)
     
+    (n1, g1, t1) = ds.load_network('data/fake_data/simpletest/beta1')
+    (n2, g2, t2) = ds.load_network('data/fake_data/simpletest/beta2')
+
+    d1 = ds.standard_source('data/fake_data/simpletest/', 0)
+    d2 = ds.standard_source('data/fake_data/simpletest/', 1)
+
+    err1 = ((np.dot(d1.tf_mat, n1) - d1.exp_mat)**2).mean()
+    err2 = ((np.dot(d2.tf_mat, n2) - d2.exp_mat)**2).mean()
+    print err1
+    print err2
