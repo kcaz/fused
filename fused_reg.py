@@ -475,6 +475,7 @@ def solve_ortho_lasso(organisms, gene_ls, tf_ls, Xs, Ys, Xs_t, Ys_t, orth, prior
 #s_it defines the number of scad-like iterations to do
 def solve_ortho_direct_scad(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS, s_it, special_args=None):
     ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)    
+    #fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
     fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
     Bs = solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, s_it=s_it,special_args=special_args)
     return Bs
@@ -1002,12 +1003,14 @@ def mcp(Bs_init, fuse_constraints, lamS, lamW=None, a=2):
         theta_init = np.abs(b_init_1 - b_init_2)
 
         if np.abs(theta_init) <= lamS*a:
-            nlamS = np.abs(lamS-1/a)
+            nlamS = lamS*theta_init - (theta_init**2)/(2*a)
+            #nlamS = np.abs(lamS-1/a)
             #nlamS = (lamS*theta_init - theta_init/a) / theta_init
             #nlamS = lamS*(theta_init**2) - (theta_init**2)/(2*a) / theta_init
 
         else:
-            nlamS = ((a*lamS**2)/(2*theta_init**2)) #/ theta_init
+            nlamS = (a*lamS**2)/2
+            #nlamS = ((a*lamS**2)/(2*theta_init**2)) #/ theta_init
 
         new_con = constraint(con.c1, con.c2, nlamS)
         new_fuse_constraints.append(new_con)
@@ -1017,11 +1020,14 @@ def mcp(Bs_init, fuse_constraints, lamS, lamW=None, a=2):
 
 #iteratively adjusts fusion constraint weight to approximate saturating penalty
 def solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, s_it, special_args=None):    
+    Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
     if special_args and 'a' in special_args:
         a = special_args['a']
+    elif special_args and 'per' in special_args:
+        a = pick_a(Bs, fuse_con, special_args['per'])
+        print lamS
     else:
         a = 3.7
-    Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
     for i in range(s_it-1):
         fuse_con = scad(Bs, fuse_con, lamS, a=a)
         Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
@@ -1063,6 +1069,17 @@ def scad(Bs_init, fuse_constraints, lamS, lamW=None, a=3.7):
         new_con = constraint(con.c1, con.c2, nlamS)
         new_fuse_constraints.append(new_con)
     return new_fuse_constraints
+
+def pick_a(Bs_init, fuse_constraints, percentile):
+    import seaborn as sns
+    from matplotlib import pyplot as plt
+    deltabetas = beta_diff(Bs_init, fuse_constraints)
+    a = np.percentile(deltabetas, percentile)
+    print percentile
+    print a
+    #sns.kdeplot(deltabetas, shade=True)
+    #plt.show()
+    return a
 
 
 #solves W = argmin_W ((XW - Y)**2).sum() + constraint related terms iteratively
