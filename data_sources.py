@@ -124,7 +124,7 @@ def generate_timeseries(tf_mat, exp_mat, td, tc):
     td_exp_mat = np.zeros((td.shape[0], exp_mat.shape[1]))
     
     for td_row in range(td.shape[0]):
-        (to, fr, s) = td[td_row, :]
+        (fr, to, s) = td[td_row, :]
         #print 'current: %d, preceding: %d' % (to, fr)
         T1 = tf_mat[int(fr), :]
         X1 = exp_mat[int(fr), :]
@@ -702,8 +702,8 @@ def write_fake_data1(out_dir=None, tfg_count1=(5,10), tfg_count2=(5,10), N1=10, 
     
     orths = generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, organisms, orth_falsepos, orth_falseneg)
     
-    expr1 = np.vstack( (y1, y1_pre) )
-    expr2 = np.vstack( (y2, y2_pre) )
+    expr1 = np.vstack( (y1_pre, y1) )
+    expr2 = np.vstack( (y2_pre, y2) )
     
     priors1 = generate_faulty_priors(B1, genes1, tfs1, prior_falsepos, prior_falseneg)
     priors2 = generate_faulty_priors(B2, genes2, tfs2, prior_falsepos, prior_falseneg)
@@ -767,7 +767,7 @@ def write_fake_td(outf, expr):
     N = expr.shape[0]
     with file(outf,'w') as f:
         for i in range(N/2):
-            f.write('%d\t%d\t%f\n' % (i+N/2, i, 1.0))
+            f.write('%d\t%d\t%f\n' % (i, i+N/2, 1.0))
 
 #write an expression matrix
 #format is: line 1, gene names. line 2-(N+1) expressions.

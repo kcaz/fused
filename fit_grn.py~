@@ -135,6 +135,8 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special
         if solver == 'solve_ortho_direct_em':
             Bs = fl.solve_ortho_direct_em(organisms, genes, tfs, Xs, Ys, orth, priors_tr_fl, lamP, lamR, lamS, em_it = special_args['em_it'], special_args=special_args)
 
+    return Bs
+
          #evaluate a bunch of metrics
         (corr, fused_coeffs) = fused_coeff_corr(organisms, genes, tfs, orth, Bs)
         for si in [0,1]:
@@ -366,10 +368,7 @@ def eval_network_roc(net, genes, tfs, priors, tr_priors=[], exclude_tfs = True, 
         auroc = auc(fpr, tpr)
     else:
         auroc = np.nan
-<<<<<<< HEAD
-=======
-    
->>>>>>> 39b78a76019d8a1a1498503a759facd57c398ee9
+
     return auroc
 
 def eval_network_beta(net1, net2):
