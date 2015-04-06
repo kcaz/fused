@@ -147,8 +147,11 @@ def test_scad():
         lamR = 2
         lamP = 1.0 #priors don't matter
         for j, lamS in enumerate(lamSs):
-            (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct_scad', reverse = False, special_args = {'s_it':50, 'a':0.6}, cv_both = (True, True))
+            settings = fr.get_settings({'s_it':50, 'a':0.6})
+            (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct_scad', reverse = False, settings = settings, cv_both = (True, True))
+
             (errd1l, errd2l) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = False, cv_both = (True, True))
+
             errors_scad[i,j] = errd1['mse'].mean()
             errors_l2[i,j] = errd1l['mse'].mean()
 
@@ -190,12 +193,13 @@ def test_scad_opt_params():
             ds.write_fake_data1(N1 = 20, N2 = 20, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = N, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.1)
             lamR = 5
             lamP = 1.0 #priors don't matter
+            scad_settings = fr.get_settings({'s_it':50, 'a':ap})
             for j, lamS in enumerate(lamSs):
                 (errd1l, errd2l) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = False, cv_both = (True, True))
                 errors_l2[i,j] += errd1l['mse'].mean()
                 errors_l2_var[i,j] += errd1l['mse'].mean()**2
                 for k, ap in enumerate(a):
-                    (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct_scad', reverse = False, special_args = {'s_it':50, 'a':ap}, cv_both = (True, True))
+                    (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct_scad', reverse = False, settings = scad_settings, cv_both = (True, True))
                     errors_scad[i,j,k] += errd1['mse'].mean()
                     errors_scad_var[i,j,k] += errd1['mse'].mean()**2
 
@@ -249,8 +253,8 @@ def test_scad_opt_params2():
                 (errd1l, errd2l) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=2, solver='solve_ortho_direct', reverse = False, cv_both = (True, True))
                 errors_l2[i,j] += errd1l['aupr'].mean()
                 errors_l2_var[i,j] += errd1l['aupr'].mean()**2
-                #(errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct_scad', reverse = False, special_args = {'s_it':50, 'per':(1-N**2)}, cv_both = (True, True))
-                (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=2, solver='solve_ortho_direct_scad', reverse = False, special_args = {'s_it':50, 'per':((1/(1+float(N)))*100)}, cv_both = (True, True))
+                scad_settings = fr.get_settings({'s_it':50, 'per':((1/(1+float(N)))*100)})
+                (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=2, solver='solve_ortho_direct_scad', reverse = False, settings = scad_settings, cv_both = (True, True))
                 errors_scad[i,j] += errd1['aupr'].mean()
                 errors_scad_var[i,j] += errd1['aupr'].mean()**2
 
@@ -267,15 +271,15 @@ def test_scad_quick():
 #create simulated data set with false orthology and run fused L2 and fused scad; faster than test_scad_opt_params2 because doesn't search through a
      
     N_TF = 20
-    N_G = 200
+    N_G = 50
     #N_TF = 10
     #N_G = 30
-    amt_fused = 1.0
+    amt_fused = 0.5
     orth_err = [0,0.75,1.0]#,0.25,0.5,0.75,1]
     lamSs = [0,3,6]#[0, 2, 4, 6]
     seed = 10
-    reps = 1
-
+    reps = 10
+    N_conds = 30
     if not os.path.exists(os.path.join('data','fake_data','test_scad_quick')):
         os.mkdir(os.path.join('data','fake_data','test_scad_quick'))
     #iterate over how much fusion
@@ -283,34 +287,21 @@ def test_scad_quick():
     errors_l2 = np.zeros((len(orth_err), len(lamSs)))
     errors_scad_var = np.zeros((len(orth_err), len(lamSs)))
     errors_l2_var = np.zeros((len(orth_err), len(lamSs)))
-
+    
     for p in range(reps):
         for i, N in enumerate(orth_err):
             out = os.path.join('data','fake_data','test_scad_quick','dat_'+str(N))
-            ds.write_fake_data1(N1 = 10, N2 = 10, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = N, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.5, fuse_std = 0.0)
+            ds.write_fake_data1(N1 = N_conds, N2 = N_conds, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = N, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.5, fuse_std = 0.0)
             lamR = 2
             lamP = 1.0 #priors don't matter
 
             for j, lamS in enumerate(lamSs):
-                (errd1l, errd2l) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=2, solver='solve_ortho_direct', reverse = False, seed=seed, cv_both = (True, True))
-                #print lamS
-                #print errd1l
-                errors_l2[i,j] += errd1l['aupr'].mean()
-                #errors_l2_var[i,j] += errd1l['aupr'].mean()**2
-                #(errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=2, solver='solve_ortho_direct_scad', reverse = False, seed=seed, special_args = {'s_it':50, 'a':0.3}, cv_both = (True, True))
-                #print errd1
-                #(errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=2, solver='solve_ortho_direct_scad', reverse = False, seed=seed, special_args = {'s_it':5, 'per':((1/(1+float(N)))*100)}, cv_both = (True, True))
-                #print errd1
-                #errors_scad[i,j] += errd1['aupr'].mean()
-                #errors_scad_var[i,j] += errd1['aupr'].mean()**2
-
-    #errors_scad /= reps
-    #errors_l2 /= reps
-    #errors_scad_var /= reps
-    #errors_scad_var -= errors_scad**2
-    #errors_l2_var /= reps
-    #errors_l2_var -= errors_l2**2
-
+                #(errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=2, solver='solve_ortho_direct', reverse = False, seed=seed, cv_both = (True, True))
+                settings = fr.get_settings({'s_it':2, 'per':((1/(1+float(N)))*100), 'return_cons':True})
+                (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=2, solver='solve_ortho_direct_scad', reverse = False, seed=seed, settings = settings, cv_both = (True, True))
+                
+                errors_l2[i,j] += errd1['B_mse'].mean()
+                plot_fuse_lams(out, settings['cons'])
     return (errors_l2)
     return (errors_scad, errors_scad_var, errors_l2, errors_l2_var)
 
@@ -325,7 +316,8 @@ def test_scad_quicker():
     (constraints, marks, orth) = ds.load_constraints(out)
     (b1, genes1, tfs1) = ds.load_network(os.path.join(out, 'beta1'))
     (b2, genes2, tfs2) = ds.load_network(os.path.join(out, 'beta2'))
-    (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=2, solver='solve_ortho_direct_scad', seed=seed, reverse = False, special_args = {'s_it':50, 'a':0.6}, cv_both = (True, True))
+    scad_settings = fr.get_settings({'s_it':50, 'a':0.6})
+    (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=2, solver='solve_ortho_direct_scad', seed=seed, reverse = False, settings = scad_settings, cv_both = (True, True))
     (errd1l, errd2l) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=2, solver='solve_ortho_direct', seed=seed, reverse = False, cv_both = (True, True))
     print 'scad error'
     print errd1
@@ -446,8 +438,11 @@ def test_mcp3():
         #lamR = 4
         lamR = 1
         lamP = 1.0 #priors don't matter
+        
         for j, lamS in enumerate(lamSs):
-            (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=2, solver='solve_ortho_direct_mcp', reverse = False, special_args = {'m_it':50, 'a':0.6}, cv_both = (True, True))
+            mcp_settings = fr.get_settings({'m_it':50, 'a':0.6})
+
+            (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=2, solver='solve_ortho_direct_mcp', reverse = False, settings = mcp_settings, cv_both = (True, True))
             (errd1l, errd2l) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=2, solver='solve_ortho_direct', reverse = False, cv_both = (True, True))
             errors_mcp[i,j] = errd1['mse'].mean()
             errors_l2[i,j] = errd1l['mse'].mean()
@@ -741,14 +736,13 @@ def test_2coeff_fuse_HS():
     for lamS in lamSs:
         print 'SOLVING'
         
-        special_args = {'s_it':5, 'orths':None, 'a':0.1}
-        (b1, b2) = fg.fit_model(out, lamPs[0], lamRs[0], lamS, solver='solve_ortho_direct_scad',special_args = special_args)
+        settings = fr.get_settings({'s_it':5, 'return_cons':True, 'a':0.1})
+        (b1, b2) = fg.fit_model(out, lamPs[0], lamRs[0], lamS, solver='solve_ortho_direct_scad',settings = settings)
         plt.plot(b1[0,2], b1[1,2], 'or',markersize=0.5*(10+20*lamS))
         plt.plot(b2[0,2], b2[1,2], 'ob',markersize=0.5*(10+20*lamS))
         
-        assemble_orths(special_args['orths'])
-        #print b1
-        #print br1
+        assemble_orths(settings['cons'])
+        
         
     (constraints, marks, orths) = ds.load_constraints(out)
     for i, orth in enumerate(orths):
@@ -834,8 +828,8 @@ def test_2coeff_fuse_HS2():
     for lamS in lamSs:
         print 'SOLVING'
         
-        special_args = {'s_it':5, 'orths':None, 'a':1.50}
-        (b1, b2) = fg.fit_model(out, lamPs[0], lamRs[0], lamS, solver='solve_ortho_direct_scad',special_args = special_args)
+        settings = fr.get_settings({'s_it':5, 'return_cons':True, 'a':1.50})
+        (b1, b2) = fg.fit_model(out, lamPs[0], lamRs[0], lamS, solver='solve_ortho_direct_scad',settings = settings)
         plt.plot(b1[ax1r1,ax1c1], b1[ax2r1,ax2c1], 'or',markersize=0.5*(10+20*lamS))
         plt.plot(b2[ax1r2,ax1c2], b2[ax2r2,ax2c2], 'ob',markersize=0.5*(10+20*lamS))
     
@@ -1023,11 +1017,10 @@ def plot_betas_scad():
 
     Bs_uf = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS=0)
     Bs_fr = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
-#    s_it = 5
-#    special_args_fs={'a':0.2, 'orths':None}
+
     s_it = 5
-    special_args_fs={'a':0.15, 'orths':None}
-    Bs_fs = fr.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, s_it, special_args=special_args_fs)
+    settings_fs=fr.get_settings({'a':0.15, 'return_cons':False})
+    Bs_fs = fr.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, s_it, settings = settings_fs)
 
     r1 = Bs_uf[0].shape[0]
     c1 = Bs_uf[0].shape[1]
@@ -1062,7 +1055,8 @@ def plot_betas_scad():
         Bfr1.append(Bs_fr[con.c1.sub][con.c1.r, con.c1.c])
         Bfr2.append(Bs_fr[con.c2.sub][con.c2.r, con.c2.c])
         Bfrd.append(Bs_fr[con.c1.sub][con.c1.r, con.c1.c]-Bs_fr[con.c2.sub][con.c2.r, con.c2.c])
-        con_fs = special_args_fs['orths'][i]
+
+        con_fs = settings_fs['cons'][i]
         cons_fs.append(con_fs.lam)
         Bfs1.append(Bs_fs[con_fs.c1.sub][con_fs.c1.r, con_fs.c1.c])
         Bfs2.append(Bs_fs[con_fs.c2.sub][con_fs.c2.r, con_fs.c2.c])
@@ -1161,14 +1155,20 @@ def plot_betas2():
     Bs_uf = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS=0)
     Bs_fr = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
     s_it = 5
-    special_args_fs={'a':1.5, 'orths':None}
-    Bs_fs = fr.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamSe, s_it, special_args=special_args_fs)
+
+    settings_fs = fr.get_settings({'a':1.5, 'return_cons':True})
+
+    Bs_fs = fr.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamSe, s_it, settings = settings_fs)
     m_it = 5
-    special_args_mcp={'orths':None}
-    Bs_fm = fr.solve_ortho_direct_mcp(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamSe, m_it, special_args=special_args_mcp)
+
+    settings_mcp = fr.get_settings({'return_cons':True})
+
+    Bs_fm = fr.solve_ortho_direct_mcp(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamSe, m_it, settings = settings_mcp)
     em_it=10
-    special_args_em={'f':1,'uf':0.1}
-    Bs_em = fr.solve_ortho_direct_em(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, em_it, special_args=special_args_em)
+
+    settings_em = fr.get_settings({'f':1,'uf':0.1})
+    
+    Bs_em = fr.solve_ortho_direct_em(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, em_it, settings = settings_em)
     r1 = Bs_uf[0].shape[0]
     c1 = Bs_uf[0].shape[1]
     r2 = Bs_uf[1].shape[0]
@@ -1226,7 +1226,7 @@ def plot_betas2():
             colors_ufem.append('r')
 
     for i in con_inds[0:subs]:
-        con = special_args_fs['orths'][i]
+        con = settings_fs['cons'][i]
         mark = marks[i]
         Bfs1.append(Bs_fs[con.c1.sub][con.c1.r, con.c1.c])
         Bfs2.append(Bs_fs[con.c2.sub][con.c2.r, con.c2.c])
@@ -1238,7 +1238,7 @@ def plot_betas2():
         area_fs.append(con.lam*100)
 
     for i in con_inds[0:subs]:
-        con = special_args_fs['orths'][i]
+        con = settings_fs['cons'][i]
         mark = marks[i]
         Bfm1.append(Bs_fm[con.c1.sub][con.c1.r, con.c1.c])
         Bfm2.append(Bs_fm[con.c2.sub][con.c2.r, con.c2.c])
@@ -1360,8 +1360,10 @@ def test_em():
         ds.write_fake_data1(N1 = N_cond*k, N2 = N_cond*k, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = N, orth_falseneg = N, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.1)
         lamR = 1
         lamP = 1.0 #priors don't matter
-        (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct_em', reverse = True, special_args = {'em_it':5, 'f':1, 'uf':1}, cv_both = (True, True))
+        settings_em = fr.get_settings({'em_it':5, 'f':1, 'uf':1})
+        (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct_em', reverse = True, settings = settings_em, cv_both = (True, True))
 
+        
         (errl1, errl2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
 
         (erru1, erru2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=0, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
@@ -1792,7 +1794,7 @@ def L2fusion_quick():
         lamP = 1.0 #priors don't matter
         seed = 10
         for j, lamS in enumerate(lamSs):
-            (errd1, errd2) = fg.cv_model_m(out2, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_args=None, reverse=False, cv_both=(True,True), exclude_tfs=True, pct_priors=0, seed=seed, verbose=False)
+            (errd1, errd2) = fg.cv_model_m(out2, lamP, lamR, lamS, k, solver='solve_ortho_direct', reverse=False, cv_both=(True,True), exclude_tfs=True, pct_priors=0, seed=seed, verbose=False)
             #print errd1['corr'].mean()
             print errd1['aupr'].mean()
             aupr_array[i,j] = errd1['aupr'].mean()
@@ -2128,7 +2130,7 @@ def plot_bacteria_performance_opt_param():
 
     rseed = random.random()
     for i, lamS in enumerate(lamSs):
-        (aupr, best_lamP, best_lamR, best_lamS, grid) = fg.grid_search_params(out, [lamP], lamRs, [lamS], k, solver='solve_ortho_direct',special_args=None, reverse=False, cv_both=(True,False), exclude_tfs=False, eval_metric='aupr')
+        (aupr, best_lamP, best_lamR, best_lamS, grid) = fg.grid_search_params(out, [lamP], lamRs, [lamS], k, solver='solve_ortho_direct', reverse=False, cv_both=(True,False), exclude_tfs=False, eval_metric='aupr')
         aupr_array[i,0] = aupr
         lamR_array[i,0] = best_lamR
     
@@ -2332,6 +2334,7 @@ def plot_synthetic_beta_err(N = 10, lamP=1, lamR=5,lamSs=[0,1]):
     plt.show()
     plt.plot(lamSs, auprs)
     plt.show()
+
 #plots error dictionaries
 #this is really for debugging plot_bacteria_performance 
 def plot_synthetic_performance(lamP=1.0, lamR=5, lamSs=[0,1], k=20):
@@ -2403,8 +2406,8 @@ def plot_synthetic_performance_em(lamP=1.0, lamR=5, lamSs=[0,1], k=20):
 
     
     for i, lamS in enumerate(lamSs):
-        sargs={'em_it': 5,'f':1,'uf':1,'marks':marks}
-        (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct_em', reverse = True, cv_both = (True, False), exclude_tfs=False, special_args=sargs)
+        sargs=fr.get_settings({'em_it': 5,'f':1,'uf':1,'marks':marks})
+        (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct_em', reverse = True, cv_both = (True, False), exclude_tfs=False, settings = sargs)
         for metric in metrics:
             err_dict1[metric][:, [i]] = errd1[metric]
             err_dict2[metric][:, [i]] = errd2[metric]
@@ -2483,13 +2486,16 @@ def plot_beta_diffs(out=None, B0=None, B1=None, add_fake=False,scale=1.0):
     
     real_diffs *= scale
     fake_diffs *= scale
+    print real_diffs
+    print fake_diffs
     #bins = np.linspace(-0.1, 0.1, 100)
+    bins = np.linspace(min(fake_diffs), max(fake_diffs), 100)
     if len(real_diffs):
-        #plt.hist(real_diffs, bins, histtype="stepfilled",alpha=0.5,label='real')
-        sns.kdeplot(real_diffs, shade=True, label='real')
+        plt.hist(real_diffs, bins, histtype="stepfilled",alpha=0.5,label='real')
+        #sns.kdeplot(real_diffs, shade=True, label='real')
     if len(fake_diffs):
-        #plt.hist(fake_diffs, bins, histtype="stepfilled",alpha=0.5,label='fake')
-        sns.kdeplot(fake_diffs, shade=True, label='fake')
+        plt.hist(fake_diffs, bins, histtype="stepfilled",alpha=0.5,label='fake')
+        #sns.kdeplot(fake_diffs, shade=True, label='fake')
     plt.xlabel('Delta Beta')
     
         
@@ -2500,7 +2506,28 @@ def plot_beta_diffs(out=None, B0=None, B1=None, add_fake=False,scale=1.0):
     plt.show()
     
 
-    return diffs
+    return (real_diffs, fake_diffs)
+
+
+#plots distributions of real lambdas of fusion constraints
+def plot_fuse_lams(out, cons):
+    N = 10
+    N_TF = 1
+    N_G = 500
+    (constraints, marks, orths) = ds.load_constraints(out)
+    marks = np.array(marks)
+    lams = np.array(map(lambda x: x.lam, cons))
+    bins = np.linspace(min(lams), max(lams), 100)
+    
+    if sum(marks):
+        plt.hist(lams[marks==True], bins, histtype="stepfilled",alpha=0.5,label='real')
+    
+    if sum(marks) < len(marks):
+        plt.hist(lams[marks==False], bins, histtype="stepfilled",alpha=0.5,label='fake')
+    plt.legend()
+    
+    plt.show()    
+
 
 
 
@@ -2619,7 +2646,7 @@ def net_var():
         for i in range(reps):
             out2 = os.path.join(out1,'dat_'+str(fused)+str(i))
             ds.write_fake_data1(out_dir = out2, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.1, pct_fused=fused)        
-            (errd1, errd2) = fg.cv_model_m(out2, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_args=None, reverse=False, cv_both=(True,False), exclude_tfs=True, seed=seed, verbose=True)
+            (errd1, errd2) = fg.cv_model_m(out2, lamP, lamR, lamS, k, solver='solve_ortho_direct', reverse=False, cv_both=(True,False), exclude_tfs=True, seed=seed, verbose=True)
             errdict1[fused][k*i:k*(i+1),:] = errd1['mse']
             errdict2[fused][k*i:k*(i+1),:] = errd2['mse']
 
@@ -2822,3 +2849,61 @@ def verify_data_integrity(out=None,N=100, N_TF=10, N_G=10):
     err2 = ((np.dot(d2.tf_mat, n2) - d2.exp_mat)**2).mean()
     print err1
     print err2
+
+
+#plots error dictionaries
+#this is really for debugging plot_bacteria_performance 
+def plot_synthetic_performance_adj(lamP=1.0, lamR=5, lamSs=[0,1], k=20):
+    N = 5
+    N_TF = 20
+    N_G = 30
+
+    out = os.path.join('data','fake_data','plot_synthetic_performance')
+    ds.write_fake_data1(N1 = k*N, N2 = k*N, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1,pct_fused=0.5, sparse=0.5, fuse_std = 0.0, orth_falsepos=10.0,orth_falseneg=0.0)
+    
+    metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con','B_mse']
+    err_dict_a = {m : np.zeros((k, len(lamSs))) for m in metrics} #subtilis
+    err_dict_u = {m : np.zeros((k, len(lamSs))) for m in metrics} #anthracis
+    settings_adj = fr.get_settings({'adjust':True,'return_cons':True})
+    for i, lamS in enumerate(lamSs):
+        (errd1a, errd2a) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, False), exclude_tfs=False, settings = settings_adj)
+        (errd1u, errd2u) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, False), exclude_tfs=False, settings = None)
+        
+        print 'corr is %f' % errd1u['corr'].mean()
+        for metric in metrics:
+            err_dict_a[metric][:, [i]] = errd1a[metric]
+            err_dict_u[metric][:, [i]] = errd1u[metric]
+
+    measures = ('auc','auc')
+    to_plot = np.dstack((err_dict_a[measures[0]], err_dict_u[measures[1]]))
+    linedesc = pd.Series(('adjusted','not'),name='error type')
+    xs = pd.Series(lamSs, name='lamS')
+    sns.tsplot(to_plot, time=xs, condition=linedesc, value=measures[0])
+    
+    plt.show()
+
+
+#plots performance as a function of R
+def plot_synthetic_performanceR(lamP=1.0, lamRs=[1,4,7,10,13], lamS=0, k=20):
+    N = 5
+    N_TF = 20
+    N_G = 30
+    out = 'data/fake_data/syntheticR'
+    ds.write_fake_data1(N1 = k*N, N2 = k*N, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1,pct_fused=0.5, sparse=0.5, fuse_std = 0.0, orth_falsepos=10.0,orth_falseneg=0.0)
+
+    metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con']
+    err_dict1 = {m : np.zeros((k, len(lamRs))) for m in metrics} #subtilis
+    err_dict2 = {m : np.zeros((k, len(lamRs))) for m in metrics} #anthracis
+
+    rseed = random.random()
+    for i, lamR in enumerate(lamRs):
+        (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse=True, cv_both=(True,False), exclude_tfs=False, pct_priors=0.0, verbose=False, seed=rseed)
+
+        for metric in metrics:
+            err_dict1[metric][:, [i]] = errd1[metric]
+            err_dict2[metric][:, [i]] = errd2[metric]
+
+    auprs = err_dict1['aupr'].mean(axis=0)
+    stes = err_dict1['aupr'].std(axis=0) / err_dict1['aupr'].shape[0]**0.5
+    pretty_plot_err(lamRs, auprs, stes, (1, 0.5, 0, 0.25))
+    plt.show()

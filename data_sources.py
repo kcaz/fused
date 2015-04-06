@@ -678,9 +678,12 @@ def generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, organisms, falsepos,
             break
         if candidate_orth.genes[0] in orth_genes or candidate_orth.genes[1] in orth_genes:
             continue
+        #add these, to make sure no double dipping
+        orth_genes.add(candidate_orth.genes[0])
+        orth_genes.add(candidate_orth.genes[1])
         to_add.append(candidate_orth)
         
-    
+    #print '%d real, %d fake' % (len(orths_retain), len(to_add))
     real_fake_orths = orths_retain + to_add
     
     return real_fake_orths
