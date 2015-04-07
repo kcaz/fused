@@ -91,36 +91,37 @@ def sanity1():
 
 #shows performance as a function of the amount of  data in a secondary network for several values of lamS
 def increase_data():
-    repeats = 1
-    N_TF = 25
+    N_TF = 20
     N_G = 200
     fixed_data_amt = 20
-    data_amnts = [10,30,50,70,90]
-    lamSs = [0,2.0]#[0, 0.25,0.5,0.75,1]
+    data_amnts = np.linspace(5,200,20)
+    lamSs = [0]#[0, 0.25,0.5,0.75,1]
     seed = 10
     if not os.path.exists(os.path.join('data','fake_data','increasedata')):
         os.mkdir(os.path.join('data','fake_data','increasedata'))
     #iterate over how much data to use
     errors = np.zeros((len(data_amnts), len(lamSs)))
-    for k in range(repeats):
-        for i, N in enumerate(data_amnts):
-            out = os.path.join('data','fake_data','increasedata','dat_'+str(N))
-            ds.write_fake_data1(N1 = 10*fixed_data_amt, N2 = 10*N, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = 1.0, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.0)
-            lamR = 0.1
-            lamP = 1.0 #priors don't matter
-            for j, lamS in enumerate(lamSs):
-                (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, seed=seed, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
-                errors[i, j] += errd2['B_mse'].mean()
-    #for i in range(len(data_amnts)):
-    #    for j in range(len(lamSs)):
-    #        errors[i,j] = errors[i,j]/k
-    print errors
-    #for r, amnt in enumerate(data_amnts):
-    #    plt.plot(data_amnts, errors[r,:])
+    for i, N in enumerate(data_amnts):
+        out = os.path.join('data','fake_data','increasedata','dat_'+str(N))
+        ds.write_fake_data1(N1 = 10*fixed_data_amt, N2 = 10*N, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = 1.0, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.75, fuse_std = 0.0)
+        lamR = 2
+        lamP = 1.0 #priors don't matter
+        for j, lamS in enumerate(lamSs):
+            (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, seed=seed, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
+            errors[i, j] += errd2['aupr'].mean()
+
+    adj_error = np.zeros((errors.shape[0],  errors.shape[1]))
+    for val in range(errors.shape[0]):
+        adj_error[val, 0] = errors[val,0]/errors[0,0]
+
+    return adj_error
+    for c, lamS in enumerate(lamSs):
+        plt.plot(data_amnts, errors[:,c])
 
     plt.legend(data_amnts)
+    plt.show()
     plt.savefig(os.path.join(os.path.join('data','fake_data','increasedata','fig1')))
-    plt.figure()
+#    plt.figure()
 #    for c, lamS in enumerate(lamSs):
 #        plt.plot(lamSs, errors[:, c])
 #    plt.legend(lamSs)
@@ -270,7 +271,7 @@ def test_scad_quick():
     N_G = 200
     #N_TF = 10
     #N_G = 30
-    amt_fused = 1.0
+    amt_fused = 0.5
     orth_err = [0,0.75,1.0]#,0.25,0.5,0.75,1]
     lamSs = [0,3,6]#[0, 2, 4, 6]
     seed = 10
@@ -287,7 +288,7 @@ def test_scad_quick():
     for p in range(reps):
         for i, N in enumerate(orth_err):
             out = os.path.join('data','fake_data','test_scad_quick','dat_'+str(N))
-            ds.write_fake_data1(N1 = 10, N2 = 10, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = N, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.5, fuse_std = 0.0)
+            ds.write_fake_data1(N1 = 10, N2 = 100, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = N, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.5, fuse_std = 0.0)
             lamR = 2
             lamP = 1.0 #priors don't matter
 
@@ -300,8 +301,9 @@ def test_scad_quick():
                 #(errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=2, solver='solve_ortho_direct_scad', reverse = False, seed=seed, special_args = {'s_it':50, 'a':0.3}, cv_both = (True, True))
                 #print errd1
                 #(errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=2, solver='solve_ortho_direct_scad', reverse = False, seed=seed, special_args = {'s_it':5, 'per':((1/(1+float(N)))*100)}, cv_both = (True, True))
+                (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=2, solver='solve_ortho_direct_scad', reverse = False, seed=seed, special_args = {'s_it':5, 'per':100}, cv_both = (True, True))
                 #print errd1
-                #errors_scad[i,j] += errd1['aupr'].mean()
+                errors_scad[i,j] += errd1['aupr'].mean()
                 #errors_scad_var[i,j] += errd1['aupr'].mean()**2
 
     #errors_scad /= reps
@@ -311,7 +313,7 @@ def test_scad_quick():
     #errors_l2_var /= reps
     #errors_l2_var -= errors_l2**2
 
-    return (errors_l2)
+    return (errors_l2,errors_scad)
     return (errors_scad, errors_scad_var, errors_l2, errors_l2_var)
 
 
@@ -1788,7 +1790,7 @@ def L2fusion_quick():
 
     for i, N in enumerate(pct_fused):
         out2 = os.path.join(out1,'dat_'+str(N))
-        ds.write_fake_data1(N1=5, N2=5, out_dir = out2, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.75, fuse_std = 0.1, pct_fused=N)        
+        ds.write_fake_data1(N1=5, N2=50, out_dir = out2, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.75, fuse_std = 0.1, pct_fused=N)        
         lamP = 1.0 #priors don't matter
         seed = 10
         for j, lamS in enumerate(lamSs):
@@ -1805,6 +1807,56 @@ def L2fusion_quick():
     df.columns.name = 'lamS'
     sns.heatmap(df,cmap="Blues", square=True)
     plt.show()
+
+def L2plot():
+    N_TF = 20
+    N_G = 200
+    pct_fused = list(np.linspace(0,1.0,20))
+
+    lamR = 2
+    lamSs = [0,list(np.linspace(0,3,10))[4]]
+    lamP = 1.0
+    aupr_array = np.zeros((len(pct_fused),len(lamSs)))
+    aupr_adj = np.zeros((len(pct_fused),len(lamSs)))
+
+    out1 = os.path.join('data','fake_data','l2plot')
+    k = 10#cv folds
+    if not os.path.exists(out1):
+        os.mkdir(out1)
+
+    metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con']
+    err_dicts = [{m : np.zeros((k, len(pct_fused))) for m in metrics},{m : np.zeros((k, len(pct_fused))) for m in metrics}]
+    err1_adj = np.zeros((k,len(pct_fused)))
+    err2_adj = np.zeros((k,len(pct_fused)))
+
+    for i, N in enumerate(pct_fused):
+        out2 = os.path.join(out1,'dat_'+str(N))
+        ds.write_fake_data1(N1=5*k, N2=50*k, out_dir = out2, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.75, fuse_std = 0.1, pct_fused=N)        
+        lamP = 1.0 #priors don't matter
+        seed = 10
+        for j, lamS in enumerate(lamSs):
+            (errd1, errd2) = fg.cv_model_m(out2, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_args=None, reverse=False, cv_both=(True,True), exclude_tfs=True, pct_priors=0, seed=seed, verbose=False)
+            for metric in metrics:
+                err_dicts[j][metric][:, [i]] = errd1[metric]
+           
+    print err_dicts[0]['aupr'].shape
+
+    for j in range(err_dicts[0]['aupr'].shape[0]):
+        for k in range(err_dicts[0]['aupr'].shape[1]):
+            err1_adj[j,k] = err_dicts[0]['aupr'][j,k]/err_dicts[0]['aupr'][j,0]
+
+    for j in range(err_dicts[1]['aupr'].shape[0]):
+        for k in range(err_dicts[1]['aupr'].shape[1]):
+            err2_adj[j,k] = err_dicts[1]['aupr'][j,k]/err_dicts[1]['aupr'][j,0]
+
+    to_plot = np.dstack((err1_adj.T, err2_adj.T))
+    linedesc = pd.Series(['unfused','fused'],name='penalty')
+    xs = pd.Series(pct_fused, name='network similarity')
+    sns.tsplot(to_plot, time=xs, condition=linedesc, value='% aupr improvement')
+    
+    plt.show()
+
+   
 
 
 #this looks at the distributions Betas for +/- priors, and an equal number of non-priors in subtilis
