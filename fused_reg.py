@@ -18,6 +18,29 @@ except ImportError:
 
 from sklearn import linear_model
 
+def get_settings(override = None):
+    d = dict()
+    d['return_cons'] = False
+    d['cons'] = []
+    d['adjust'] = False
+    d['solver'] = 'basic'#use this later
+    d['a'] = 0
+    d['per'] = 0
+    d['s_it'] = 5
+    d['m_it'] = 5
+    if override != None:
+        for k in override.keys():
+            if k in d:
+                d[k] = override[k]
+            else:
+                print 'attempting to override nonexistent key'
+                print d[k]
+    return d    
+
+
+
+
+
 #SECTION: -------------------DATA STRUCTURES--------------
 coefficient = collections.namedtuple('coefficient',['sub','r','c'])
 
@@ -271,6 +294,60 @@ def no_self_reg_constraints(organisms, gene_ls, tf_ls, lam):
 
 #SECTION: --------CODE FOR ADJUSTING CONSTRAINTS---------
 
+
+#for the given columns, figures out the inverse covariance matrix of the equivalent prior for fused/unfused, takes the trace of the inverses as the variance, and figures out a constant to multiply fused interactions by that will equalize them
+def adjust_var(Xs, cols, fuse_cons, ridge_cons, lamR):
+#returns the inverse covariance matrix of the prior equivalent to the given constraint structure
+    counter = 0
+    b_to_n = dict()
+    n_to_b = dict()    
+    for co in cols:
+        sub = co.sub
+        for r in range(Xs[sub].shape[1]):
+            b_to_n[(sub, co.c, r)] = counter
+            n_to_b[counter] = (sub, co.c, r)
+            counter += 1
+    N = counter
+
+    def inv_cov(Xs, cols, fuse_cons, ridge_cons, lamR):
+        Einv = np.zeros((N, N))
+        for n in range(N):
+            Einv[n, n] = lamR
+        for ridge_con in ridge_cons:
+            n = b_to_n[(ridge_con.c1.sub, ridge_con.c1.c, ridge_con.c1.r)]
+            Einv[n, n] = ridge_con.lam
+        for fuse_con in fuse_cons:
+            n = b_to_n[(fuse_con.c1.sub, fuse_con.c1.c, fuse_con.c1.r)]
+            m = b_to_n[(fuse_con.c2.sub, fuse_con.c2.c, fuse_con.c2.r)]
+            Einv[n, m] += -fuse_con.lam
+            Einv[m, n] += -fuse_con.lam
+            Einv[n, n] += fuse_con.lam
+            Einv[m, m] += fuse_con.lam
+        return Einv
+
+
+    Einv_fused = inv_cov(Xs, cols, fuse_cons, ridge_cons, lamR)
+    Einv_unfused = inv_cov(Xs, cols, [], ridge_cons, lamR)
+
+    
+    v_f = np.sum(np.trace(np.linalg.inv(Einv_fused)))
+    v_u = np.sum(np.trace(np.linalg.inv(Einv_unfused)))
+
+    #to fix the cov mat ratio we want to multiply by v_u/v_f
+    #because we're multiplying by the inverse, v_f/v_u
+    c = v_f/v_u
+    fuse_cons_adj = []
+    ridge_cons_adj = []
+    lamR = lamR*c
+    #print 'living with %d constraints' % len(fuse_cons)
+    #print 'adjusting by (%f / %f) = %f'%(v_f, v_u, c)
+    for fcon in fuse_cons:
+        fuse_cons_adj.append(constraint(fcon.c1, fcon.c2, fcon.lam*c))
+    for rcon in ridge_cons:
+        ridge_cons_adj.append(constraint(rcon.c1, rcon.c2, rcon.lam*c))
+        
+    return (fuse_cons_adj, ridge_cons_adj, lamR)
+
 #MISSING: adjuster based on variance, because that's not always possible
 
 #we don't want the presence of a fusion constraint to over-constrain the coefficients that the fusion constraint is attached to. This code adjusts the weight of fusion and ridge constraints in order to maintain the determinant of the covariance matrix.
@@ -417,15 +494,12 @@ def direct_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR):
 #YS: list of gene expression matrices
 #Orth: list of lists of one_genes
 #priors: list of lists of one_gene pairs
-def solve_ortho_ref(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors,lamP, lamR, lamS, adjust=False, self_reg_pen = 0, special_args=None):
-    
-    
+def solve_ortho_ref(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors,lamP, lamR, lamS, settings=None):
+    if settings == None:
+        settings = get_settings()
     ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
     fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
-    if self_reg_pen:
-        self_con = no_self_reg_constraints(organisms, gene_ls, tf_ls, lamR * self_reg_pen)
-
-    Bs = direct_solve(Xs, Ys, fuse_con, ridge_con, lamR)    
+    Bs = direct_solve(Xs, Ys, fuse_con, ridge_con, lamR, adjust = settings['adjust'])
     return Bs
 
 #most basic solver. Can involve a pre-adjustment step to avoid over-regularizing fused constraints. Solves by factoring.
@@ -434,26 +508,59 @@ def solve_ortho_ref(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors,lamP, lamR, 
 #YS: list of gene expression matrices
 #Orth: list of lists of one_genes
 #priors: list of lists of one_gene pairs
-def solve_ortho_direct(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors,lamP, lamR, lamS, adjust=False, self_reg_pen = 0, special_args=None):   
+def solve_ortho_direct(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors,lamP, lamR, lamS, adjust=False, self_reg_pen = 0, settings=None):   
+    if settings == None:
+        settings = get_settings()    
     ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
     fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
-    
-    if self_reg_pen:
-        self_con = no_self_reg_constraints(organisms, gene_ls, tf_ls, lamR * self_reg_pen)
-    Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)    
+    Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR, adjust = settings['adjust'])    
     
     return Bs
 
 
-#solver that uses R package for mcp
-def solve_ortho_direct_mcp_r(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors,lamP, lamR, lamS, adjust=False, self_reg_pen = 0, special_args=None):   
-    ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
+
+#parameters as solve_ortho_direct. 
+#s_it defines the number of scad-like iterations to do
+def solve_ortho_direct_scad(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS, settings = None):
+    if settings == None:
+        settings = get_settings()  
+    ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)    
     fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
-    if self_reg_pen:
-        self_con = no_self_reg_constraints(organisms, gene_ls, tf_ls, lamR * self_reg_pen)
-    Bs = direct_solve_factor_r(Xs, Ys, fuse_con, ridge_con, lamR)    
+    Bs = solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, settings['s_it'], settings = settings)
     return Bs
 
+#same as solve_ortho_direct_scad, but also plots lams at each iteration
+def solve_ortho_direct_scad_plot(out, organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS, settings = None):
+    if settings == None:
+        settings = get_settings()  
+    ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)    
+    fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
+    Bs = solve_scad_plot(out, Xs, Ys, fuse_con, ridge_con, lamR, lamS, settings['s_it'], settings = settings)
+    return Bs
+
+
+#parameters as solve_ortho_direct. 
+#m_it defines the number of mcp-like iterations to do
+def solve_ortho_direct_mcp(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS, settings = None):
+    if settings == None:
+        settings = get_settings()  
+    ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)    
+    fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
+    Bs = solve_mcp(Xs, Ys, fuse_con, ridge_con, lamR, lamS, settings['s_it'], settings = settings)
+    return Bs
+
+
+#parameters as solve_ortho_direct. 
+#em_it defines the number of em iterations to do
+def solve_ortho_direct_em(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS, settings = None):
+    if settings == None:
+        settings = get_settings()  
+    ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)    
+    fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
+    Bs = solve_em(Xs, Ys, fuse_con, ridge_con, lamR, lamS, settings['s_it'], settings = settings)
+    return Bs
+
+#??? fix this later
 def solve_ortho_lasso(organisms, gene_ls, tf_ls, Xs, Ys, Xs_t, Ys_t, orth, priors,lamP, lamR, lamS, n_alpha=100, adjust=False, special_args=None):
     ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
     fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
@@ -469,34 +576,6 @@ def solve_ortho_lasso(organisms, gene_ls, tf_ls, Xs, Ys, Xs_t, Ys_t, orth, prior
     best_alpha_ind = np.argmin(errors)
     alpha = alphas[best_alpha_ind]
     (Bs, _) = lasso_path(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, Xs_t, Ys_t, alphas, return_model=False)
-
-
-#parameters as solve_ortho_direct. 
-#s_it defines the number of scad-like iterations to do
-def solve_ortho_direct_scad(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS, s_it, special_args=None):
-    ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)    
-    #fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
-    fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
-    Bs = solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, s_it=s_it,special_args=special_args)
-    return Bs
-
-
-#parameters as solve_ortho_direct. 
-#m_it defines the number of mcp-like iterations to do
-def solve_ortho_direct_mcp(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS, m_it, special_args=None):
-    ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)    
-    fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
-    Bs = solve_mcp(Xs, Ys, fuse_con, ridge_con, lamR, lamS, m_it=m_it,special_args=special_args)
-    return Bs
-
-
-#parameters as solve_ortho_direct. 
-#em_it defines the number of em iterations to do
-def solve_ortho_direct_em(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS, em_it, special_args=None):
-    ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)    
-    fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
-    Bs = solve_em(Xs, Ys, fuse_con, ridge_con, lamR, lamS, em_it=em_it,special_args=special_args)
-    return Bs
 
 
 #this is like direct solve, but it breaks up unrelated columns
@@ -516,14 +595,19 @@ def direct_solve_factor(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, ad
         
     #iterate over subproblems
     for f, cols in enumerate(cols_l):
-        (F, y, b_inds) = get_Design(Xs, Ys, cols_l[f], cons_l[f], ridg_l[f], lambdaR)
+        if adjust:
+            (fcons, rcons, lamR) = adjust_var(Xs, cols_l[f], cons_l[f], ridg_l[f] ,lambdaR)
+        else:
+            fcons = cons_l[f]
+            rcons = ridg_l[f]
+            lamR = lambdaR                  
+            
+        (F, y, b_inds) = get_Design(Xs, Ys, cols_l[f], fcons, rcons, lamR)
 
         bsp = scipy.sparse.linalg.lsqr(F, y)#the first result is b, and it needs to be turned into a column vector
         b = bsp[0][:, None] #god this is annoying
         
-
         #we've now solved a b vector that contains potentially several columns of B. figure out what indices go where, and put them into the right B
-
         for co_i, co in enumerate(cols):
             (start_ind, end_ind) = b_inds[co_i]
             Bs[co.sub][:, [co.c]] = b[start_ind:end_ind]
@@ -630,135 +714,21 @@ def lasso_path(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, Xs_t, Ys_t,
     
     return (Bs, alpha_err)
 
-#produces X, y for use in R package ncvreg
-def direct_solve_factor_r(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, adjust=False):
-#    if False:#this switches to the old version, which is faster for inexplicable reasons
-#        return direct_solve_factor_o(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, adjust=adjust)
-    ncvreg = rpackages.importr('ncvreg')
-    cv_ncvreg = robjects.r("cv.ncvreg")
+#I've deleted this, because I was fairly sure we would never use it. Can dig it out of git if needed.
+#def direct_solve_factor_r
+
+def solve_em(Xs, Ys, fuse_con, ridge_con, lamR, lamS, em_it, settings = None):
     
-    (cols_l, cons_l, ridg_l) = factor_constraints_columns(Xs, Ys, fuse_constraints, ridge_constraints)
-    
-    Bs = []
-    
-    #Initialize matrices to hold solutions
-    for i in range(len(Xs)):
-        Bs.append(np.zeros((Xs[i].shape[1], Ys[i].shape[1])))  
-
-    Fs = []
-    ys = []
-    #iterate over subproblems
-    for f in range(len(cols_l)):
-#print('\r working on subproblem: %d'%f), #!?!?!?!
-        #get the coefficients and constraints associated with the current problem
-        
-        columns = cols_l[f]
-        constraints = cons_l[f]
-        ridge_cons = ridg_l[f]
-        #num_species = len(set(map(lambda co: co.sub, coefficients)))
-        if adjust:
-            
-            (constraints, ridge_cons) = adjust_vol2(Xs, columns, constraints, ridge_cons,lambdaR)
-        
-        #we're building a canonical ordering over the columns for the current subproblem
-        counter = 0
-        col_order = dict()
-        for co in columns:
-            sub = co.sub
-            col_order[co] = counter
-            counter += 1
-        #make a list of Xs for diagonal concatenation
-        X_l = []
-        for co in columns:
-            X_l.append(Xs[co.sub])
-        #make Y 
-        Y_l = []
-        for co in columns:
-            Y = Ys[co.sub]
-            Y_l.append(Y[:, [co.c]])
-        
-
-        #compute a cumulative sum over the number of columns in each sub-block, for use as offsets when computing coefficient indices for penalties
-        #what this means is that column c in subproblem s has start index cums[s] + r
-        cums = [0]+list(np.cumsum(map(lambda x: x.shape[1], X_l)))
-        
-        #initialize P. we know it has as many rows as constraints
-        if len(constraints):
-            P = scipy.sparse.dok_matrix((len(constraints), cums[-1]))#np.zeros((len(constraints), cums[-1]))
-        else:
-            P = None
-        #I_vals = np.ones(cums[-1]) * lambdaR
-        #now we go through the ridge constraints and set entries of I
-        #for con in ridge_cons:
-        #    ind1 = col_order[(con.c1.sub, con.c1.c)]
-        #    pc1 = cums[ind1] + con.c1.r
-        #    I_vals[pc1] = con.lam
-                
-        #I = scipy.sparse.csr_matrix((I_vals, np.vstack((np.arange(cums[-1]), np.arange(cums[-1])))), shape=(cums[-1],cums[-1]))
-        
-        for P_r, con in enumerate(constraints):
-            #get the indices of the diagonal blocks in X corresponding to the coefficients in this constraint
-            ind1 = col_order[(con.c1.sub, con.c1.c)]
-            ind2 = col_order[(con.c2.sub, con.c2.c)]
-            #the locations corresponding to the coefficients we want to penalize are the start index of that block plus the row
-            pc1 = cums[ind1] + con.c1.r
-            pc2 = cums[ind2] + con.c2.r
-            
-            P[P_r, pc1] = con.lam
-            P[P_r, pc2] = -con.lam
-            
-        #due to an annoying bug in sparse vstack, I need to check if P is all zeros
-        
-        
-        X = diag_concat_sparse(X_l)        
-        if len(constraints) and len(P.keys()):
-            P = P.asformat('csr')
-            Y_l.append(np.zeros((len(constraints), 1)))
-            F = scipy.sparse.vstack((X, P))
-            #F = scipy.sparse.vstack((X, P, I))#F is the penalized design matrix
-        else:
-            F = X
-            #F = scipy.sparse.vstack((X, I), format='csr')#F is the penalized design matrix
-        y = np.vstack(Y_l)
- 
-        F0 = np.array(F.todense())
-        
-        rpy2.robjects.numpy2ri.activate()
-
-        fit = ncvreg.ncvreg(F0, y)
-        cvfit = ncvreg.cv_ncvreg(F0, y)
-        B = list(np.array(fit[0])[:,cvfit[4][0]])
-        print len(B)
-
-
-        for co_i in range(len(columns)):
-            co = columns[co_i]
-            start_ind = cums[co_i]
-            end_ind = cums[co_i+1]
-            Bs[co.sub][:,co.c] = B[start_ind:end_ind]
-
-#        y = np.vstack(Y_l) 
-#        Fs.append(F)
-#        ys.append(y)
-
-    return Bs
-
-
-def solve_em(Xs, Ys, fuse_con, ridge_con, lamR, lamS, em_it, special_args=None):
-    #special_args is a dictionary where 'f': constant to multiply 1/covar_fused by to get lamS; 'uf' is unfused and 'f' is fused
-    verbose=False
+    verbose=settings['verbose']
     if verbose:
         from matplotlib import pyplot as plt
         import seaborn as sns
         #plt.figure()
-    f = special_args['f']
-    uf = special_args['uf']
+    f = settings['f']
+    uf = settings['uf']
 
     Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
-    if 'marks' in special_args:
-        marks = np.array(special_args['marks'])
-    else:
-        marks = None
+    marks = settings['marks']
     if lamS == 0:
         em_it = 1
     for i in range(em_it-1):
@@ -976,20 +946,17 @@ def em_old(Bs_init, fuse_con, lamS, f, uf):
     return new_fuse_constraints
 
 
-def solve_mcp(Xs, Ys, fuse_con, ridge_con, lamR, lamS, m_it, special_args=None):    
-    if special_args and 'a' in special_args:
-        a = special_args['a']
-    else:   
-        a = 3.7
+def solve_mcp(Xs, Ys, fuse_con, ridge_con, lamR, lamS, m_it, settings):  
     
+    a = settings['a']
+
     Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
+
     for i in range(m_it-1):
         fuse_con = mcp(Bs, fuse_con, lamS, a=a)
         Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
-    #plot_scad(Bs, fuse_con2)
-    
-    if special_args and 'orths' in special_args:
-        special_args['orths'] = fuse_con #backdoor!
+    if settings['return_cons']:
+        settings['cons'] = fuse_con
     return Bs
 
 #returns a new set of fusion constraints corresponding to a saturating penalty
@@ -1019,23 +986,57 @@ def mcp(Bs_init, fuse_constraints, lamS, lamW=None, a=2):
 
 
 #iteratively adjusts fusion constraint weight to approximate saturating penalty
-def solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, s_it, special_args=None):    
+def solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, s_it, settings): 
     Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
-    if special_args and 'a' in special_args:
-        a = special_args['a']
-    elif special_args and 'per' in special_args:
-        a = pick_a(Bs, fuse_con, special_args['per'])
-        print lamS
+    if settings['a'] > 0:
+        a = settings['a']
     else:
-        a = 3.7
+        a = pick_a(Bs, fuse_con, settings['per'])
     for i in range(s_it-1):
         fuse_con = scad(Bs, fuse_con, lamS, a=a)
         Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
+    if settings['return_cons']:
+        settings['cons'] = fuse_con
+    return Bs
+
+#same as solve_scad but includes plot_fuse_lams
+def solve_scad_plot(out, Xs, Ys, fuse_con, ridge_con, lamR, lamS, s_it, settings): 
+    import experiments as e
+    import data_sources as ds
+    import matplotlib.pyplot as plt
+    Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
+    if settings['a'] > 0:
+        a = settings['a']
+    else:
+        a = pick_a(Bs, fuse_con, settings['per'])
+    (constraints, marks, orths) = ds.load_constraints(out)
+    marks = np.array(marks)
+    true_cons = []
+    false_cons = []
     
-    #plot_scad(Bs, fuse_con2)
-    
-    if special_args and 'orths' in special_args:
-        special_args['orths'] = fuse_con #backdoor!
+    for i in range(s_it-1):
+        fuse_con = scad(Bs, fuse_con, lamS, a=a)
+        Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
+        lams = np.array(map(lambda x: x.lam, fuse_con))
+        true_cons.append(lams[marks==True])
+        false_cons.append(lams[marks==False])
+
+    #print false_cons 
+    true_arr = np.array(true_cons).T
+    false_arr = np.array(false_cons).T
+    T = range(true_arr.shape[1])
+    for i in range(true_arr.shape[0]):
+        plt.plot(T, true_arr[i,:])
+    plt.title('true orth')
+    plt.show()
+    F = range(false_arr.shape[1])
+    for i in range(false_arr.shape[0]):
+        plt.plot(F, false_arr[i,:])
+    plt.title('false orth')
+    plt.show()
+
+    if settings['return_cons']:
+        settings['cons'] = fuse_con
     return Bs
 
 def scad_prime(theta, lamS, a):
@@ -1052,7 +1053,7 @@ def scad2_prime(theta, lamS, a):
         return lamS * max(0, (a - theta))
 
 #returns a new set of fusion constraints corresponding to a saturating penalty
-def scad(Bs_init, fuse_constraints, lamS, lamW=None, a=3.7):
+def scad(Bs_init, fuse_constraints, lamS, a):
     new_fuse_constraints = []
     import math    
     for i in range(len(fuse_constraints)):
@@ -1071,14 +1072,10 @@ def scad(Bs_init, fuse_constraints, lamS, lamW=None, a=3.7):
     return new_fuse_constraints
 
 def pick_a(Bs_init, fuse_constraints, percentile):
-    import seaborn as sns
-    from matplotlib import pyplot as plt
-    deltabetas = beta_diff(Bs_init, fuse_constraints)
+    
+    deltabetas = np.abs(beta_diff(Bs_init, fuse_constraints))
     a = np.percentile(deltabetas, percentile)
-    print percentile
-    print a
-    #sns.kdeplot(deltabetas, shade=True)
-    #plt.show()
+    
     return a
 
 

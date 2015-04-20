@@ -14,7 +14,7 @@ import collections
 
 
 
-def fit_model(data_fn, lamP, lamR, lamS, solver='solve_ortho_direct',special_args=None):
+def fit_model(data_fn, lamP, lamR, lamS, solver='solve_ortho_direct', settings = None):
     ds1 = ds.standard_source(data_fn,0)
     ds2 = ds.standard_source(data_fn,1)
     orth_fn = os.path.join(data_fn, 'orth')
@@ -38,17 +38,17 @@ def fit_model(data_fn, lamP, lamR, lamS, solver='solve_ortho_direct',special_arg
     priors = priors1 + priors2
 
     if solver == 'solve_ortho_direct':
-        Bs = fl.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
+        Bs = fl.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, settings = settings)
     if solver == 'solve_ortho_direct_scad':
-        Bs = fl.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, s_it = special_args['s_it'], special_args = special_args)
+        Bs = fl.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, settings = settings)
     if solver == 'solve_ortho_ref':
-        Bs = fl.solve_ortho_ref(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
+        Bs = fl.solve_ortho_ref(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, settings = settings)
     
     return Bs
 
 
 #this is the master cross-validator!
-def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_args=None, reverse=False, cv_both=(True,True), exclude_tfs=True, pct_priors=0, seed=None, verbose=False):
+def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',settings = None, reverse=False, cv_both=(True,True), exclude_tfs=True, pct_priors=0, seed=None, verbose=False):
     if seed != None:
         random.seed(seed)
 
@@ -127,13 +127,15 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special
         priors_tr_fl = priors_tr[0] + priors_tr[1]
         #solve the model
         if solver == 'solve_ortho_direct':
-            Bs = fl.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors_tr_fl, lamP, lamR, lamS)
+            Bs = fl.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors_tr_fl, lamP, lamR, lamS, settings = settings)
         if solver == 'solve_ortho_direct_scad':
-            Bs = fl.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, orth, priors_tr_fl, lamP, lamR, lamS, s_it = special_args['s_it'], special_args=special_args)
+            Bs = fl.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, orth, priors_tr_fl, lamP, lamR, lamS, settings = settings)
+        if solver == 'solve_ortho_direct_scad_plot':
+            Bs = fl.solve_ortho_direct_scad_plot(data_fn, organisms, genes, tfs, Xs, Ys, orth, priors_tr_fl, lamP, lamR, lamS, settings = settings)
         if solver == 'solve_ortho_direct_mcp':
-            Bs = fl.solve_ortho_direct_mcp(organisms, genes, tfs, Xs, Ys, orth, priors_tr_fl, lamP, lamR, lamS, m_it = special_args['m_it'], special_args=special_args)
+            Bs = fl.solve_ortho_direct_mcp(organisms, genes, tfs, Xs, Ys, orth, priors_tr_fl, lamP, lamR, lamS, settings = settings)
         if solver == 'solve_ortho_direct_em':
-            Bs = fl.solve_ortho_direct_em(organisms, genes, tfs, Xs, Ys, orth, priors_tr_fl, lamP, lamR, lamS, em_it = special_args['em_it'], special_args=special_args)
+            Bs = fl.solve_ortho_direct_em(organisms, genes, tfs, Xs, Ys, orth, priors_tr_fl, lamP, lamR, lamS, settings = settings)
 
          #evaluate a bunch of metrics
         (corr, fused_coeffs) = fused_coeff_corr(organisms, genes, tfs, orth, Bs)
@@ -390,7 +392,7 @@ def fused_coeff_corr(organisms, genes_l, tfs_l, orth, B_l):
     return (np.corrcoef(fused_vals)[0,1], fused_vals)
 
 #take list of lamP, lamR, lamS values and finds the optimal parameters using cv_model1
-def grid_search_params(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',special_args=None, reverse=False, cv_both=(True,True), exclude_tfs=True, eval_metric='mse'):
+def grid_search_params(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',settings=None, reverse=False, cv_both=(True,True), exclude_tfs=True, eval_metric='mse'):
 
     seed = random.random()
     grid = dict()
@@ -404,7 +406,7 @@ def grid_search_params(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct'
     for r in range(len(lamR)):
         for s in range(len(lamS)):
             for p in range(len(lamP)):
-                (errd1, errd2) = cv_model_m(data_fn, lamP[p], lamR[r], lamS[s], k, solver='solve_ortho_direct',special_args=None, reverse=False, cv_both=(True,True), exclude_tfs=True, seed=seed, verbose=True)
+                (errd1, errd2) = cv_model_m(data_fn, lamP[p], lamR[r], lamS[s], k, solver='solve_ortho_direct',settings=settings, reverse=False, cv_both=(True,True), exclude_tfs=True, seed=seed, verbose=True)
 
                 if eval_metric == 'mse':
                     grid[str(lamR[r])+'_'+str(lamS[s])+'_'+str(lamP[p])] = errd1['mse']

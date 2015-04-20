@@ -678,9 +678,12 @@ def generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, organisms, falsepos,
             break
         if candidate_orth.genes[0] in orth_genes or candidate_orth.genes[1] in orth_genes:
             continue
+        #add these, to make sure no double dipping
+        orth_genes.add(candidate_orth.genes[0])
+        orth_genes.add(candidate_orth.genes[1])
         to_add.append(candidate_orth)
         
-    
+    #print '%d real, %d fake' % (len(orths_retain), len(to_add))
     real_fake_orths = orths_retain + to_add
     
     return real_fake_orths
@@ -912,4 +915,19 @@ def voodoo():
         f.write('tc1\t%s\ntc2\t%s\n' %('1','1'))
     
 
+#makes sure that XB = Y for generated data
+
+def verify_data_integrity(N=100, N_TF=10, N_G=10):
+    out = os.path.join('data','fake_data','verify_data_integrity')
+    ds.write_fake_data1(N1=N, N2=N, out_dir = 'data/fake_data/simpletest', tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.0, measure_noise2 = 0.0, sparse=0.0, fuse_std = 0.0, pct_fused=1.0)
     
+    (n1, g1, t1) = ds.load_network('data/fake_data/simpletest/beta1')
+    (n2, g2, t2) = ds.load_network('data/fake_data/simpletest/beta2')
+
+    d1 = ds.standard_source('data/fake_data/simpletest/', 0)
+    d2 = ds.standard_source('data/fake_data/simpletest/', 1)
+
+    err1 = ((np.dot(d1.tf_mat, n1) - d1.exp_mat)**2).mean()
+    err2 = ((np.dot(d2.tf_mat, n2) - d2.exp_mat)**2).mean()
+    print err1
+    print err2
