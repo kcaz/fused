@@ -27,6 +27,7 @@ def get_settings(override = None):
     d['a'] = 0
     d['per'] = 0
     d['s_it'] = 5
+    d['m_it'] = 5
     if override != None:
         for k in override.keys():
             if k in d:
@@ -528,6 +529,15 @@ def solve_ortho_direct_scad(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lam
     Bs = solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, settings['s_it'], settings = settings)
     return Bs
 
+#same as solve_ortho_direct_scad, but also plots lams at each iteration
+def solve_ortho_direct_scad_plot(out, organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS, settings = None):
+    if settings == None:
+        settings = get_settings()  
+    ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)    
+    fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
+    Bs = solve_scad_plot(out, Xs, Ys, fuse_con, ridge_con, lamR, lamS, settings['s_it'], settings = settings)
+    return Bs
+
 
 #parameters as solve_ortho_direct. 
 #m_it defines the number of mcp-like iterations to do
@@ -985,6 +995,46 @@ def solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, s_it, settings):
     for i in range(s_it-1):
         fuse_con = scad(Bs, fuse_con, lamS, a=a)
         Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
+    if settings['return_cons']:
+        settings['cons'] = fuse_con
+    return Bs
+
+#same as solve_scad but includes plot_fuse_lams
+def solve_scad_plot(out, Xs, Ys, fuse_con, ridge_con, lamR, lamS, s_it, settings): 
+    import experiments as e
+    import data_sources as ds
+    import matplotlib.pyplot as plt
+    Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
+    if settings['a'] > 0:
+        a = settings['a']
+    else:
+        a = pick_a(Bs, fuse_con, settings['per'])
+    (constraints, marks, orths) = ds.load_constraints(out)
+    marks = np.array(marks)
+    true_cons = []
+    false_cons = []
+    
+    for i in range(s_it-1):
+        fuse_con = scad(Bs, fuse_con, lamS, a=a)
+        Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
+        lams = np.array(map(lambda x: x.lam, fuse_con))
+        true_cons.append(lams[marks==True])
+        false_cons.append(lams[marks==False])
+
+    #print false_cons 
+    true_arr = np.array(true_cons).T
+    false_arr = np.array(false_cons).T
+    T = range(true_arr.shape[1])
+    for i in range(true_arr.shape[0]):
+        plt.plot(T, true_arr[i,:])
+    plt.title('true orth')
+    plt.show()
+    F = range(false_arr.shape[1])
+    for i in range(false_arr.shape[0]):
+        plt.plot(F, false_arr[i,:])
+    plt.title('false orth')
+    plt.show()
+
     if settings['return_cons']:
         settings['cons'] = fuse_con
     return Bs

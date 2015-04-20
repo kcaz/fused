@@ -91,36 +91,37 @@ def sanity1():
 
 #shows performance as a function of the amount of  data in a secondary network for several values of lamS
 def increase_data():
-    repeats = 1
-    N_TF = 25
+    N_TF = 20
     N_G = 200
     fixed_data_amt = 20
-    data_amnts = [10,30,50,70,90]
-    lamSs = [0,2.0]#[0, 0.25,0.5,0.75,1]
+    data_amnts = np.linspace(5,200,20)
+    lamSs = [0]#[0, 0.25,0.5,0.75,1]
     seed = 10
     if not os.path.exists(os.path.join('data','fake_data','increasedata')):
         os.mkdir(os.path.join('data','fake_data','increasedata'))
     #iterate over how much data to use
     errors = np.zeros((len(data_amnts), len(lamSs)))
-    for k in range(repeats):
-        for i, N in enumerate(data_amnts):
-            out = os.path.join('data','fake_data','increasedata','dat_'+str(N))
-            ds.write_fake_data1(N1 = 10*fixed_data_amt, N2 = 10*N, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = 1.0, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.0)
-            lamR = 0.1
-            lamP = 1.0 #priors don't matter
-            for j, lamS in enumerate(lamSs):
-                (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, seed=seed, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
-                errors[i, j] += errd2['B_mse'].mean()
-    #for i in range(len(data_amnts)):
-    #    for j in range(len(lamSs)):
-    #        errors[i,j] = errors[i,j]/k
-    print errors
-    #for r, amnt in enumerate(data_amnts):
-    #    plt.plot(data_amnts, errors[r,:])
+    for i, N in enumerate(data_amnts):
+        out = os.path.join('data','fake_data','increasedata','dat_'+str(N))
+        ds.write_fake_data1(N1 = 10*fixed_data_amt, N2 = 10*N, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = 1.0, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.75, fuse_std = 0.0)
+        lamR = 2
+        lamP = 1.0 #priors don't matter
+        for j, lamS in enumerate(lamSs):
+            (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, seed=seed, solver='solve_ortho_direct', reverse = True, cv_both = (True, True))
+            errors[i, j] += errd2['aupr'].mean()
+
+    adj_error = np.zeros((errors.shape[0],  errors.shape[1]))
+    for val in range(errors.shape[0]):
+        adj_error[val, 0] = errors[val,0]/errors[0,0]
+
+    return adj_error
+    for c, lamS in enumerate(lamSs):
+        plt.plot(data_amnts, errors[:,c])
 
     plt.legend(data_amnts)
+    plt.show()
     plt.savefig(os.path.join(os.path.join('data','fake_data','increasedata','fig1')))
-    plt.figure()
+#    plt.figure()
 #    for c, lamS in enumerate(lamSs):
 #        plt.plot(lamSs, errors[:, c])
 #    plt.legend(lamSs)
@@ -143,7 +144,7 @@ def test_scad():
     errors_l2 = np.zeros((len(orth_err), len(lamSs)))
     for i, N in enumerate(orth_err):
         out = os.path.join('data','fake_data','test_scad','dat_'+str(N))
-        ds.write_fake_data1(N1 = 10*10, N2 = 10*10, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = N, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.1)
+        ds.write_fake_data1(N1 = 10*10, N2 = 50*10, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = N, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.5, fuse_std = 0.1)
         lamR = 2
         lamP = 1.0 #priors don't matter
         for j, lamS in enumerate(lamSs):
@@ -152,8 +153,8 @@ def test_scad():
 
             (errd1l, errd2l) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = False, cv_both = (True, True))
 
-            errors_scad[i,j] = errd1['mse'].mean()
-            errors_l2[i,j] = errd1l['mse'].mean()
+            errors_scad[i,j] = errd1['aupr'].mean()
+            errors_l2[i,j] = errd1l['aupr'].mean()
 
     return (errors_scad, errors_l2)
     orth_error = np.array(orth_err)
@@ -224,54 +225,150 @@ def test_scad_opt_params():
     plt.figure()
 
 def test_scad_opt_params2():
-#create simulated data set with false orthology and run fused L2 and fused scad; faster than test_scad_opt_params2 because doesn't search through a
+#create simulated data set with false orthology and run fused L2 and fused scad; faster than test_scad_opt_params because doesn't search through a
      
     N_TF = 20
     N_G = 200
     amt_fused = 0.5
     orth_err = [0,0.25,0.5,0.75,1]
-    lamSs = [3]#[0, 2, 4, 6]
+    lamSs = [0,2,4,6]#[0, 2, 4, 6]
     seed = 10
-    reps = 10
+    reps = 2
 
-    if not os.path.exists(os.path.join('data','fake_data','test_scad')):
-        os.mkdir(os.path.join('data','fake_data','test_scad'))
+    if not os.path.exists(os.path.join('data','fake_data','test_scad_opt_params2')):
+        os.mkdir(os.path.join('data','fake_data','test_scad_opt_params2'))
     #iterate over how much fusion
     errors_scad = np.zeros((len(orth_err), len(lamSs)))
     errors_l2 = np.zeros((len(orth_err), len(lamSs)))
     errors_scad_var = np.zeros((len(orth_err), len(lamSs)))
     errors_l2_var = np.zeros((len(orth_err), len(lamSs)))
 
+    errors_scad2 = np.zeros((len(orth_err), len(lamSs)))
+    errors_l22 = np.zeros((len(orth_err), len(lamSs)))
+    errors_scad_var2 = np.zeros((len(orth_err), len(lamSs)))
+    errors_l2_var2 = np.zeros((len(orth_err), len(lamSs)))
+
+
     for p in range(reps):
         for i, N in enumerate(orth_err):
-            out = os.path.join('data','fake_data','test_scad','dat_'+str(N))
-            ds.write_fake_data1(N1 = 5, N2 = 5, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = N, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.7, fuse_std = 0.1)
+            out = os.path.join('data','fake_data','test_scad_opt_params2','dat_'+str(N))
+            ds.write_fake_data1(N1 = 10*5, N2 = 10*50, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = N, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.5, fuse_std = 0.1)
             lamR = 2
             lamP = 1.0 #priors don't matter
 
             for j, lamS in enumerate(lamSs):
-                (errd1l, errd2l) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=2, solver='solve_ortho_direct', reverse = False, cv_both = (True, True))
+                print N
+                print lamS
+                (errd1l, errd2l) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = False, cv_both = (True, True))
                 errors_l2[i,j] += errd1l['aupr'].mean()
                 errors_l2_var[i,j] += errd1l['aupr'].mean()**2
+                print errd1l['aupr'].mean()
+                errors_l22[i,j] += errd2l['aupr'].mean()
+                errors_l2_var2[i,j] += errd2l['aupr'].mean()**2
+
+
                 scad_settings = fr.get_settings({'s_it':50, 'per':((1/(1+float(N)))*100)})
-                (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=2, solver='solve_ortho_direct_scad', reverse = False, settings = scad_settings, cv_both = (True, True))
+                (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct_scad', reverse = False, settings = scad_settings, cv_both = (True, True))
+                #print 'orth err'
+                #print N
+                #print lamS
+                #plot_fuse_lams(out, scad_settings['cons'])
+                print errd1['aupr'].mean()
                 errors_scad[i,j] += errd1['aupr'].mean()
                 errors_scad_var[i,j] += errd1['aupr'].mean()**2
 
-    errors_scad /= reps
-    errors_l2 /= reps
-    errors_scad_var /= reps
-    errors_scad_var -= errors_scad**2
-    errors_l2_var /= reps
-    errors_l2_var -= errors_l2**2
+                errors_scad2[i,j] += errd2['aupr'].mean()
+                errors_scad_var2[i,j] += errd2['aupr'].mean()**2
 
-    return (errors_scad, errors_scad_var, errors_l2, errors_l2_var)
+    errors_scad /= reps
+    errors_scad2 /=reps
+    errors_l2 /= reps
+    errors_l22 /= reps
+    errors_scad_var /= reps
+    errors_scad_var2 /= reps
+    errors_scad_var -= errors_scad**2
+    errors_scad_var2 -= errors_scad2**2
+    errors_l2_var /= reps
+    errors_l2_var2 /= reps
+    errors_l2_var -= errors_l2**2
+    errors_l2_var2 -= errors_l22**2
+
+    return (errors_scad, errors_scad2, errors_scad_var, errors_scad_var2, errors_l2, errors_l22, errors_l2_var, errors_l2_var2)
+
+def test_scad_opt_params3():
+#create simulated data set with false orthology and run fused L2 and fused scad; faster than test_scad_opt_params because doesn't search through a
+    import copy    
+
+    N_TF = 20
+    N_G = 200
+    amt_fused = 0.5
+    orth_err = [0,0.5,0.75,1]
+    lamSs = [0,2,4]#[0, 2, 4, 6]
+    seed = 10
+    reps = 1
+    k = 5
+
+    metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con','B_mse']
+    err_dict_s = {m : np.zeros((k, len(lamSs))) for m in metrics}
+    err_dict_l = {m : np.zeros((k, len(lamSs))) for m in metrics}
+    err_s = {o : copy.deepcopy(err_dict_s) for o in orth_err}
+    err_l = {o : copy.deepcopy(err_dict_l) for o in orth_err}
+
+    if not os.path.exists(os.path.join('data','fake_data','test_scad_opt_params3')):
+        os.mkdir(os.path.join('data','fake_data','test_scad_opt_params3'))
+    #iterate over how much fusion
+
+    for p in range(reps):
+        for i, N in enumerate(orth_err):
+            out = os.path.join('data','fake_data','test_scad_opt_params3','dat_'+str(N))
+            ds.write_fake_data1(N1 = 5*5, N2 = 5*50, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = N, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.5, fuse_std = 0.1)
+            lamR = 2
+            lamP = 1.0 #priors don't matter
+
+            for j, lamS in enumerate(lamSs):
+                print N
+                print lamS
+                (errd1l, errd2l) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=5, solver='solve_ortho_direct', reverse = False, cv_both = (True, True))
+                print errd1l['aupr']
+                for metric in metrics:
+                    err_l[N][metric][:, [j]] = errd1l[metric]
+                print err_l[N]['aupr']
+
+                scad_settings = fr.get_settings({'s_it':50, 'per':((1/(1+float(N)))*100)})
+                (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=5, solver='solve_ortho_direct_scad', reverse = False, settings = scad_settings, cv_both = (True, True))
+                print errd1['aupr']
+                for metric in metrics:
+                    err_s[N][metric][:, [j]] = errd1[metric]
+                print err_s[N]['aupr']
+
+    o0 = np.dstack((err_l[0]['aupr'], err_s[0]['aupr']))
+    o05 = np.dstack((err_l[0.5]['aupr'], err_s[0.5]['aupr']))
+    o1 = np.dstack((err_l[1]['aupr'], err_s[1]['aupr']))
+
+    xax = pd.Series(lamSs, name="lamS")
+    conds = pd.Series(["Fused L2", "Fused SCAD"], name="method")
+
+    plt.subplot(131)
+    sns.tsplot(o0, time=xax, condition=conds, value="AUPR")
+    plt.title("Orth error = 0")
+
+    plt.subplot(132)
+    sns.tsplot(o05, time=xax, condition=conds, value="AUPR")
+    plt.title("Orth error = 0.5")
+
+    plt.subplot(133)
+    sns.tsplot(o1, time=xax, condition=conds, value="AUPR")
+    plt.title("Orth error = 1")
+
+
+
+    return (err_l, err_s)
 
 def test_scad_quick():
 #create simulated data set with false orthology and run fused L2 and fused scad; faster than test_scad_opt_params2 because doesn't search through a
      
     N_TF = 20
-    N_G = 50
+    N_G = 200#50
     #N_TF = 10
     #N_G = 30
     amt_fused = 0.5
@@ -291,41 +388,65 @@ def test_scad_quick():
     for p in range(reps):
         for i, N in enumerate(orth_err):
             out = os.path.join('data','fake_data','test_scad_quick','dat_'+str(N))
-            ds.write_fake_data1(N1 = N_conds, N2 = N_conds, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = N, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.5, fuse_std = 0.0)
+            ds.write_fake_data1(N1 = 20*10, N2=50*10, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = N, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.5, fuse_std = 0.0)
             lamR = 2
             lamP = 1.0 #priors don't matter
 
             for j, lamS in enumerate(lamSs):
-                #(errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=2, solver='solve_ortho_direct', reverse = False, seed=seed, cv_both = (True, True))
-                settings = fr.get_settings({'s_it':2, 'per':((1/(1+float(N)))*100), 'return_cons':True})
-                (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=2, solver='solve_ortho_direct_scad', reverse = False, seed=seed, settings = settings, cv_both = (True, True))
-                
-                errors_l2[i,j] += errd1['B_mse'].mean()
-                plot_fuse_lams(out, settings['cons'])
+                (errd1l, errd2l) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct', reverse = False, seed=seed, cv_both = (True, True))
+                print lamS
+                print errd1l
+                errors_l2[i,j] += errd1l['aupr'].mean()
+                errors_l2_var[i,j] += errd1l['aupr'].mean()**2                
+                scad_settings = fr.get_settings({'s_it':50, 'per':((1/(1+float(N)))*100)})
+                (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=10, solver='solve_ortho_direct_scad', reverse = False, seed=seed, settings=scad_settings, cv_both = (True, True))
+                print errd1
+                errors_scad[i,j] += errd1['aupr'].mean()
+                errors_scad_var[i,j] += errd1['aupr'].mean()**2
+
+    errors_scad /= reps
+    errors_l2 /= reps
+    errors_scad_var /= reps
+    errors_scad_var -= errors_scad**2
+    errors_l2_var /= reps
+    errors_l2_var -= errors_l2**2
+
+    return (errors_l2,errors_l2_var,errors_scad,errors_scad_var)
+
+    #(errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=2, solver='solve_ortho_direct', reverse = False, seed=seed, cv_both = (True, True))
+    settings = fr.get_settings({'s_it':2, 'per':((1/(1+float(N)))*100), 'return_cons':True})
+    (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=2, solver='solve_ortho_direct_scad', reverse = False, seed=seed, settings = settings, cv_both = (True, True))
+    
+    errors_l2[i,j] += errd1['B_mse'].mean()
+    plot_fuse_lams(out, settings['cons'])
     return (errors_l2)
     return (errors_scad, errors_scad_var, errors_l2, errors_l2_var)
 
+#visualizes lams at each oon of scad
+def plot_scad_iteration():
+    N_TF = 20
+    N_G = 200
+    amt_fused = 0.5
+    orth_err = [1]
+    lamSs = [3]
+    reps = 1
 
+    if not os.path.exists(os.path.join('data','fake_data','plot_scad_iteration')):
+        os.mkdir(os.path.join('data','fake_data','plot_scad_iteration'))
 
-def test_scad_quicker():
-    lamS = 2
-    lamP = 1
-    lamR = 2
-    seed=10
-    out = os.path.join('data','fake_data','test_scad','dat_1')
-    (constraints, marks, orth) = ds.load_constraints(out)
-    (b1, genes1, tfs1) = ds.load_network(os.path.join(out, 'beta1'))
-    (b2, genes2, tfs2) = ds.load_network(os.path.join(out, 'beta2'))
-    scad_settings = fr.get_settings({'s_it':50, 'a':0.6})
-    (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=2, solver='solve_ortho_direct_scad', seed=seed, reverse = False, settings = scad_settings, cv_both = (True, True))
-    (errd1l, errd2l) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=2, solver='solve_ortho_direct', seed=seed, reverse = False, cv_both = (True, True))
-    print 'scad error'
-    print errd1
-    #print errd1l['mse'].mean()
-    print 'l2 error'
-    print errd1l
-    #print errd1l['aupr']
-#lamS =2, lamR=2, a=0.8 gives better scad performance!
+    for p in range(reps):
+        for i, N in enumerate(orth_err):
+            out = os.path.join('data','fake_data','plot_scad_iteration','dat_'+str(N))
+            ds.write_fake_data1(N1 = 4*5, N2 = 4*50, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = N, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.5, fuse_std = 0.1)
+            lamR = 2
+            lamP = 1.0 #priors don't matter
+
+            for j, lamS in enumerate(lamSs):
+                scad_settings = fr.get_settings({'s_it':50, 'per':((1/(1+float(N)))*100)})
+                print N
+                print lamS
+                (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=4, solver='solve_ortho_direct_scad_plot', reverse = False, settings = scad_settings, cv_both = (True, True))
+                print errd1
 
 def test_scad2():
 #create simulated data set with false orthology and run fused scad + visualize scad penalty at each cv
@@ -444,8 +565,8 @@ def test_mcp3():
 
             (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=2, solver='solve_ortho_direct_mcp', reverse = False, settings = mcp_settings, cv_both = (True, True))
             (errd1l, errd2l) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=2, solver='solve_ortho_direct', reverse = False, cv_both = (True, True))
-            errors_mcp[i,j] = errd1['mse'].mean()
-            errors_l2[i,j] = errd1l['mse'].mean()
+            errors_mcp[i,j] = errd1['aupr'].mean()
+            errors_l2[i,j] = errd1l['aupr'].mean()
 
     return (errors_mcp, errors_l2)
 
@@ -551,6 +672,28 @@ def studentseminar():
     plt.plot(lamSs, errors, 'ro')
     plt.savefig(os.path.join(os.path.join('data','bacteria_standard','studentseminar','fig1')))
     plt.figure()
+
+def orth_err_perf():
+    N_TF = 20
+    N_G = 200
+    amt_fused = 0.5
+    orth_err = [1]
+    lamSs = [0,2,4]#[0, 2, 4, 6]
+    seed = 10
+    if not os.path.exists(os.path.join('data','fake_data','ortherrperf')):
+        os.mkdir(os.path.join('data','fake_data','ortherrperf'))
+
+    for i, N in enumerate(orth_err):
+        out = os.path.join('data','fake_data','ortherrperf','dat_'+str(N))
+        ds.write_fake_data1(N1 = 5*5, N2 = 5*50, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = N, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.5, fuse_std = 0.1)
+        lamR = 2
+        lamP = 1.0 #priors don't matter
+
+        for j, lamS in enumerate(lamSs):
+            print N
+            print lamS
+            (errd1l, errd2l) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=5, solver='solve_ortho_direct', reverse = False, cv_both = (True, True))
+            print errd1l['aupr'].mean()
 
 
 #generates two fused beta vectors, with a fusion constraint on each pair.
@@ -889,25 +1032,26 @@ def check_structure1():
     N1 = 20
     N2 = 20
     sparse = 0.5
+    seed = 5
     out = os.path.join('data','fake_data','struct1')
     ds.write_fake_data1(N1 = N1, N2 = N2, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=sparse, fuse_std = 0.0)
     
     lamP = 1.0
-    lamR = 100
-    lamS = 0.0001
+    #lamR = 100
+    #lamS = 0.0001
+    lamR = 4
+    lamS = 2
     k=5
-    solver='solve_ortho_direct'
-    reverse=False
     cv_both = (True, True)
-    (errd11, errd12) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = False, cv_both = (True, True))
-    lamP = 0.01
-    (errd21, errd22) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = False, cv_both = (True, True))
+    (errd11, errd12) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = False, cv_both = (True, True), pct_priors=0.75, seed=seed)
+    lamP = 0.001
+    (errd21, errd22) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = False, cv_both = (True, True), pct_priors=0.75, seed=seed)
     
-    print errd11
-    print errd21
-    (b1, b2) = fg.fit_model(out, lamP, lamR, lamS, solver='solve_ortho_direct')
-    (b1r, g, t) = ds.load_network(os.path.join(out, 'beta1'))
-    return (b1, b2)
+    print errd11['aupr']
+    print errd21['aupr']
+    #(b1, b2) = fg.fit_model(out, lamP, lamR, lamS, solver='solve_ortho_direct')
+    #(b1r, g, t) = ds.load_network(os.path.join(out, 'beta1'))
+    #return (b1, b2)
 
 
 #generates simple model, then inspects priors
@@ -991,17 +1135,17 @@ def increase_data2():
     plt.show()
 
 
-def plot_betas_scad():
-    N_TF = 20
-    N_G = 50
-    lamP = 1.0
-    lamR = 1.0
-    lamS = 1.5
-
-    out = os.path.join('data','fake_data','plot_betas2','dat')
-    ds1 = ds.standard_source(out,0)
-    ds2 = ds.standard_source(out,1)
-    orth_fn = os.path.join(out, 'orth')
+def plot_betas_scad(net_path):
+    lamR = 2
+    lamP = 1
+    lamS = 4
+    out2 = os.path.join('data','fake_data','plot_betas_scad')
+    if not os.path.exists(out2):
+        os.mkdir(out2)
+    #out = os.path.join('data','fake_data','plot_betas2','dat')
+    ds1 = ds.standard_source(net_path,0)
+    ds2 = ds.standard_source(net_path,1)
+    orth_fn = os.path.join(net_path, 'orth')
     organisms = [ds1.name, ds2.name]
     orth = ds.load_orth(orth_fn, organisms)
     (e1, t1, genes1, tfs1) = ds1.load_data()
@@ -1018,9 +1162,8 @@ def plot_betas_scad():
     Bs_uf = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS=0)
     Bs_fr = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
 
-    s_it = 5
-    settings_fs=fr.get_settings({'a':0.15, 'return_cons':False})
-    Bs_fs = fr.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, s_it, settings = settings_fs)
+    settings_fs=fr.get_settings({'s_it': 30, 'per':((1/(1+float(0.5)))*100), 'return_cons':True})
+    Bs_fs = fr.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, settings = settings_fs)
 
     r1 = Bs_uf[0].shape[0]
     c1 = Bs_uf[0].shape[1]
@@ -1045,7 +1188,7 @@ def plot_betas_scad():
     cons_fs = []
 
     subs = 2000
-    for i in con_inds[0:subs]:
+    for i in con_inds:#[0:subs]:
         con = constraints[i]
         cons.append(con.lam)
         mark = marks[i]
@@ -1089,7 +1232,7 @@ def plot_betas_scad():
     plt.close()
     plt.hist(cons_fs)
     plt.title('scad lamS dist')    
-    plt.savefig(os.path.join(out,'scad lamS dist'))
+    plt.savefig(os.path.join(out2,'scad lamS dist'))
     plt.show(block=False)
 #    return (Bfsds, cons_fs)    
 #    print cons_fs
@@ -1102,7 +1245,7 @@ def plot_betas_scad():
     plt.xlabel('beta network 1')
     plt.ylabel('beta network 2')
     plt.title('unfused')
-    plt.savefig(os.path.join(out,'unfused'))
+    plt.savefig(os.path.join(out2,'unfused'))
     
 
     plt.figure()
@@ -1110,14 +1253,14 @@ def plot_betas_scad():
     plt.xlabel('beta network 1')
     plt.ylabel('beta network 2')
     plt.title('fused l2')
-    plt.savefig(os.path.join(out,'fused l2'))
+    plt.savefig(os.path.join(out2,'fused l2'))
     
     plt.figure()
     plt.scatter(Bfs1s, Bfs2s, c=colors, alpha=0.5)
     plt.xlabel('beta network 1')
     plt.ylabel('beta network 2')
     plt.title('scad')
-    plt.savefig(os.path.join(out,'scad'))
+    plt.savefig(os.path.join(out2,'scad'))
    
     plt.show(block=False)
 
@@ -1790,7 +1933,7 @@ def L2fusion_quick():
 
     for i, N in enumerate(pct_fused):
         out2 = os.path.join(out1,'dat_'+str(N))
-        ds.write_fake_data1(N1=5, N2=5, out_dir = out2, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.75, fuse_std = 0.1, pct_fused=N)        
+        ds.write_fake_data1(N1=5, N2=50, out_dir = out2, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.75, fuse_std = 0.1, pct_fused=N)        
         lamP = 1.0 #priors don't matter
         seed = 10
         for j, lamS in enumerate(lamSs):
@@ -1807,6 +1950,61 @@ def L2fusion_quick():
     df.columns.name = 'lamS'
     sns.heatmap(df,cmap="Blues", square=True)
     plt.show()
+
+def L2plot():
+    N_TF = 20
+    N_G = 200
+    pct_fused = list(np.linspace(0,1.0,20))
+
+    lamR = 2
+    lamSs = [0,list(np.linspace(0,3,10))[4]]
+    lamP = 1.0
+    aupr_array = np.zeros((len(pct_fused),len(lamSs)))
+    aupr_adj = np.zeros((len(pct_fused),len(lamSs)))
+
+    reps = 2
+
+    out1 = os.path.join('data','fake_data','l2plot')
+    k = 10#cv folds
+    if not os.path.exists(out1):
+        os.mkdir(out1)
+
+    metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con']
+    err_dicts = [{m : np.zeros((k*reps, len(pct_fused))) for m in metrics},{m : np.zeros((k*reps, len(pct_fused))) for m in metrics}]
+    err1_adj = np.zeros((k*reps,len(pct_fused)))
+    err2_adj = np.zeros((k*reps,len(pct_fused)))
+
+    for p in range(reps):
+        for i, N in enumerate(pct_fused):
+            print N
+            out2 = os.path.join(out1,'dat_'+str(N))
+            ds.write_fake_data1(N1=5*k, N2=50*k, out_dir = out2, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.75, fuse_std = 0.1, pct_fused=N)        
+            lamP = 1.0 #priors don't matter
+            seed = 10
+            for j, lamS in enumerate(lamSs):
+                print lamS
+                (errd1, errd2) = fg.cv_model_m(out2, lamP, lamR, lamS, k, solver='solve_ortho_direct',reverse=False, cv_both=(True,True), exclude_tfs=True, pct_priors=0, seed=seed, verbose=False)
+                for metric in metrics:
+                    err_dicts[j][metric][p*k:(p+1)*k, [i]] = errd1[metric]
+           
+    return (err_dicts[0]['aupr'], err_dicts[1]['aupr'])
+
+    for j in range(err_dicts[0]['aupr'].shape[0]):
+        for k in range(err_dicts[0]['aupr'].shape[1]):
+            err1_adj[j,k] = err_dicts[0]['aupr'][j,k]/err_dicts[0]['aupr'][j,:].mean()
+
+    for j in range(err_dicts[1]['aupr'].shape[0]):
+        for k in range(err_dicts[1]['aupr'].shape[1]):
+            err2_adj[j,k] = err_dicts[1]['aupr'][j,k]/err_dicts[1]['aupr'][j,:].mean()
+
+    to_plot = np.dstack((err1_adj, err2_adj))
+    linedesc = pd.Series(['unfused','fused'],name='penalty')
+    xs = pd.Series(pct_fused, name='network similarity')
+    sns.tsplot(to_plot, time=xs, condition=linedesc, value='% aupr improvement')
+    
+    plt.show()
+
+   
 
 
 #this looks at the distributions Betas for +/- priors, and an equal number of non-priors in subtilis
@@ -2701,6 +2899,7 @@ def em_sillytest():
     plt.show()
 
 #uses data from test_mcp3; plots lamS for scad and mcp  for true and false orths
+#running off of true networks, not estimated networks--need to fix
 def plot_lamS():
     a = 0.5
     lamS = 3
@@ -2908,3 +3107,32 @@ def plot_synthetic_performanceR(lamP=1.0, lamRs=[1,4,7,10,13], lamS=0, k=20):
     stes = errs.std(axis=0) / errs.shape[0]**0.5
     pretty_plot_err(lamRs, errs.mean(axis=0), stes, (1, 0.5, 0, 0.25))
     plt.show()
+
+
+def scad_priors():
+    N_TF = 20
+    N_G = 200
+    amt_fused = 0.5
+    lamPs = [1.0,0.0001,0.000001]
+    lamS = 2
+    lamR = 2
+    seed = 10
+    reps = 1
+    k = 5
+
+    metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con','B_mse']
+    err_dict = {m : np.zeros((k, len(lamPs))) for m in metrics}
+
+    if not os.path.exists(os.path.join('data','fake_data','scad_priors')):
+        os.mkdir(os.path.join('data','fake_data','scad_priors'))
+    out = os.path.join('data','fake_data','scad_priors')
+
+    for p in range(reps):
+        for i, P in enumerate(lamPs):
+            ds.write_fake_data1(N1 = 5*5, N2 = 5*50, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.5, fuse_std = 0.1)
+
+            (errd1l, errd2l) = fg.cv_model_m(out, lamP=P, lamR=lamR, lamS=lamS, k=5, solver='solve_ortho_direct', reverse = False, cv_both = (True, True), pct_priors=0.75)
+            for metric in metrics:
+                err_dict[metric][:, [i]] = errd1l[metric]
+
+    return (err_dict)
