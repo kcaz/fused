@@ -2885,7 +2885,7 @@ def plot_synthetic_performance_adj(lamP=1.0, lamR=5, lamSs=[0,1], k=20):
 
 #plots performance as a function of R
 def plot_synthetic_performanceR(lamP=1.0, lamRs=[1,4,7,10,13], lamS=0, k=20):
-    N = 5
+    N = 3
     N_TF = 20
     N_G = 30
     out = 'data/fake_data/syntheticR'
@@ -2902,8 +2902,9 @@ def plot_synthetic_performanceR(lamP=1.0, lamRs=[1,4,7,10,13], lamS=0, k=20):
         for metric in metrics:
             err_dict1[metric][:, [i]] = errd1[metric]
             err_dict2[metric][:, [i]] = errd2[metric]
+    metric = 'mse'
+    errs = err_dict1[metric]
 
-    auprs = err_dict1['aupr'].mean(axis=0)
-    stes = err_dict1['aupr'].std(axis=0) / err_dict1['aupr'].shape[0]**0.5
-    pretty_plot_err(lamRs, auprs, stes, (1, 0.5, 0, 0.25))
+    stes = errs.std(axis=0) / errs.shape[0]**0.5
+    pretty_plot_err(lamRs, errs.mean(axis=0), stes, (1, 0.5, 0, 0.25))
     plt.show()

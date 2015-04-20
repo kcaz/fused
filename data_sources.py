@@ -902,7 +902,9 @@ def voodoo():
         os.mkdir(out_dir)
     write_expr_mat(out_dir+os.sep+'expression1', bs_e, bs_genes)
     write_expr_mat(out_dir+os.sep+'expression2', ba_e, ba_genes)
-    write_ss_td(os.path.join(out_dir, 'time_diffs1'), bs_e)
+    
+    #write_ss_td(os.path.join(out_dir, 'time_diffs1'), bs_e)
+    subtilis_td()
     write_ss_td(os.path.join(out_dir, 'time_diffs2'), ba_e)
 
     write_priors_voodoo(out_dir+os.sep+'priors1',bs_priors, bs_sign)
@@ -914,6 +916,39 @@ def voodoo():
         f.write('organism1\t%s\norganism2\t%s\n' % ('B_subtilis','B_anthracis'))
         f.write('tc1\t%s\ntc2\t%s\n' %('1','1'))
     
+
+
+#time series loader
+#tu (time unit) scales the time series. basically arbitrary. howtoset? related to decay rate
+def load_subtilis(tu=1.0):
+    (e, t, gene_n, tf_n) = load_B_subtilis()
+    #already normalized data
+    ftd = file('data/subtilis_td')
+    fss = file('data/subtilis_ss')
+    ftd_sl = filter(len, ftd.read().split('\n'))
+    fss_sl = filter(len, fss.read().split('\n'))
+    #append rows we want as a list (or differences of rows)
+    gene_exps = []
+    tf_exps = []
+    if use_time_series:
+        for l in ftd_sl:
+            (from_cond_s, to_cond_s, td_s) = l.split('\t')
+            (from_cond, to_cond, td) = (int(from_cond_s), int(to_cond_s), float(td_s))
+        #try and predict time difference by the mean TF expr at each end
+            td_expr = e[from_cond,:]+tu*(e[to_cond,:] - e[from_cond,:])/td
+            tf_expr = t[from_cond,:]#(t[to_cond,:]+t[from_cond,:])/2
+            
+            gene_exps.append(td_expr)
+            tf_exps.append(tf_expr)
+    if use_steady_state:
+        for l in fss_sl:
+            cond = int(l)
+            tf_exps.append(t[cond, :])
+            gene_exps.append(e[cond, :])
+    exp_mat = np.vstack(gene_exps)
+    tf_mat = np.vstack(tf_exps)
+    return (exp_mat, tf_mat, gene_n, tf_n)
+
 
 #makes sure that XB = Y for generated data
 
@@ -931,3 +966,36 @@ def verify_data_integrity(N=100, N_TF=10, N_G=10):
     err2 = ((np.dot(d2.tf_mat, n2) - d2.exp_mat)**2).mean()
     print err1
     print err2
+
+#returns the b subtilis time-difference file associated with the metadata file subtilis_metadata. currently there are some (38) conditions that don't appear in the metadata, and are excluded
+def subtilis_td():
+    import pandas
+    mdata = pandas.read_table(os.path.join('data','bacteria1','subtilis_metadata'), sep=' ')
+    exp = pandas.read_table(os.path.join('data','bacteria1','B_subtilis.csv'), sep=',')
+    cond_names = exp.columns
+    cond_names_ind = {cond_names[i] : i for i in range(len(cond_names))}
+    
+    next_cond = dict() #maps condition number to (next_cond, time elapsed) tuples
+    for r in range(len(mdata.index)):
+        #figure out what  condition number this is
+        cond_ind = cond_names_ind[mdata['condName'][r]]
+        if not mdata['isTs'][r]:
+            next_cond[cond_ind] = (cond_ind, 1.0)
+        else:
+            prev = mdata['prevCol'][r]
+            if not str(prev) == 'nan': #this is insane
+                prev_ind = cond_names_ind[prev]
+                elapsed = mdata['del.t'][r]
+                next_cond[prev_ind] = (cond_ind, elapsed)
+    
+    with file('data/bacteria_standard/time_diffs1', 'w') as td_file:
+        #let's make the conditions come out in basically the same order as they appera in the data
+        
+        for cond1 in range(len(cond_names)):
+            
+            if cond1 in next_cond:
+            
+                (cond2, td) = next_cond[cond1]
+                td_file.write('%d\t%d\t%f\n' % (cond1, cond2, td))
+    
+        
