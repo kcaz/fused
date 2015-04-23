@@ -360,9 +360,75 @@ def test_scad_opt_params3():
     sns.tsplot(o1, time=xax, condition=conds, value="AUPR")
     plt.title("Orth error = 1")
 
+    return (err_l, err_s)
 
+def test_scad_nonopt_params():
+#create simulated data set with false orthology and run fused L2 and fused scad; faster than test_scad_opt_params because doesn't search through a
+    import copy    
+
+    N_TF = 20
+    N_G = 200
+    amt_fused = 0.5
+    orth_err = [0,0.5,0.75,1]
+    lamSs = [0,2,4]#[0, 2, 4, 6]
+    seed = 10
+    reps = 1
+    k = 5
+
+    metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con','B_mse']
+    err_dict_s = {m : np.zeros((k, len(lamSs))) for m in metrics}
+    err_dict_l = {m : np.zeros((k, len(lamSs))) for m in metrics}
+    err_s = {o : copy.deepcopy(err_dict_s) for o in orth_err}
+    err_l = {o : copy.deepcopy(err_dict_l) for o in orth_err}
+
+    if not os.path.exists(os.path.join('data','fake_data','test_scad_nonopt_params')):
+        os.mkdir(os.path.join('data','fake_data','test_scad_nonopt_params'))
+    #iterate over how much fusion
+
+    for p in range(reps):
+        for i, N in enumerate(orth_err):
+            out = os.path.join('data','fake_data','test_scad_nonopt_params','dat_'+str(N))
+            ds.write_fake_data1(N1 = 5*5, N2 = 5*50, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = N, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.5, fuse_std = 0.1)
+            lamR = 2
+            lamP = 1.0 #priors don't matter
+
+            for j, lamS in enumerate(lamSs):
+                print N
+                print lamS
+                (errd1l, errd2l) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=5, solver='solve_ortho_direct', reverse = False, cv_both = (True, True))
+                print errd1l['aupr']
+                for metric in metrics:
+                    err_l[N][metric][:, [j]] = errd1l[metric]
+                print err_l[N]['aupr']
+
+                scad_settings = fr.get_settings({'s_it':50, 'a':1.0})
+                (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=5, solver='solve_ortho_direct_scad', reverse = False, settings = scad_settings, cv_both = (True, True))
+                print errd1['aupr']
+                for metric in metrics:
+                    err_s[N][metric][:, [j]] = errd1[metric]
+                print err_s[N]['aupr']
+
+    o0 = np.dstack((err_l[0]['aupr'], err_s[0]['aupr']))
+    o05 = np.dstack((err_l[0.5]['aupr'], err_s[0.5]['aupr']))
+    o1 = np.dstack((err_l[1]['aupr'], err_s[1]['aupr']))
+
+    xax = pd.Series(lamSs, name="lamS")
+    conds = pd.Series(["Fused L2", "Fused SCAD"], name="method")
+
+    plt.subplot(131)
+    sns.tsplot(o0, time=xax, condition=conds, value="AUPR")
+    plt.title("Orth error = 0")
+
+    plt.subplot(132)
+    sns.tsplot(o05, time=xax, condition=conds, value="AUPR")
+    plt.title("Orth error = 0.5")
+
+    plt.subplot(133)
+    sns.tsplot(o1, time=xax, condition=conds, value="AUPR")
+    plt.title("Orth error = 1")
 
     return (err_l, err_s)
+
 
 def test_scad_quick():
 #create simulated data set with false orthology and run fused L2 and fused scad; faster than test_scad_opt_params2 because doesn't search through a
@@ -3115,7 +3181,7 @@ def scad_priors():
     amt_fused = 0.5
     lamPs = [1.0,0.0001,0.000001]
     lamS = 2
-    lamR = 2
+    lamR = 4
     seed = 10
     reps = 1
     k = 5
@@ -3129,9 +3195,9 @@ def scad_priors():
 
     for p in range(reps):
         for i, P in enumerate(lamPs):
-            ds.write_fake_data1(N1 = 5*5, N2 = 5*50, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.5, fuse_std = 0.1)
+            ds.write_fake_data1(N1 = 5*3, N2 = 5*20, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.5, fuse_std = 0.1, orth_falsepos = 0.5)
 
-            (errd1l, errd2l) = fg.cv_model_m(out, lamP=P, lamR=lamR, lamS=lamS, k=5, solver='solve_ortho_direct', reverse = False, cv_both = (True, True), pct_priors=0.75)
+            (errd1l, errd2l) = fg.cv_model_m(out, lamP=P, lamR=lamR, lamS=lamS, k=5, solver='solve_ortho_direct', reverse = False, cv_both = (True, True), pct_priors=0.7)
             for metric in metrics:
                 err_dict[metric][:, [i]] = errd1l[metric]
 
