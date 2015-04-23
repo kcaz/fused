@@ -2281,15 +2281,16 @@ def plot_bacteria_performance(lamP=1.0, lamR=5, lamSs=[0,1,2,3,4], k=20):
             err_dict2[metric][:, [i]] = errd2[metric]
 
     #to_plot = err_dict1['aupr']#
-    to_plot = np.dstack((err_dict1['aupr'], err_dict1['aupr_con']))
+    metric = 'auc'
+    to_plot = np.dstack((err_dict1[metric], err_dict1[metric+'_con']))
 
 
     linedesc = pd.Series(['full','constrained'],name='error type')
     #linedesc = pd.Series(['full'],name='error type')
     xs = pd.Series(lamSs, name='lamS')
-    sns.tsplot(to_plot, time=xs, condition=linedesc, value='aupr')
-    #with file('err_dict1','w') as f:
-    #    pickle.dump(err_dict1, f)
+    sns.tsplot(to_plot, time=xs, condition=linedesc, value=metric)
+    with file('err_dict1','w') as f:
+        pickle.dump(err_dict1, f)
     
     plt.show()
 
@@ -2310,7 +2311,9 @@ def plot_bacteria_performanceR(lamP=1.0, lamRs=[1,4,7,10,13], lamS=0, k=20):
             err_dict1[metric][:, [i]] = errd1[metric]
             err_dict2[metric][:, [i]] = errd2[metric]
 
+    #auprs = err_dict1['aupr'].mean(axis=0)
     auprs = err_dict1['aupr'].mean(axis=0)
+    #stes = err_dict1['aupr'].std(axis=0) / err_dict1['aupr'].shape[0]**0.5
     stes = err_dict1['aupr'].std(axis=0) / err_dict1['aupr'].shape[0]**0.5
     pretty_plot_err(lamRs, auprs, stes, (1, 0.5, 0, 0.25))
 

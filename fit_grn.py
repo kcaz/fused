@@ -148,16 +148,23 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
             R2 = prediction_error(Xs_te[si], Bs[si], Ys_te[si], 'R2', exclude_tfs=exclude_tfs)
             err_dicts[si]['R2'][fold, 0] = R2
             
-            aupr = eval_network_pr(Bs[si], genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = None)
+            Xsi = Xs[si]
+            Ysi = Ys[si]
+            Bsi = Bs[si]
+            if True:
+                S = rescale_betas(Xsi, Ysi, Bsi)
+            else:
+                S = Bsi
+            aupr = eval_network_pr(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = None)
             err_dicts[si]['aupr'][fold,0] = aupr
             
-            aupr_con = eval_network_pr(Bs[si], genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, sub = si)
+            aupr_con = eval_network_pr(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, sub = si)
             err_dicts[si]['aupr_con'][fold,0] = aupr_con                
 
-            auc = eval_network_roc(Bs[si], genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = None)
+            auc = eval_network_roc(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = None)
             err_dicts[si]['auc'][fold,0] = auc
             
-            auc_con = eval_network_roc(Bs[si], genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, sub = si)
+            auc_con = eval_network_roc(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, sub = si)
             err_dicts[si]['auc_con'][fold,0] = auc_con
 
             betafile = os.path.join(data_fn, 'beta%d' % (si+1))
@@ -275,6 +282,19 @@ def prediction_error(X, B, Y, metric, exclude_tfs = True):
             corra += corr
         return corra / (Ypred.shape[1] - start_ind)
 
+#converts beta matrix B into scale matrix S by an approximation to the rule used in BBSR. The score i, j is assigned to be 1 - residual[j]/(B[i,j]^2*var(X[i]) + residual[j])
+def rescale_betas(X, Y, B):
+    residual = Y - np.dot(X,B)
+    mse = (residual ** 2).mean(axis=0)
+    
+    vars_tf = np.var(X, axis=0)
+    S = np.zeros(B.shape)
+
+    for c in range(S.shape[1]):
+
+        Sc = 1 - mse[c] / (B[:, c]**2 * vars_tf + mse[c])
+        S[:, c] = Sc
+    return S
 
 #returns scores/labels for aupr or auc
 def get_scores_labels(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False, constraints = None, sub=None):
