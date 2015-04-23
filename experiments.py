@@ -2347,15 +2347,16 @@ def plot_bacteria_performance(lamP=1.0, lamR=5, lamSs=[0,1,2,3,4], k=20):
             err_dict2[metric][:, [i]] = errd2[metric]
 
     #to_plot = err_dict1['aupr']#
-    to_plot = np.dstack((err_dict1['aupr'], err_dict1['aupr_con']))
+    metric = 'auc'
+    to_plot = np.dstack((err_dict1[metric], err_dict1[metric+'_con']))
 
 
     linedesc = pd.Series(['full','constrained'],name='error type')
     #linedesc = pd.Series(['full'],name='error type')
     xs = pd.Series(lamSs, name='lamS')
-    sns.tsplot(to_plot, time=xs, condition=linedesc, value='aupr')
-    #with file('err_dict1','w') as f:
-    #    pickle.dump(err_dict1, f)
+    sns.tsplot(to_plot, time=xs, condition=linedesc, value=metric)
+    with file('err_dict1','w') as f:
+        pickle.dump(err_dict1, f)
     
     plt.show()
 
@@ -2376,7 +2377,9 @@ def plot_bacteria_performanceR(lamP=1.0, lamRs=[1,4,7,10,13], lamS=0, k=20):
             err_dict1[metric][:, [i]] = errd1[metric]
             err_dict2[metric][:, [i]] = errd2[metric]
 
+    #auprs = err_dict1['aupr'].mean(axis=0)
     auprs = err_dict1['aupr'].mean(axis=0)
+    #stes = err_dict1['aupr'].std(axis=0) / err_dict1['aupr'].shape[0]**0.5
     stes = err_dict1['aupr'].std(axis=0) / err_dict1['aupr'].shape[0]**0.5
     pretty_plot_err(lamRs, auprs, stes, (1, 0.5, 0, 0.25))
 
@@ -3202,3 +3205,42 @@ def scad_priors():
                 err_dict[metric][:, [i]] = errd1l[metric]
 
     return (err_dict)
+
+
+
+#compares performance on constrained and non-constrained portions of the network
+def con_noncon():
+    N_TF = 20
+    N_G = 200
+    amt_fused = 0.5
+    lamSs = [0,2,4]
+    seed = 10
+    k = 5
+
+    metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con','auc_noncon', 'aupr_noncon', 'B_mse']
+    err_dict_l = {m : np.zeros((k, len(lamSs))) for m in metrics}
+
+    out = os.path.join('data','fake_data','non_con')
+    if not os.path.exists(os.path.join('data','fake_data','con_noncon')):
+        os.mkdir(os.path.join('data','fake_data','non_con'))
+    #iterate over how much fusion
+
+
+    ds.write_fake_data1(N1 = 3*5, N2 = 3*50, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.5, fuse_std = 0.1)
+    lamR = 2
+    lamP = 1.0 #priors don't matter
+
+    for j, lamS in enumerate(lamSs):
+        (errd1l, errd2l) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=5, solver='solve_ortho_direct', reverse = False, cv_both = (True, True))
+        for metric in metrics:
+            err_dict_l[metric][:, [j]] = errd1l[metric]
+
+    o0 = np.dstack((err_dict_l['aupr_con'], err_dict_l['aupr_noncon'], err_dict_l['aupr']))
+
+    xax = pd.Series(lamSs, name="lamS")
+    conds = pd.Series(["AUPR constrained", "AUPR non constrained", "AUPR whole network"], name="method")
+
+    sns.tsplot(o0, time=xax, condition=conds, value="AUPR")
+    plt.show()
+
+    return (err_dict_l)
