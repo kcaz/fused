@@ -3210,37 +3210,63 @@ def scad_priors():
 
 #compares performance on constrained and non-constrained portions of the network
 def con_noncon():
+    import copy
     N_TF = 20
     N_G = 200
-    amt_fused = 0.5
+    amt_fuseds = [0,0.25,0.5,0.75]
     lamSs = [0,2,4]
     seed = 10
     k = 5
 
     metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con','auc_noncon', 'aupr_noncon', 'B_mse']
     err_dict_l = {m : np.zeros((k, len(lamSs))) for m in metrics}
+    err_l = {f : copy.deepcopy(err_dict_l) for f in amt_fuseds}
 
-    out = os.path.join('data','fake_data','non_con')
     if not os.path.exists(os.path.join('data','fake_data','con_noncon')):
         os.mkdir(os.path.join('data','fake_data','non_con'))
     #iterate over how much fusion
 
+    for f, amt_fused in enumerate(amt_fuseds):
+        out1 = os.path.join('data','fake_data','con_noncon','dat_'+str(f))
+        if not os.path.exists(out1):
+            os.mkdir(os.path.join('data','fake_data','con_noncon','dat_'+str(f)))
+        
+        ds.write_fake_data1(N1 = 3*5, N2 = 3*50, out_dir = out1, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.5, fuse_std = 0.1)
+        lamR = 2
+        lamP = 1.0 #priors don't matter
 
-    ds.write_fake_data1(N1 = 3*5, N2 = 3*50, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.5, fuse_std = 0.1)
-    lamR = 2
-    lamP = 1.0 #priors don't matter
+        for j, lamS in enumerate(lamSs):
+            (errd1l, errd2l) = fg.cv_model_m(out1, lamP=lamP, lamR=lamR, lamS=lamS, k=5, solver='solve_ortho_direct', reverse = False, cv_both = (True, True))
+            for metric in metrics:
+                err_l[amt_fused][metric][:, [j]] = errd1l[metric]
 
-    for j, lamS in enumerate(lamSs):
-        (errd1l, errd2l) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=5, solver='solve_ortho_direct', reverse = False, cv_both = (True, True))
-        for metric in metrics:
-            err_dict_l[metric][:, [j]] = errd1l[metric]
-
-    o0 = np.dstack((err_dict_l['aupr_con'], err_dict_l['aupr_noncon'], err_dict_l['aupr']))
+    o0 = np.dstack((err_l[0]['aupr_con'], err_l[0]['aupr_noncon'], err_l[0]['aupr']))
+    o025 = np.dstack((err_l[0.25]['aupr_con'], err_l[0.25]['aupr_noncon'], err_l[0.25]['aupr']))
+    o05 = np.dstack((err_l[0.5]['aupr_con'], err_l[0.5]['aupr_noncon'], err_l[0.5]['aupr']))
+    o075 = np.dstack((err_l[0.75]['aupr_con'], err_l[0.75]['aupr_noncon'], err_l[0.75]['aupr']))
 
     xax = pd.Series(lamSs, name="lamS")
-    conds = pd.Series(["AUPR constrained", "AUPR non constrained", "AUPR whole network"], name="method")
+    conds = pd.Series(["Constrained", "Non constrained", "Whole network"], name="method")
 
+    plt.subplot(141)
     sns.tsplot(o0, time=xax, condition=conds, value="AUPR")
+    plt.axis([0,4,0.65,1])
+    plt.title("Amount fused = 0")
+
+    plt.subplot(142)
+    sns.tsplot(o025, time=xax, condition=conds, value="AUPR")
+    plt.axis([0,4,0.65,1])
+    plt.title("Amount fused = 0.25")
+
+    plt.subplot(143)
+    sns.tsplot(o05, time=xax, condition=conds, value="AUPR")
+    plt.axis([0,4,0.65,1])
+    plt.title("Amount fused = 0.5")
+
+    plt.subplot(144)
+    sns.tsplot(o075, time=xax, condition=conds, value="AUPR")
+    plt.axis([0,4,0.65,1])
+    plt.title("Amount fused = 0.75")
     plt.show()
 
     return (err_dict_l)
