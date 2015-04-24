@@ -61,8 +61,12 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
     err_dict1 = {m : np.zeros((k, 1)) for m in metrics}
     err_dict2 = {m : np.zeros((k, 1)) for m in metrics}
     err_dicts = [err_dict1, err_dict2] #for indexing
-
-
+    #prc and roc are special (not individual numbers)
+    metrics2 = ['prc','roc', 'prc_con','roc_con']
+    for err_dict in err_dicts:
+        for metric in metrics2:
+            err_dict[metric] = map(lambda x: [], range(k))
+    metrics = metrics1 + metrics2
     (constraints, marks, orth) = ds.load_constraints(data_fn)
     
     orth_fn = os.path.join(data_fn, 'orth')
@@ -155,22 +159,26 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
                 S = rescale_betas(Xsi, Ysi, Bsi)
             else:
                 S = Bsi
-            aupr = eval_network_pr(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = None)
+            (aupr, prc) = eval_network_pr(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = None)
             err_dicts[si]['aupr'][fold,0] = aupr
+            err_dicts[si]['prc'][fold] = prc            
             
-            aupr_con = eval_network_pr(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, sub = si)
-            err_dicts[si]['aupr_con'][fold,0] = aupr_con        
-
-            aupr_noncon = eval_network_pr(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, non_con=True, sub = si)
+            (aupr_noncon, prc_noncon) = eval_network_pr(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, non_con=True, sub = si)
             err_dicts[si]['aupr_noncon'][fold,0] = aupr_noncon            
 
-            auc = eval_network_roc(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = None)
-            err_dicts[si]['auc'][fold,0] = auc
-            
-            auc_con = eval_network_roc(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, sub = si)
-            err_dicts[si]['auc_con'][fold,0] = auc_con
+            (aupr_con, prc_con) = eval_network_pr(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, sub = si)
+            err_dicts[si]['aupr_con'][fold,0] = aupr_con                
+            err_dicts[si]['prc_con'][fold] = prc_con
 
-            auc_noncon = eval_network_roc(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, non_con=True, sub = si)
+            (auc, roc) = eval_network_roc(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = None)
+            err_dicts[si]['auc'][fold,0] = auc
+            err_dicts[si]['roc'][fold] = roc            
+
+            (auc_con, roc_con) = eval_network_roc(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, sub = si)
+            err_dicts[si]['auc_con'][fold,0] = auc_con
+            err_dicts[si]['roc_con'][fold] = roc_con
+
+            (auc_noncon, roc_noncon) = eval_network_roc(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, non_con=True, sub = si)
             err_dicts[si]['auc_noncon'][fold,0] = auc_noncon
 
             betafile = os.path.join(data_fn, 'beta%d' % (si+1))
@@ -380,11 +388,13 @@ def eval_network_pr(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False, 
     if len(scores):
             
         (precision, recall,t) = precision_recall_curve(labels, scores)#prc(scores, labels)
+        #precision recall, unlike roc_curve, has one fewer t than precision/recall value. I'm just going to copy the last element.
+        t = np.concatenate((t, t[[-1]]))
         aupr = auc(recall, precision)
     else:
         aupr = np.nan
     
-    return aupr
+    return (aupr, (recall, precision, t))
 
 #evaluates the area under the roc, with respect to some given priors
 
@@ -398,7 +408,7 @@ def eval_network_roc(net, genes, tfs, priors, tr_priors=[], exclude_tfs = True, 
     else:
         auroc = np.nan
 
-    return auroc
+    return (auroc, (fpr, tpr, t))
 
 def eval_network_beta(net1, net2):
     return ((net1 - net2)**2).mean()
@@ -478,3 +488,50 @@ def grid_search_params(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct'
     if eval_metric == 'auroc':
         return (best_auroc, best_lamP, best_lamR, best_lamS, grid)
 
+
+#given list of roc/prc curves of the form [(precision, recall, t), ...] produces a new set of curves interpolated at every unique value of recall/fpr present on the list all_roc_curves
+
+def pool_roc(roc_curves, all_roc_curves = None):
+    all_f = set()
+    if all_roc_curves == None:
+        all_roc_curves = [roc_curves]
+
+    for roc_curves_group in all_roc_curves:
+        for (fs, hs, ts) in roc_curves_group:
+            for f in fs:
+                all_f.add(f)
+    fs_interp = sorted(list(all_f))        
+    ts_interp = np.zeros((len(roc_curves), len(fs_interp)))
+    hs_interp = np.zeros((len(roc_curves), len(fs_interp)))
+    
+    for i, roc in enumerate(roc_curves):
+        
+        (fs, hs, ts) = roc
+        from matplotlib import pyplot as plt
+        
+        #for interp to work, the function must be increasing
+        # if it isn't, reverse it, then reverse again
+        if fs[0] < fs[-1]:
+            ts_interp[i, :] = np.interp(fs_interp, fs, ts)
+            hs_interp[i, :] = np.interp(fs_interp, fs, hs)
+        else:
+            #flip everything
+            fs = np.fliplr([fs])[0]
+            hs = np.fliplr([hs])[0]
+            ts = np.fliplr([ts])[0]
+            fs_interp = np.fliplr([fs_interp])[0]
+
+            ts_interp[i, :] = np.interp(fs_interp, fs, ts)
+            hs_interp[i, :] = np.interp(fs_interp, fs, hs)
+
+            #unflip everything            
+            ts_interp[i, :] = np.fliplr([ts_interp[i,:]])[0]
+            hs_interp[i, :] = np.fliplr([hs_interp[i,:]])[0]
+
+            fs = np.fliplr([fs])[0]
+            hs = np.fliplr([hs])[0]
+            ts = np.fliplr([ts])[0]
+            fs_interp = np.fliplr([fs_interp])[0]
+
+        
+    return (fs_interp,hs_interp, ts_interp)

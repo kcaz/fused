@@ -2330,7 +2330,8 @@ def eval_mapped_performance(lamP=1.0, lamR=1.0,lamS=0):
     auc = fg.eval_network_roc(B0_mapped2, genes1, tfs1, priors1, exclude_tfs=False, constraints=constraints, sub=0)
 
     print 'performance-constr, mapped2: aupr %f, auc %f' % (aupr, auc)
-    
+
+#plots the chosen metric as a function of lamS for bacterial data    
 def plot_bacteria_performance(lamP=1.0, lamR=5, lamSs=[0,1,2,3,4], k=20):
 
     out = 'data/bacteria_standard'
@@ -2628,6 +2629,44 @@ def plot_synthetic_performance(lamP=1.0, lamR=5, lamSs=[0,1], k=20):
     sns.tsplot(to_plot, time=xs, condition=linedesc, value=measures[0])
     
     plt.show()
+
+#as plot synthetic performance, except it plots overlaid ROC curves for different values of lamS
+def plot_synthetic_roc(lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc'):
+    N = 10
+    N_TF = 20
+    N_G = 30
+    out = os.path.join('data','fake_data','plot_synthetic_performance')
+    ds.write_fake_data1(N1 = k*N, N2 = 5*k*N, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1,pct_fused=0.8, sparse=0.5, fuse_std = 0.0, orth_falsepos=0.0,orth_falseneg=0.0)
+
+    if metric == 'roc':
+        xl = 'false alarm'
+        yl = 'hit'
+    if metric == 'prc':
+        xl = 'recall'
+        yl = 'precision'
+    
+    all_roc_curves = []
+    for i, lamS in enumerate(lamSs):
+        (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, False), exclude_tfs=False)
+        
+        rocs = errd1[metric]
+        print errd1['aupr'].mean()
+        all_roc_curves.append(rocs)
+
+    pss = []
+    for roc_curve_group in all_roc_curves:
+        (rs, ps, ts) = fg.pool_roc(roc_curve_group, all_roc_curves)
+        pss.append(ps)
+    
+    linedesc = pd.Series(map(str, lamSs), name='lambdaS')
+    to_plot = np.dstack(pss)
+    xs = pd.Series(rs, name=xl)
+    
+    sns.tsplot(to_plot, time=xs, condition=linedesc, value=yl)
+    
+    plt.show()
+    
+
 
 
 #plots error dictionaries
