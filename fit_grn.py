@@ -57,9 +57,9 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
     dss = [ds1, ds2]
 
     #set up containers for results
-    metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con', 'auc_noncon', 'aupr_noncon', 'B_mse']
-    err_dict1 = {m : np.zeros((k, 1)) for m in metrics}
-    err_dict2 = {m : np.zeros((k, 1)) for m in metrics}
+    metrics1 = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con', 'auc_noncon', 'aupr_noncon', 'B_mse']
+    err_dict1 = {m : np.zeros((k, 1)) for m in metrics1}
+    err_dict2 = {m : np.zeros((k, 1)) for m in metrics1}
     err_dicts = [err_dict1, err_dict2] #for indexing
     #prc and roc are special (not individual numbers)
     metrics2 = ['prc','roc', 'prc_con','roc_con']
@@ -393,6 +393,9 @@ def eval_network_pr(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False, 
         aupr = auc(recall, precision)
     else:
         aupr = np.nan
+        precision = np.nan
+        recall = np.nan
+        t = np.nan
     
     return (aupr, (recall, precision, t))
 
