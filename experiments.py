@@ -2564,6 +2564,8 @@ def plot_synthetic_performance(lamP=1.0, lamR=5, lamSs=[0,1], k=20):
     
     plt.show()
 
+
+
 #as plot synthetic performance, except it plots overlaid ROC curves for different values of lamS
 def plot_synthetic_roc(lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc'):
     N = 10
@@ -2571,35 +2573,70 @@ def plot_synthetic_roc(lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc'):
     N_G = 30
     out = os.path.join('data','fake_data','plot_synthetic_performance')
     ds.write_fake_data1(N1 = k*N, N2 = 5*k*N, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1,pct_fused=0.8, sparse=0.5, fuse_std = 0.0, orth_falsepos=0.0,orth_falseneg=0.0)
+    plot_roc(out, lamP, lamR, lamSs, k, metric)
 
-    if metric == 'roc':
+#as plot synthetic performance, except it plots overlaid ROC curves for different values of lamS
+def plot_bacteria_roc(lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None):
+    out = os.path.join('data','bacteria_standard')
+    plot_roc(out, lamP, lamR, lamSs, k, metric, savef=savef)
+
+#generic function for above two
+def plot_roc(out, lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None):
+    seed = np.random.randn()
+    if metric[0:3] == 'roc':
         xl = 'false alarm'
         yl = 'hit'
-    if metric == 'prc':
+    if metric[0:3] == 'prc':
         xl = 'recall'
         yl = 'precision'
     
+    if 'con' in metric:
+        chancek = 'chance_con'
+    else:
+        chancek = 'chance'
     all_roc_curves = []
-    for i, lamS in enumerate(lamSs):
-        (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, False), exclude_tfs=False)
-        
-        rocs = errd1[metric]
-        print errd1['aupr'].mean()
-        all_roc_curves.append(rocs)
+    import pickle
+    if savef != None:
+        savef = os.path.join('saves',savef)
 
+    if savef != None and os.path.exists(savef):
+        with file(savef) as f:
+            errdls = pickle.load(f)
+    else:
+        errdls = []
+    
+        for i, lamS in enumerate(lamSs):
+            (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, False), exclude_tfs=False, seed = seed)
+            errdls.append( (errd1, errd2) )
+    
+    if savef != None:
+        with file(savef, 'w') as f:
+            pickle.dump(errdls, f)
+
+    chance_rates = []
+    for i, lamS in enumerate(lamSs):
+        (errd1, errd2) = errdls[i]        
+        rocs = errd1[metric]
+        
+        all_roc_curves.append(rocs)
+        chance_rates.append(errd1[chancek])
     pss = []
     for roc_curve_group in all_roc_curves:
-        (rs, ps, ts) = fg.pool_roc(roc_curve_group, all_roc_curves)
+        (rs, ps, ts) = fg.pool_roc(roc_curve_group, all_roc_curves, max_x = 1000)
         pss.append(ps)
     
     linedesc = pd.Series(map(str, lamSs), name='lambdaS')
-    to_plot = np.dstack(pss)
+    
+    to_plot = np.dstack(pss) / np.repeat(pss[0][:,:,None], len(pss), axis=2)
     xs = pd.Series(rs, name=xl)
     
     sns.tsplot(to_plot, time=xs, condition=linedesc, value=yl)
-    
+    plt.hold(True)
+
+    chance_x = [min(xs), max(xs)]
+    chance_y = [np.mean(chance_rates), np.mean(chance_rates)]
+    #plt.plot(chance_x, chance_y,'--k')
     plt.show()
-    
 
 
 
