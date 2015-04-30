@@ -2897,9 +2897,7 @@ def plot_beta_diffs(out=None, B0=None, B1=None, add_fake=False,scale=1.0):
 
 #plots distributions of real lambdas of fusion constraints
 def plot_fuse_lams(out, cons):
-    N = 10
-    N_TF = 1
-    N_G = 500
+
     (constraints, marks, orths) = ds.load_constraints(out)
     marks = np.array(marks)
     lams = np.array(map(lambda x: x.lam, cons))
@@ -3396,8 +3394,8 @@ def lamS_dist_fig():
 
     N_TF = 20
     N_G = 200
-    amt_fused = 0.5
-    orth_err = [1]
+    amt_fused = 0.3
+    orth_err = [0.3]
     lamSs = [4]#[0, 2, 4, 6]
     seed = 10
     k = 5
@@ -3415,7 +3413,7 @@ def lamS_dist_fig():
 
         for j, lamS in enumerate(lamSs):
 
-            scad_settings = fr.get_settings({'s_it':50, 'per':((1/(1+float(N)))*100), 'return_cons' : True})
+            scad_settings = fr.get_settings({'s_it':20, 'per':((1/(1+float(N)))*100), 'return_cons' : True})
             (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=5, solver='solve_ortho_direct_scad', reverse = False, settings = scad_settings, cv_both = (True, True))
             print scad_settings['cons']
             plot_fuse_lams(out, scad_settings['cons'])
