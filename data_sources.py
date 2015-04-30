@@ -89,7 +89,7 @@ class data_source():
     
     #loads data associated with a list of conditions
     def load_data(self,conditions=None):
-        if conditions == None:
+        if conditions is None:
             conditions = np.arange(self.N)
         conditions = np.array(conditions)
         exp_mat = self.exp_mat[conditions, :]

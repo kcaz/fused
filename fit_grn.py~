@@ -57,7 +57,11 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
     dss = [ds1, ds2]
 
     #set up containers for results
-    metrics1 = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con', 'auc_noncon', 'aupr_noncon', 'B_mse']
+<<<<<<< HEAD
+    metrics1 = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con', 'auc_noncon', 'aupr_noncon', 'chance', 'chance_con', 'B_mse']
+=======
+    metrics1 = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con', 'B_mse', 'chance','chance_con']
+>>>>>>> 51b3a298f3c94517cb48c92a934d6d11b75646eb
     err_dict1 = {m : np.zeros((k, 1)) for m in metrics1}
     err_dict2 = {m : np.zeros((k, 1)) for m in metrics1}
     err_dicts = [err_dict1, err_dict2] #for indexing
@@ -185,8 +189,12 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
             if os.path.exists(betafile):
                 B_mse = mse_B(Bs[si], betafile)
                 err_dicts[si]['B_mse'][fold,0] = B_mse
-            else:
-                print 'hi'
+            
+            chance = compute_chance_precision(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = None, sub = si)
+            err_dicts[si]['chance'][fold, 0] = chance
+            chance_con = compute_chance_precision(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, sub = si)
+            err_dicts[si]['chance_con'][fold, 0] = chance
+            
     return err_dicts
 
 
@@ -391,10 +399,12 @@ def eval_network_pr(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False, 
         #precision recall, unlike roc_curve, has one fewer t than precision/recall value. I'm just going to copy the last element.
         t = np.concatenate((t, t[[-1]]))
         aupr = auc(recall, precision)
+        return (aupr, (recall, precision, t))
     else:
         aupr = np.nan
     
-    return (aupr, (recall, precision, t))
+        return (aupr, (None, None, None))
+        
 
 #evaluates the area under the roc, with respect to some given priors
 
@@ -403,12 +413,14 @@ def eval_network_roc(net, genes, tfs, priors, tr_priors=[], exclude_tfs = True, 
     if len(scores):
         (fpr, tpr, t) = roc_curve(labels, scores)
         if any(np.isnan(fpr)) or any(np.isnan(tpr)):
-            return 0.0 #no false positives        
+            return (0.0, (None, None, None)) #no false positives        
         auroc = auc(fpr, tpr)
+        return (auroc, (fpr, tpr, t))
     else:
         auroc = np.nan
+        return (auroc, (None, None, None))
 
-    return (auroc, (fpr, tpr, t))
+    
 
 def eval_network_beta(net1, net2):
     return ((net1 - net2)**2).mean()
@@ -491,7 +503,7 @@ def grid_search_params(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct'
 
 #given list of roc/prc curves of the form [(precision, recall, t), ...] produces a new set of curves interpolated at every unique value of recall/fpr present on the list all_roc_curves
 
-def pool_roc(roc_curves, all_roc_curves = None):
+def pool_roc(roc_curves, all_roc_curves = None, max_x = np.inf):
     all_f = set()
     if all_roc_curves == None:
         all_roc_curves = [roc_curves]
@@ -500,10 +512,15 @@ def pool_roc(roc_curves, all_roc_curves = None):
         for (fs, hs, ts) in roc_curves_group:
             for f in fs:
                 all_f.add(f)
-    fs_interp = sorted(list(all_f))        
+    if len(all_f) > max_x:
+        fs_interp = np.linspace(min(all_f), max(all_f), max_x)
+    else:
+        fs_interp = sorted(list(all_f))        
     ts_interp = np.zeros((len(roc_curves), len(fs_interp)))
     hs_interp = np.zeros((len(roc_curves), len(fs_interp)))
-    
+    def interp_fl(x, xp, fp):
+        reverse_interp = np.interp(x[::-1],xp[::-1],fp[::-1])
+        return np.fliplr([reverse_interp])[0]
     for i, roc in enumerate(roc_curves):
         
         (fs, hs, ts) = roc
@@ -515,23 +532,51 @@ def pool_roc(roc_curves, all_roc_curves = None):
             ts_interp[i, :] = np.interp(fs_interp, fs, ts)
             hs_interp[i, :] = np.interp(fs_interp, fs, hs)
         else:
-            #flip everything
-            fs = np.fliplr([fs])[0]
-            hs = np.fliplr([hs])[0]
-            ts = np.fliplr([ts])[0]
-            fs_interp = np.fliplr([fs_interp])[0]
-
-            ts_interp[i, :] = np.interp(fs_interp, fs, ts)
-            hs_interp[i, :] = np.interp(fs_interp, fs, hs)
-
-            #unflip everything            
-            ts_interp[i, :] = np.fliplr([ts_interp[i,:]])[0]
-            hs_interp[i, :] = np.fliplr([hs_interp[i,:]])[0]
-
-            fs = np.fliplr([fs])[0]
-            hs = np.fliplr([hs])[0]
-            ts = np.fliplr([ts])[0]
-            fs_interp = np.fliplr([fs_interp])[0]
+            ts_interp[i, :] = interp_fl(fs_interp, fs, ts)
+            hs_interp[i, :] = interp_fl(fs_interp, fs, hs)
 
         
     return (fs_interp,hs_interp, ts_interp)
+
+#given list of roc/prc curves of the form [(false-alarm, hit, t), ...] produces a new set of Fbeta curves interpolated at every unique value of t
+
+def pool_roc_f(roc_curves, all_roc_curves = None, beta=1.0):
+    all_t = set()
+    if all_roc_curves == None:
+        all_roc_curves = [roc_curves]
+
+    for roc_curves_group in all_roc_curves:
+        for (fs, hs, ts) in roc_curves_group:
+            for t in ts:
+                all_t.add(t)
+    ts_interp = sorted(list(all_t))
+    fs_interp = np.zeros((len(roc_curves), len(fs_interp)))
+    hs_interp = np.zeros((len(roc_curves), len(fs_interp)))
+    
+    def interp_fl(x, xp, fp):
+        reverse_interp = np.interp(x[::-1],xp[::-1],fp[::-1])
+        return np.fliplr([reverse_interp])[0]
+                                   
+    for i, roc in enumerate(roc_curves):
+        
+        (fs, hs, ts) = roc
+        
+        #for interp to work, the function must be increasing
+        # if it isn't, reverse it, then reverse again
+        if fs[0] < fs[-1]:
+            fs_interp[i, :] = np.interp(fs_interp, fs, fs)
+            hs_interp[i, :] = np.interp(fs_interp, fs, hs)
+        else:
+            fs_interp[i, :] = interp_fl(fs_interp, fs, fs)
+            hs_interp[i, :] = interp_fl(fs_interp, fs, hs)
+            
+    return (fs_interp,hs_interp, ts_interp)
+
+#returns the fraction of true labels for the given constraints and priors
+def compute_chance_precision(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False, constraints = None, sub=None):
+    
+    (scores, labels) = get_scores_labels(net, genes, tfs, priors, tr_priors, exclude_tfs, constraints, sub)
+    if len(scores) == 0:
+        return np.nan
+    return np.mean(labels)
+    
