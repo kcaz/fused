@@ -56,10 +56,16 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
     ds2 = ds.standard_source(data_fn,1)
     dss = [ds1, ds2]
 
+
     #set up containers for results
     metrics1 = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con', 'B_mse', 'chance','chance_con']
     err_dict1 = {m : np.zeros((k, 1)) for m in metrics1}
     err_dict2 = {m : np.zeros((k, 1)) for m in metrics1}
+
+    #save the parameters
+    err_dict1['params'] = (lamP, lamR, lamS, settings)
+    err_dict2['params'] = (lamP, lamR, lamS, settings)
+
     err_dicts = [err_dict1, err_dict2] #for indexing
     #prc and roc are special (not individual numbers)
     metrics2 = ['prc','roc', 'prc_con','roc_con']
@@ -104,6 +110,16 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
     Ys = [None, None]
     Xs_te = [None, None]
     Ys_te = [None, None]
+
+        #downsamples the ROC, or PRC, curve
+    def downsample_roc(roc):
+        if roc[0] == None:
+            return roc
+        (roc_f, roc_h, roc_t) = pool_roc([roc], max_x=10000)
+            
+            #hrm?
+        return (roc_f[:], roc_h[0,:], roc_t[0,:])
+
     for fold in range(k):
         if verbose:
             print 'working on %d' % fold
@@ -143,6 +159,7 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
 
          #evaluate a bunch of metrics
         (corr, fused_coeffs) = fused_coeff_corr(organisms, genes, tfs, orth, Bs)
+            
         for si in [0,1]:
             err_dicts[si]['corr'][fold,0] = corr
 
@@ -160,20 +177,20 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
             else:
                 S = Bsi
             (aupr, prc) = eval_network_pr(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = None)
-            err_dicts[si]['aupr'][fold,0] = aupr
-            err_dicts[si]['prc'][fold] = prc
+            err_dicts[si]['aupr'][fold,0] = aupr            
+            err_dicts[si]['prc'][fold] = downsample_roc(prc)
 
             (aupr_con, prc_con) = eval_network_pr(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, sub = si)
             err_dicts[si]['aupr_con'][fold,0] = aupr_con                
-            err_dicts[si]['prc_con'][fold] = prc_con
+            err_dicts[si]['prc_con'][fold] = downsample_roc(prc_con)
 
             (auc, roc) = eval_network_roc(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = None)
             err_dicts[si]['auc'][fold,0] = auc
-            err_dicts[si]['roc'][fold] = roc            
+            err_dicts[si]['roc'][fold] = downsample_roc(roc)
 
             (auc_con, roc_con) = eval_network_roc(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, sub = si)
             err_dicts[si]['auc_con'][fold,0] = auc_con
-            err_dicts[si]['roc_con'][fold] = roc_con
+            err_dicts[si]['roc_con'][fold] = downsample_roc(roc_con)
             
             betafile = os.path.join(data_fn, 'beta%d' % (si+1))
             if os.path.exists(betafile):
@@ -501,7 +518,7 @@ def pool_roc(roc_curves, all_roc_curves = None, max_x = np.inf):
     if len(all_f) > max_x:
         fs_interp = np.linspace(min(all_f), max(all_f), max_x)
     else:
-        fs_interp = sorted(list(all_f))        
+        fs_interp = np.array(sorted(list(all_f)))        
     ts_interp = np.zeros((len(roc_curves), len(fs_interp)))
     hs_interp = np.zeros((len(roc_curves), len(fs_interp)))
     def interp_fl(x, xp, fp):
@@ -510,11 +527,18 @@ def pool_roc(roc_curves, all_roc_curves = None, max_x = np.inf):
     for i, roc in enumerate(roc_curves):
         
         (fs, hs, ts) = roc
-        from matplotlib import pyplot as plt
+        #from matplotlib import pyplot as plt
         
         #for interp to work, the function must be increasing
         # if it isn't, reverse it, then reverse again
         if fs[0] < fs[-1]:
+            print fs_interp.shape
+            print fs.shape
+            print hs.shape
+            print ts.shape
+            print np.interp(fs_interp, fs, ts).shape
+            print ts_interp[i, :].shape
+            
             ts_interp[i, :] = np.interp(fs_interp, fs, ts)
             hs_interp[i, :] = np.interp(fs_interp, fs, hs)
         else:
@@ -522,7 +546,7 @@ def pool_roc(roc_curves, all_roc_curves = None, max_x = np.inf):
             hs_interp[i, :] = interp_fl(fs_interp, fs, hs)
 
         
-    return (fs_interp,hs_interp, ts_interp)
+    return (np.array(fs_interp),np.array(hs_interp), np.array(ts_interp))
 
 #given list of roc/prc curves of the form [(false-alarm, hit, t), ...] produces a new set of Fbeta curves interpolated at every unique value of t
 
