@@ -2043,7 +2043,7 @@ def L2fusion_quick():
 
     for i, N in enumerate(pct_fused):
         out2 = os.path.join(out1,'dat_'+str(N))
-        ds.write_fake_data1(N1=5, N2=50, out_dir = out2, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.75, fuse_std = 0.1, pct_fused=N)        
+        ds.write_fake_data1(N1=5, N2=50, out_dir = out2, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.75, fuse_std = 0.3, pct_fused=N)        
         lamP = 1.0 #priors don't matter
         seed = 10
         for j, lamS in enumerate(lamSs):
@@ -2902,7 +2902,7 @@ def plot_fuse_lams(out, cons):
     marks = np.array(marks)
     lams = np.array(map(lambda x: x.lam, cons))
     print lams
-    bins = np.linspace(min(lams), max(lams), 100)
+    bins = np.linspace(min(lams), max(lams), 50)
     
     if sum(marks):
         plt.hist(lams[marks==True], bins, histtype="stepfilled",alpha=0.5,label='real')
@@ -3394,8 +3394,8 @@ def lamS_dist_fig():
 
     N_TF = 20
     N_G = 200
-    amt_fused = 0.3
-    orth_err = [0.3]
+    amt_fused = 0.5
+    orth_err = [0.75]
     lamSs = [4]#[0, 2, 4, 6]
     seed = 10
     k = 5
@@ -3407,7 +3407,7 @@ def lamS_dist_fig():
 
     for i, N in enumerate(orth_err):
         out = os.path.join('data','fake_data','lamS_dist_fig','dat_'+str(N))
-        ds.write_fake_data1(N1 = 5*5, N2 = 5*50, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = N, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.5, fuse_std = 0.1)
+        ds.write_fake_data1(N1 = 5*70, N2 = 570, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = N, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.5, fuse_std = 0.1)
         lamR = 2
         lamP = 1.0 #priors don't matter
 
