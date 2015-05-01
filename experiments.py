@@ -2375,6 +2375,7 @@ def eval_mapped_performance(lamP=1.0, lamR=1.0,lamS=0):
     print 'performance-constr, mapped2: aupr %f, auc %f' % (aupr, auc)
 
 #plots the chosen metric as a function of lamS for bacterial data    
+#DEPRACATED: use plot_bacteria, which plots from saved error dictionaries
 def plot_bacteria_performance(lamP=1.0, lamR=5, lamSs=[0,1,2,3,4], k=20):
 
     out = 'data/bacteria_standard'
@@ -2673,10 +2674,29 @@ def plot_synthetic_performance(lamP=1.0, lamR=5, lamSs=[0,1], k=20):
     
     plt.show()
 
+#given a savef, plots whatever metric you like as a function of lamR, lamP, or lamS
+#lamS here temporarily
+def plot_savef(savef, metric, lamSs):
+    errdls = []
+    scores = []
+    import pickle
+    savef = os.path.join('saves',savef)
+    with file(savef) as f:
+        errdls = pickle.load(f)
+    
+    for i, lamS in enumerate(lamSs):
+        (errd1, errd2) = errdls[i]        
+        scores.append(errd1[metric].mean())
+    
+    plt.plot(lamSs, scores)
+    plt.show()
 
+    return None
+    
+    
 
 #as plot synthetic performance, except it plots overlaid ROC curves for different values of lamS
-def plot_synthetic_roc(lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc'):
+def plot_synthetic_roc(lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',normed=False):
     N = 10
     N_TF = 20
     N_G = 30
@@ -2685,12 +2705,12 @@ def plot_synthetic_roc(lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc'):
     plot_roc(out, lamP, lamR, lamSs, k, metric)
 
 #as plot synthetic performance, except it plots overlaid ROC curves for different values of lamS
-def plot_bacteria_roc(lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None):
+def plot_bacteria_roc(lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,normed=False):
     out = os.path.join('data','bacteria_standard')
     plot_roc(out, lamP, lamR, lamSs, k, metric, savef=savef)
 
 #generic function for above two
-def plot_roc(out, lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None):
+def plot_roc(out, lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,normed=False):
     seed = np.random.randn()
     if metric[0:3] == 'roc':
         xl = 'false alarm'
@@ -2707,9 +2727,10 @@ def plot_roc(out, lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None):
     import pickle
     if savef != None:
         savef = os.path.join('saves',savef)
-
+    loaded = False
     if savef != None and os.path.exists(savef):
         with file(savef) as f:
+            loaded = True
             errdls = pickle.load(f)
     else:
         errdls = []
@@ -2718,7 +2739,7 @@ def plot_roc(out, lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None):
             (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, False), exclude_tfs=False, seed = seed)
             errdls.append( (errd1, errd2) )
     
-    if savef != None:
+    if savef != None and not loaded:
         with file(savef, 'w') as f:
             pickle.dump(errdls, f)
 
@@ -2736,7 +2757,10 @@ def plot_roc(out, lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None):
     
     linedesc = pd.Series(map(str, lamSs), name='lambdaS')
     
-    to_plot = np.dstack(pss) / np.repeat(pss[0][:,:,None], len(pss), axis=2)
+    if normed:
+        to_plot = np.dstack(pss) / np.repeat(pss[0][:,:,None], len(pss), axis=2)
+    else:
+       to_plot = np.dstack(pss)
     xs = pd.Series(rs, name=xl)
     
     sns.tsplot(to_plot, time=xs, condition=linedesc, value=yl)
