@@ -58,7 +58,11 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
 
 
     #set up containers for results
-    metrics1 = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con', 'B_mse', 'chance','chance_con', 'top_100']
+
+
+    metrics1 = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con', 'auc_noncon', 'aupr_noncon', 'chance', 'chance_con', 'B_mse','top_100']
+
+
     err_dict1 = {m : np.zeros((k, 1)) for m in metrics1}
     err_dict2 = {m : np.zeros((k, 1)) for m in metrics1}
 
@@ -68,7 +72,7 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
 
     err_dicts = [err_dict1, err_dict2] #for indexing
     #prc and roc are special (not individual numbers)
-    metrics2 = ['prc','roc', 'prc_con','roc_con']
+    metrics2 = ['prc','roc', 'prc_con','roc_con', 'prc_noncon', 'roc_noncon']
     for err_dict in err_dicts:
         for metric in metrics2:
             err_dict[metric] = map(lambda x: [], range(k))
@@ -182,8 +186,12 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
                 S = Bsi
             #aupr and prc curves
             (aupr, prc) = eval_network_pr(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = None)
-            err_dicts[si]['aupr'][fold,0] = aupr            
-            err_dicts[si]['prc'][fold] = downsample_roc(prc)
+            err_dicts[si]['aupr'][fold,0] = aupr
+            err_dicts[si]['prc'][fold] = prc            
+            
+            (aupr_noncon, prc_noncon) = eval_network_pr(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, non_con=True, sub = si)
+            err_dicts[si]['aupr_noncon'][fold,0] = aupr_noncon                    
+            err_dicts[si]['prc_noncon'][fold] = downsample_roc(prc_noncon)
 
             #constrained aupr and prc curves
             (aupr_con, prc_con) = eval_network_pr(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, sub = si)
@@ -199,6 +207,10 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
             (auc_con, roc_con) = eval_network_roc(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, sub = si)
             err_dicts[si]['auc_con'][fold,0] = auc_con
             err_dicts[si]['roc_con'][fold] = downsample_roc(roc_con)
+
+            (auc_noncon, roc_noncon) = eval_network_roc(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, non_con=True, sub = si)
+            err_dicts[si]['auc_noncon'][fold,0] = auc_noncon
+            err_dicts[si]['roc_noncon'][fold] = downsample_roc(roc_noncon)
             
             #beta error if data is simulated
             betafile = os.path.join(data_fn, 'beta%d' % (si+1))
@@ -338,7 +350,7 @@ def rescale_betas(X, Y, B):
     return S
 
 #returns scores/labels for aupr or auc
-def get_scores_labels(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False, constraints = None, sub=None):
+def get_scores_labels(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False, constraints = None, non_con = False, sub=None):
     #from matplotlib import pyplot as plt
     if len(priors)==0:
         return ([], [])
@@ -380,10 +392,13 @@ def get_scores_labels(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False
             if exclude_tfs and gi < len(tfs):
                 continue
             coeff = fl.coefficient(sub=sub, r=tfi, c=gi) #potential coefficient
-            if constraints != None:                
-                if not coeff in con_set:
-                    continue
-            
+            if constraints != None: 
+                if non_con==True:
+                    if coeff in con_set:
+                        continue           
+                else:
+                    if not coeff in con_set:
+                        continue
             tf = tfs[tfi]
             g = genes[gi]
             score = np.abs(net[tfi, gi])
@@ -407,8 +422,8 @@ def get_scores_labels(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False
 # constraints: if not None, evaluates only on interactions which have fusion constraints
 #sub: name of subproblem. used if constraints != None
 #tr_priors are the training set priors
-def eval_network_pr(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False, constraints = None, sub=None):
-    (scores, labels) = get_scores_labels(net, genes, tfs, priors, tr_priors, exclude_tfs, constraints, sub)
+def eval_network_pr(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False, constraints = None, non_con = False, sub=None):
+    (scores, labels) = get_scores_labels(net, genes, tfs, priors, tr_priors, exclude_tfs, constraints, non_con, sub)
     if len(scores):
             
         (precision, recall,t) = precision_recall_curve(labels, scores)#prc(scores, labels)
@@ -418,13 +433,14 @@ def eval_network_pr(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False, 
         return (aupr, (recall, precision, t))
     else:
         aupr = np.nan
+    
         return (aupr, (None, None, None))
         
 
 #evaluates the area under the roc, with respect to some given priors
 
-def eval_network_roc(net, genes, tfs, priors, tr_priors=[], exclude_tfs = True, constraints = None, sub=None):
-    (scores, labels) = get_scores_labels(net, genes, tfs, priors, tr_priors, exclude_tfs, constraints, sub)
+def eval_network_roc(net, genes, tfs, priors, tr_priors=[], exclude_tfs = True, constraints = None, non_con = False, sub=None):
+    (scores, labels) = get_scores_labels(net, genes, tfs, priors, tr_priors, exclude_tfs, constraints, non_con, sub)
     if len(scores):
         (fpr, tpr, t) = roc_curve(labels, scores)
         if any(np.isnan(fpr)) or any(np.isnan(tpr)):

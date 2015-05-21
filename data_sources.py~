@@ -3,6 +3,7 @@ import fused_reg as fr
 import random
 import os
 import collections
+
 #SECTION: -------------UTILITY FUNCTIONS------------------------------
 #quantile normalizes conditions AND scales to mean zero/unit variance
 #AND DOES NOT divides expression matrices by the square root of the sample size
@@ -116,21 +117,28 @@ def arrange_tfs_first(tfs, genes, tf_mat, exp_mat):
     exp_mat = exp_mat[:, new_order]
     return (tfs, genes, tf_mat, exp_mat)
 
-#turns expression matrices along with time-difference arrays that specify
+#turns expression matrices along with time-difference list of lists of strings that specify
 #cond1, cond2, gap into time difference approximations of the derivative according to
 # [X(t_2) - X(t_1)] / (t_2 - t_1) + x(t_1)/ tc
 def generate_timeseries(tf_mat, exp_mat, td, tc):
-    td_tf_mat = np.zeros((td.shape[0], tf_mat.shape[1]))
-    td_exp_mat = np.zeros((td.shape[0], exp_mat.shape[1]))
+    N = len(td)
+    M_tf = tf_mat.shape[1]
+    M_exp = exp_mat.shape[1]
+    td_tf_mat = np.zeros((N, M_tf))
+    td_exp_mat = np.zeros((N, M_exp))
     
-    for td_row in range(td.shape[0]):
-        (to, fr, s) = td[td_row, :]
+    for td_row in range(N):
+        (fr_s, to_s, s_s) = td[td_row]
+        fr = int(fr_s)
+        to = map(int, to_s.split(','))
+        s = float(s_s)
+
         #print 'current: %d, preceding: %d' % (to, fr)
-        T1 = tf_mat[int(fr), :]
-        X1 = exp_mat[int(fr), :]
-        X2 = exp_mat[int(to), :]
-        #print X2
-        #print X1
+        T1 = tf_mat[fr, :]
+        X1 = exp_mat[fr, :]
+    
+        X2 = exp_mat[to, :].mean(axis=0)
+    
         Xdt = (X2 - X1)/s
         Xtc = X1 / tc
         #print Xdt
@@ -186,8 +194,8 @@ class standard_source(data_source):
         #read the time difference file
         with file(time_diff_fn) as time_diff_f:
             tdlt = spl_ln_t(time_diff_f.read())
-            td = np.array(tdlt).astype(float)
-
+            #td = np.array(tdlt).astype(float)
+            td = tdlt
         
         #now we extract the transcription factor expression matrix
         gene_to_ind = {genes[i] : i for i in range(len(genes))}
@@ -678,9 +686,12 @@ def generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, organisms, falsepos,
             break
         if candidate_orth.genes[0] in orth_genes or candidate_orth.genes[1] in orth_genes:
             continue
+        #add these, to make sure no double dipping
+        orth_genes.add(candidate_orth.genes[0])
+        orth_genes.add(candidate_orth.genes[1])
         to_add.append(candidate_orth)
         
-    
+    #print '%d real, %d fake' % (len(orths_retain), len(to_add))
     real_fake_orths = orths_retain + to_add
     
     return real_fake_orths
@@ -899,17 +910,141 @@ def voodoo():
         os.mkdir(out_dir)
     write_expr_mat(out_dir+os.sep+'expression1', bs_e, bs_genes)
     write_expr_mat(out_dir+os.sep+'expression2', ba_e, ba_genes)
-    write_ss_td(os.path.join(out_dir, 'time_diffs1'), bs_e)
-    write_ss_td(os.path.join(out_dir, 'time_diffs2'), ba_e)
+    
+    #write_ss_td(os.path.join(out_dir, 'time_diffs1'), bs_e)
+    subtilis_td()
+    #write_ss_td(os.path.join(out_dir, 'time_diffs2'), ba_e)
+    #copy over the file from bacteria 1...
+    
+    anthracis_td()
 
     write_priors_voodoo(out_dir+os.sep+'priors1',bs_priors, bs_sign)
     write_priors_voodoo(out_dir+os.sep+'priors2',ba_priors, ba_sign)
     write_tfnames(out_dir+os.sep+'tfnames1',bs_tfs)
     write_tfnames(out_dir+os.sep+'tfnames2',ba_tfs)
     write_orth(out_dir+os.sep+'orth', orths)
+    #tc: 1/tc * log(2) = 10 minutes 
+    tc = np.log(2)/10
     with file(out_dir+os.sep+'description', 'w') as f:
         f.write('organism1\t%s\norganism2\t%s\n' % ('B_subtilis','B_anthracis'))
-        f.write('tc1\t%s\ntc2\t%s\n' %('1','1'))
+        f.write('tc1\t%f\ntc2\t%f\n' %(tc,tc))
     
 
+
+#time series loader
+#tu (time unit) scales the time series. basically arbitrary. howtoset? related to decay rate
+def load_subtilis(tu=1.0):
+    (e, t, gene_n, tf_n) = load_B_subtilis()
+    #already normalized data
+    ftd = file('data/subtilis_td')
+    fss = file('data/subtilis_ss')
+    ftd_sl = filter(len, ftd.read().split('\n'))
+    fss_sl = filter(len, fss.read().split('\n'))
+    #append rows we want as a list (or differences of rows)
+    gene_exps = []
+    tf_exps = []
+    if use_time_series:
+        for l in ftd_sl:
+            (from_cond_s, to_cond_s, td_s) = l.split('\t')
+            (from_cond, to_cond, td) = (int(from_cond_s), int(to_cond_s), float(td_s))
+        #try and predict time difference by the mean TF expr at each end
+            td_expr = e[from_cond,:]+tu*(e[to_cond,:] - e[from_cond,:])/td
+            tf_expr = t[from_cond,:]#(t[to_cond,:]+t[from_cond,:])/2
+            
+            gene_exps.append(td_expr)
+            tf_exps.append(tf_expr)
+    if use_steady_state:
+        for l in fss_sl:
+            cond = int(l)
+            tf_exps.append(t[cond, :])
+            gene_exps.append(e[cond, :])
+    exp_mat = np.vstack(gene_exps)
+    tf_mat = np.vstack(tf_exps)
+    return (exp_mat, tf_mat, gene_n, tf_n)
+
+
+#makes sure that XB = Y for generated data
+
+def verify_data_integrity(N=100, N_TF=10, N_G=10):
+    out = os.path.join('data','fake_data','verify_data_integrity')
+    ds.write_fake_data1(N1=N, N2=N, out_dir = 'data/fake_data/simpletest', tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.0, measure_noise2 = 0.0, sparse=0.0, fuse_std = 0.0, pct_fused=1.0)
     
+    (n1, g1, t1) = ds.load_network('data/fake_data/simpletest/beta1')
+    (n2, g2, t2) = ds.load_network('data/fake_data/simpletest/beta2')
+
+    d1 = ds.standard_source('data/fake_data/simpletest/', 0)
+    d2 = ds.standard_source('data/fake_data/simpletest/', 1)
+
+    err1 = ((np.dot(d1.tf_mat, n1) - d1.exp_mat)**2).mean()
+    err2 = ((np.dot(d2.tf_mat, n2) - d2.exp_mat)**2).mean()
+    print err1
+    print err2
+
+#returns the b subtilis time-difference file associated with the metadata file subtilis_metadata. currently there are some (38) conditions that don't appear in the metadata, and are excluded
+def subtilis_td():
+    import pandas
+    mdata = pandas.read_table(os.path.join('data','bacteria1','subtilis_metadata'), sep=' ')
+    exp = pandas.read_table(os.path.join('data','bacteria1','B_subtilis.csv'), sep=',')
+    cond_names = exp.columns
+    cond_names_ind = {cond_names[i] : i for i in range(len(cond_names))}
+    
+    next_cond = dict() #maps condition number to (next_cond, time elapsed) tuples
+    for r in range(len(mdata.index)):
+        #figure out what  condition number this is
+        cond_ind = cond_names_ind[mdata['condName'][r]]
+        if not mdata['isTs'][r]:
+            next_cond[cond_ind] = (cond_ind, 1.0)
+        else:
+            prev = mdata['prevCol'][r]
+            if not str(prev) == 'nan': #this is insane
+                prev_ind = cond_names_ind[prev]
+                elapsed = mdata['del.t'][r]
+                next_cond[prev_ind] = (cond_ind, elapsed)
+    
+    with file('data/bacteria_standard/time_diffs1', 'w') as td_file:
+        #let's make the conditions come out in basically the same order as they appera in the data
+        
+        for cond1 in range(len(cond_names)):
+            
+            if cond1 in next_cond:
+            
+                (cond2, td) = next_cond[cond1]
+                td_file.write('%d\t%d\t%f\n' % (cond1, cond2, td))
+
+#loads the metadata file obtained (by hand) from http://www.google.com/url?q=http%3A%2F%2Fwww.ebi.ac.uk%2Farrayexpress%2Fexperiments%2FE-MEXP-788%2Fsamples%2F&sa=D&sntz=1&usg=AFQjCNGy0TRm9r6L5MSwwl3ogfOeQZLI7Q and converts it into condition numbers. Treats all conditions from the iron starvation experiment as steady-state
+def anthracis_td():
+    import pandas
+    #timeseries metadata
+    mdata_ts = pandas.read_table('data/bacteria1/time_diffs_ant', names = ['from','to','td'],sep=' ')
+    #iron is steady state!
+    
+    ts_data =  pandas.read_table('data/bacteria1/Normalized_data_RMA._txt')
+    ts_conds = ts_data.columns[1:]
+    iron_data = pandas.read_table('data/bacteria1/normalizedgeneexpressionvalues.txt')
+    iron_conds = iron_data.columns[1:]
+    cond_index = dict()
+    #joining expression matrices doesn't change the order of conditions
+    for i, ts_cond in enumerate(ts_conds):
+        cond_index[ts_cond] = i
+    for i, ir_cond in enumerate(iron_conds):
+        if ir_cond in cond_index:
+            print('overlapping condition names!!!!!! disaster!')
+        cond_index[ir_cond] = i + len(ts_conds)
+
+    with file('data/bacteria_standard/time_diffs2','w') as td_file:
+        #fill in timeseries
+        for r in range(len(mdata_ts.index)):
+            fr = mdata_ts['from'][r]
+            to = mdata_ts['to'][r].split(',')
+            td = mdata_ts['td'][r]
+
+            fr_ind = cond_index[fr]
+            to_inds = ','.join(map(lambda x: str(cond_index[x]), to))
+            td_file.write('%d\t%s\t%f\n' % (fr_ind, to_inds , td))
+                          
+        for r in range(len(iron_conds)):
+            fr = cond_index[iron_conds[r]]
+            to = cond_index[iron_conds[r]]
+            td = 1.0
+            td_file.write('%d\t%d\t%f\n' % (fr, to , td))
+            
