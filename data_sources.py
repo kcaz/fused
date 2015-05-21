@@ -911,12 +911,15 @@ def voodoo():
     write_expr_mat(out_dir+os.sep+'expression1', bs_e, bs_genes)
     write_expr_mat(out_dir+os.sep+'expression2', ba_e, ba_genes)
     
+    #ss td files
     #write_ss_td(os.path.join(out_dir, 'time_diffs1'), bs_e)
-    subtilis_td()
     #write_ss_td(os.path.join(out_dir, 'time_diffs2'), ba_e)
-    #copy over the file from bacteria 1...
-    
+    #'real' td files
+    subtilis_td()
     anthracis_td()
+    
+    
+    
 
     write_priors_voodoo(out_dir+os.sep+'priors1',bs_priors, bs_sign)
     write_priors_voodoo(out_dir+os.sep+'priors2',ba_priors, ba_sign)

@@ -992,6 +992,7 @@ def solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, s_it, settings):
         a = settings['a']
     else:
         a = pick_a(Bs, fuse_con, settings['per'])
+        
     for i in range(s_it-1):
         fuse_con = scad(Bs, fuse_con, lamS, a=a)
         Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
@@ -1066,7 +1067,7 @@ def scad(Bs_init, fuse_constraints, lamS, a):
             nlamS = lamS
         else:
             nlamS = scad2_prime(theta_init, lamS, a) / theta_init
-
+        
         new_con = constraint(con.c1, con.c2, nlamS)
         new_fuse_constraints.append(new_con)
     return new_fuse_constraints

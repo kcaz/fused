@@ -1811,6 +1811,8 @@ def test_prior_sign_corr_orth():
     priors_r = filter(lambda p: p[0].name in subt_to_anth and p[1].name in subt_to_anth, priors_r)
 
 
+    print 'there are %d mapped priors' % (len(priors_a) + len(priors_r))
+
     gene_ind_anth = {genes2[i] : i for i in range(len(genes2))}
     prior_cons_r = fr.priors_to_constraints([ds1.name], [genes1], [tfs1], priors_r, 1.0)
     prior_cons_a = fr.priors_to_constraints([ds1.name], [genes1], [tfs1], priors_a, 1.0)
@@ -2540,12 +2542,12 @@ def plot_synthetic_beta_err(N = 10, lamP=1, lamR=5,lamSs=[0,1]):
 
 #plots error dictionaries
 #this is really for debugging plot_bacteria_performance 
-def plot_synthetic_performance(lamP=1.0, lamR=5, lamSs=[0,1], k=20):
+def plot_synthetic_performance(lamP=1.0, lamR=5, lamSs=[0,1], k=20, fuse_std=0.0):
     N = 10
     N_TF = 20
     N_G = 30
     out = os.path.join('data','fake_data','plot_synthetic_performance')
-    ds.write_fake_data1(N1 = k*N, N2 = 5*k*N, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1,pct_fused=0.8, sparse=0.5, fuse_std = 0.0, orth_falsepos=0.0,orth_falseneg=0.0)
+    ds.write_fake_data1(N1 = k*N, N2 = 5*k*N, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1,pct_fused=0.8, sparse=0.5, fuse_std = fuse_std, orth_falsepos=0.0,orth_falseneg=0.0)
     
     metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con']
     err_dict1 = {m : np.zeros((k, len(lamSs))) for m in metrics} #subtilis
@@ -2593,27 +2595,39 @@ def plot_synthetic_roc(lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',normed=
     N_G = 30
     out = os.path.join('data','fake_data','plot_synthetic_performance')
     ds.write_fake_data1(N1 = k*N, N2 = 5*k*N, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1,pct_fused=0.8, sparse=0.5, fuse_std = 0.0, orth_falsepos=0.0,orth_falseneg=0.0)
-    plot_roc(out, lamP, lamR, lamSs, k, metric)
+    plot_roc(out, lamP, lamR, lamSs, k, metric,normed=normed)
 
 #as plot synthetic performance, except it plots overlaid ROC curves for different values of lamS
 def plot_bacteria_roc(lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,normed=False):
     out = os.path.join('data','bacteria_standard')
-    plot_roc(out, lamP, lamR, lamSs, k, metric, savef=savef)
+    plot_roc(out, lamP, lamR, lamSs, k, metric, savef=savef,normed=normed)
 
 #generic function for above two
 def plot_roc(out, lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,normed=False):
     seed = np.random.randn()
+    scad = False
+    if scad:
+        settings = fr.get_settings({'per' : 75})
+        solver = 'solve_ortho_direct_scad'
+    else:
+        settings = fr.get_settings()
+        solver = 'solve_ortho_direct'
+
     if metric[0:3] == 'roc':
         xl = 'false alarm'
         yl = 'hit'
+        summary_measure = 'auc'
     if metric[0:3] == 'prc':
         xl = 'recall'
         yl = 'precision'
+        summary_measure = 'aupr'
     
     if 'con' in metric:
         chancek = 'chance_con'
+        summary_measure = summary_measure + '_con'
     else:
         chancek = 'chance'
+        summary_measure = summary_measure + '_con'
     all_roc_curves = []
     import pickle
     if savef != None:
@@ -2627,7 +2641,7 @@ def plot_roc(out, lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,n
         errdls = []
     
         for i, lamS in enumerate(lamSs):
-            (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, False), exclude_tfs=False, seed = seed)
+            (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver = solver, settings = settings, reverse = True, cv_both = (True, False), exclude_tfs=False, seed = seed)
             errdls.append( (errd1, errd2) )
     
     if savef != None and not loaded:
@@ -2639,6 +2653,7 @@ def plot_roc(out, lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,n
         (errd1, errd2) = errdls[i]        
         rocs = errd1[metric]
         
+        print (lamS, errd1[summary_measure].mean())
         all_roc_curves.append(rocs)
         chance_rates.append(errd1[chancek])
     pss = []
@@ -3239,3 +3254,21 @@ def scad_priors():
                 err_dict[metric][:, [i]] = errd1l[metric]
 
     return (err_dict)
+
+#returns a list of the top k (pre-specified when running model) interactions that are in the prior, appear in network 1, but not in network 2. and vice versa
+def top_k_diff(top_k_1, labels1, top_k_2, labels2, k):
+    top_k_1 = top_k_1[0:k]
+    top_k_2 = top_k_2[0:k]
+    top_k_true_1 = map(lambda i: top_k_1[i], filter(lambda j: labels1[j] == 1, range(len(top_k_1))))
+    top_k_true_2 = map(lambda i: top_k_2[i], filter(lambda j: labels2[j] == 1, range(len(top_k_2))))
+
+    #top_k_true_1 = top_k_true_1[0:k]
+    #top_k_true_2 = top_k_true_2[0:k]
+
+    top_k_true_s_2 = set(top_k_true_2)
+    top_k_true_s_1 = set(top_k_true_1)
+
+    top_k_true_excl_1 = filter(lambda tki: not tki in top_k_true_s_2, top_k_true_1)
+    top_k_true_excl_2 = filter(lambda tki: not tki in top_k_true_s_1, top_k_true_2)
+
+    return (top_k_true_excl_1, top_k_true_excl_2)
