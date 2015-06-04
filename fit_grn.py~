@@ -48,7 +48,7 @@ def fit_model(data_fn, lamP, lamR, lamS, solver='solve_ortho_direct', settings =
 
 
 #this is the master cross-validator!
-def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',settings = None, reverse=False, cv_both=(True,True), exclude_tfs=True, pct_priors=0, seed=None, verbose=False):
+def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',settings = None, reverse=False, cv_both=(True,True), exclude_tfs=True, pct_priors=0, seed=None, verbose=False, orth_file='orth'):
     if seed != None:
         random.seed(seed)
 
@@ -59,7 +59,9 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
 
     #set up containers for results
 
-    metrics1 = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con', 'auc_noncon', 'aupr_noncon', 'chance', 'chance_con', 'B_mse']
+
+    metrics1 = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con', 'auc_noncon', 'aupr_noncon', 'chance', 'chance_con', 'B_mse','top_100']
+
 
     err_dict1 = {m : np.zeros((k, 1)) for m in metrics1}
     err_dict2 = {m : np.zeros((k, 1)) for m in metrics1}
@@ -77,7 +79,8 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
     metrics = metrics1 + metrics2
     (constraints, marks, orth) = ds.load_constraints(data_fn)
     
-    orth_fn = os.path.join(data_fn, 'orth')
+
+    orth_fn = os.path.join(data_fn, orth_file)
 
     organisms = [ds1.name, ds2.name]
     orth = ds.load_orth(orth_fn, organisms)
@@ -127,7 +130,7 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
             print 'working on %d' % fold
         #get conditions for current cross-validation fold
         for si in (0,1):
-            if cv_both[si]:
+            if cv_both[si] and k > 1:
                 f_te[si] = folds[si][fold]
                 f_tr[si] = np.hstack(excl(folds[si], fold))    
             if reverse:
@@ -163,55 +166,67 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
         (corr, fused_coeffs) = fused_coeff_corr(organisms, genes, tfs, orth, Bs)
             
         for si in [0,1]:
+            #correlation of fused coefficients
             err_dicts[si]['corr'][fold,0] = corr
 
+            #mse
             mse = prediction_error(Xs_te[si], Bs[si], Ys_te[si], 'mse', exclude_tfs=exclude_tfs)
             err_dicts[si]['mse'][fold, 0] = mse
 
+            #R2
             R2 = prediction_error(Xs_te[si], Bs[si], Ys_te[si], 'R2', exclude_tfs=exclude_tfs)
             err_dicts[si]['R2'][fold, 0] = R2
             
             Xsi = Xs[si]
             Ysi = Ys[si]
             Bsi = Bs[si]
-            if True:
+
+            if True: #always rescale the beta matrix now
                 S = rescale_betas(Xsi, Ysi, Bsi)
             else:
                 S = Bsi
+            #aupr and prc curves
             (aupr, prc) = eval_network_pr(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = None)
             err_dicts[si]['aupr'][fold,0] = aupr
             err_dicts[si]['prc'][fold] = prc            
             
             (aupr_noncon, prc_noncon) = eval_network_pr(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, non_con=True, sub = si)
             err_dicts[si]['aupr_noncon'][fold,0] = aupr_noncon                    
-            err_dicts[si]['prc'][fold] = downsample_roc(prc)
+            err_dicts[si]['prc_noncon'][fold] = downsample_roc(prc_noncon)
 
+            #constrained aupr and prc curves
             (aupr_con, prc_con) = eval_network_pr(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, sub = si)
             err_dicts[si]['aupr_con'][fold,0] = aupr_con                
             err_dicts[si]['prc_con'][fold] = downsample_roc(prc_con)
 
+            #auc and roc curves
             (auc, roc) = eval_network_roc(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = None)
             err_dicts[si]['auc'][fold,0] = auc
             err_dicts[si]['roc'][fold] = downsample_roc(roc)
 
+            #constrained auc and roc curves
             (auc_con, roc_con) = eval_network_roc(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, sub = si)
             err_dicts[si]['auc_con'][fold,0] = auc_con
             err_dicts[si]['roc_con'][fold] = downsample_roc(roc_con)
 
             (auc_noncon, roc_noncon) = eval_network_roc(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, non_con=True, sub = si)
             err_dicts[si]['auc_noncon'][fold,0] = auc_noncon
-            err_dicts[si]['roc_con'][fold] = downsample_roc(roc_con)
+            err_dicts[si]['roc_noncon'][fold] = downsample_roc(roc_noncon)
             
+            #beta error if data is simulated
             betafile = os.path.join(data_fn, 'beta%d' % (si+1))
             if os.path.exists(betafile):
                 B_mse = mse_B(Bs[si], betafile)
                 err_dicts[si]['B_mse'][fold,0] = B_mse
             
+            #chance precision and chance constrained interactions precision
             chance = compute_chance_precision(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = None, sub = si)
             err_dicts[si]['chance'][fold, 0] = chance
             chance_con = compute_chance_precision(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, sub = si)
             err_dicts[si]['chance_con'][fold, 0] = chance
             
+            #top 100 interactions
+            err_dicts[si]['top_100'] = top_k_interactions(S, genes[si], tfs[si], priors_te[si], org=organisms[si], k=np.inf)
     return err_dicts
 
 
@@ -545,14 +560,7 @@ def pool_roc(roc_curves, all_roc_curves = None, max_x = np.inf):
         
         #for interp to work, the function must be increasing
         # if it isn't, reverse it, then reverse again
-        if fs[0] < fs[-1]:
-            print fs_interp.shape
-            print fs.shape
-            print hs.shape
-            print ts.shape
-            print np.interp(fs_interp, fs, ts).shape
-            print ts_interp[i, :].shape
-            
+        if fs[0] < fs[-1]:            
             ts_interp[i, :] = np.interp(fs_interp, fs, ts)
             hs_interp[i, :] = np.interp(fs_interp, fs, hs)
         else:
@@ -604,3 +612,41 @@ def compute_chance_precision(net, genes, tfs, priors, tr_priors=[], exclude_tfs 
         return np.nan
     return np.mean(labels)
     
+#returns a list of the top k interactions (as tf gene name tuples) along with labels specifying whether they are in the prior set
+#restricts to top k interactions for which some prior exists
+def top_k_interactions(net, genes, tfs, priors, org=0, k=np.inf, restrict_genes_w_priors = True):
+    (r, c) = np.indices(net.shape)
+    rc_inds = zip(r.ravel(), c.ravel())
+    
+    rc_inds.sort(key = lambda rc: net[rc[0], rc[1]])
+    
+    k = min(k, len(rc_inds))
+    priors_set = set(priors)
+    rc_inds_k = rc_inds[0:k]
+    interaction_names = []
+    labels = []
+    
+    genes_w_priors = set()
+    for (tf_og, gene_og) in priors:
+        genes_w_priors.add(tf_og)
+        genes_w_priors.add(gene_og)
+
+    assigned = 0
+    for ki, (r, c) in enumerate(rc_inds):
+        if assigned >= k:
+            break
+        tf = tfs[r]
+        gene = genes[c]
+        label = 0
+        tf_og = fl.one_gene(tf, org)
+        gene_og = fl.one_gene(gene, org)
+        if not restrict_genes_w_priors or tf_og in genes_w_priors or gene_og in genes_w_priors:
+            if (tf_og, gene_og) in priors_set:
+                label = 1
+            if (gene_og, tf_og) in priors_set:
+                label = 1
+            labels.append(label)
+            interaction_names.append((tf, gene))
+            assigned += 1
+    
+    return (interaction_names, labels)

@@ -492,10 +492,8 @@ ba_bs_orth = lambda: load_orth('data/bacteria1/bs_ba_ortho_804',['B_anthracis','
 #Okuda S, Katayama T, Kawashima S, Goto S, and Kanehisa M.; ODB: a database of operons accumulating known operons across multiple genomes. Nucleic Acids Res. 34(Database issue):D358-362 (2006).[pubmed]
 
 #takes downloaded operon file and writes new file with just bsu operons
-def bsu_operon_to_orth(op_file, orth_file, new_orth_file):
+def bsu_operon_to_orth(op_file, new_orth_file):
     f = file(op_file)
-    o = file(orth_file)
-    os = filter(len, o.read().split('\n'))
     w = file(new_orth_file, 'w')
     f1 = f.read().split('\n')
     f1s = filter(len, f1)
@@ -508,14 +506,7 @@ def bsu_operon_to_orth(op_file, orth_file, new_orth_file):
     (bs_e, bs_t, bs_genes, bs_tfs) = sub.load_data()
     for tf in bs_tfs:
         w.write(tf + ',' + tf + '\t' + '\t' + 'True' + '\n')
-    for line in range(len(os)):
-        genes = os[line].split('\t')
-        w.write(genes[0] + '\t' + genes[1] + '\t' + 'True' + '\n')
     w.close()
-
-bsu_operon_to_orth('data/bacteria1/known_operon.download.txt', 'data/bacteria1/bs_ba_ortho_804', 'data/bacteria1/bsu_operon_orth')
-load_orth('data/bacteria1/bsu_operon_orth', ['B_subtilis','B_subtilis'])
-
 
 
 #SECTION: ----------------------------DATA GENERATORS------------------
@@ -931,7 +922,7 @@ def voodoo():
     (bs_priors, bs_sign) = sub.get_priors()
     (ba_priors, ba_sign) = anth.get_priors()
     orths = load_orth_voodoo('data/bacteria1/bs_ba_ortho_804',['B_anthracis','B_subtilis'])
-    
+    operons = load_orth('data/bacterai1/bsu_operon_orth',['B_subtilis','B_anthracis'])
     out_dir = os.path.join('data','bacteria_standard')
     if not os.path.exists(out_dir):
         os.mkdir(out_dir)
@@ -953,6 +944,7 @@ def voodoo():
     write_tfnames(out_dir+os.sep+'tfnames1',bs_tfs)
     write_tfnames(out_dir+os.sep+'tfnames2',ba_tfs)
     write_orth(out_dir+os.sep+'orth', orths)
+    write_orth(out_dir+os.sep+'operon',operons)
     #tc: 1/tc * log(2) = 10 minutes 
     tc = np.log(2)/10
     with file(out_dir+os.sep+'description', 'w') as f:

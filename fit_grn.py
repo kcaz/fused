@@ -48,7 +48,7 @@ def fit_model(data_fn, lamP, lamR, lamS, solver='solve_ortho_direct', settings =
 
 
 #this is the master cross-validator!
-def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',settings = None, reverse=False, cv_both=(True,True), exclude_tfs=True, pct_priors=0, seed=None, verbose=False):
+def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',settings = None, reverse=False, cv_both=(True,True), exclude_tfs=True, pct_priors=0, seed=None, verbose=False, orth_file='orth'):
     if seed != None:
         random.seed(seed)
 
@@ -79,7 +79,8 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
     metrics = metrics1 + metrics2
     (constraints, marks, orth) = ds.load_constraints(data_fn)
     
-    orth_fn = os.path.join(data_fn, 'orth')
+
+    orth_fn = os.path.join(data_fn, orth_file)
 
     organisms = [ds1.name, ds2.name]
     orth = ds.load_orth(orth_fn, organisms)
