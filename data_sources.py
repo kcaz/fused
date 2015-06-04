@@ -508,34 +508,18 @@ def bsu_operon_to_orth(op_file, orth_file):
     f1 = f.read().split('\n')
     f1s = (line for line in f1 if f1)
     f.close()
-    bsu = filter((lambda x: x.split('\t')[1] = 'bsu', f1s)
+    bsu = filter((lambda x: x.split('\t')[1] == 'bsu', f1s)
     for line in range(len(bsu)):
         genes = bsu[line].split('\t')[3].split(',')
-        first = genes[0]
-        for gene in genes:
-            w.write(first + '\t' + gene)
+        w.write(','.join(genes) + '\n')
     (bs_e, bs_t, bs_genes, bs_tfs) = sub.load_data()
     for tf in bs_tfs:
-        w.write(tf + '\t' + tf)
+        w.write(tf + ',' + tf + '\n')
     w.close()
 
-filter_bsu_operon('data/bacteria1/known_operon.download.txt', 'data/bacteria1/bsu_operon_orth')
+bsu_operon_to_orth('data/bacteria1/known_operon.download.txt', 'data/bacteria1/bsu_operon_orth')
 load_orth('data/bacteria1/bsu_operon_orth', ['B_subtilis','B_subtilis'])
 
-
-def load_orth(orth_fn, organisms):
-    f = file(orth_fn)
-    fs = f.read()
-    fsn = filter(len, fs.split('\n'))
-    fsnt = map(lambda x: x.split('\t'), fsn)
-    
-    orths = []
-    for o in fsnt:
-        real = o[2] == 'True'
-        orth = fr.orthology(genes = (fr.one_gene(name=o[0],organism=organisms[0]), fr.one_gene(name=o[1], organism=organisms[1])), real = real)
-        orths.append(orth)
-        
-    return orths
 
 
 #SECTION: ----------------------------DATA GENERATORS------------------
