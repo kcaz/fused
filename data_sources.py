@@ -454,6 +454,8 @@ class anthr(data_source):
 #SECTION: ----------------------------------ORTHOLOGY LOADERS----------
 
 def load_orth(orth_fn, organisms):
+    from itertools import combinations
+
     f = file(orth_fn)
     fs = f.read()
     fsn = filter(len, fs.split('\n'))
@@ -462,6 +464,18 @@ def load_orth(orth_fn, organisms):
     orths = []
     for o in fsnt:
         real = o[2] == 'True'
+        if len(o[0].split(',')) > 1:
+            op_genes = o[0].split(',')
+            for pair in combinations(op_genes,2):
+                orth = fr.orthology(genes = (fr.one_gene(name=pair[0],organism=organisms[0]), fr.one_gene(name=pair[1], organism=organisms[0])), real = real)
+                orths.append(orth)
+
+        if len(o[1].split(',')) > 1:
+            op_genes = o[0].split(',')
+            for pair in combinations(op_genes,2):
+                orth = fr.orthology(genes = (fr.one_gene(name=pair[0],organism=organisms[1]), fr.one_gene(name=pair[1], organism=organisms[1])), real = real)
+                orths.append(orth)
+
         orth = fr.orthology(genes = (fr.one_gene(name=o[0],organism=organisms[0]), fr.one_gene(name=o[1], organism=organisms[1])), real = real)
         orths.append(orth)
         
@@ -483,6 +497,45 @@ def load_constraints(data_fn):
     return (constraints, marks, orth)
 
 ba_bs_orth = lambda: load_orth('data/bacteria1/bs_ba_ortho_804',['B_anthracis','B_subtilis'])
+
+#Okuda, S. and Yoshizawa, A.C.; ODB: a database for operon organizations, 2011 update. Nucleic Acids Res.39(Database issue):D552-555 (2011). [pubmed]
+#Okuda S, Katayama T, Kawashima S, Goto S, and Kanehisa M.; ODB: a database of operons accumulating known operons across multiple genomes. Nucleic Acids Res. 34(Database issue):D358-362 (2006).[pubmed]
+
+#takes downloaded operon file and writes new file with just bsu operons
+def bsu_operon_to_orth(op_file, orth_file):
+    f = file(op_file)
+    w = file(orth_file, 'w')
+    f1 = f.read().split('\n')
+    f1s = (line for line in f1 if f1)
+    f.close()
+    bsu = filter((lambda x: x.split('\t')[1] = 'bsu', f1s)
+    for line in range(len(bsu)):
+        genes = bsu[line].split('\t')[3].split(',')
+        first = genes[0]
+        for gene in genes:
+            w.write(first + '\t' + gene)
+    (bs_e, bs_t, bs_genes, bs_tfs) = sub.load_data()
+    for tf in bs_tfs:
+        w.write(tf + '\t' + tf)
+    w.close()
+
+filter_bsu_operon('data/bacteria1/known_operon.download.txt', 'data/bacteria1/bsu_operon_orth')
+load_orth('data/bacteria1/bsu_operon_orth', ['B_subtilis','B_subtilis'])
+
+
+def load_orth(orth_fn, organisms):
+    f = file(orth_fn)
+    fs = f.read()
+    fsn = filter(len, fs.split('\n'))
+    fsnt = map(lambda x: x.split('\t'), fsn)
+    
+    orths = []
+    for o in fsnt:
+        real = o[2] == 'True'
+        orth = fr.orthology(genes = (fr.one_gene(name=o[0],organism=organisms[0]), fr.one_gene(name=o[1], organism=organisms[1])), real = real)
+        orths.append(orth)
+        
+    return orths
 
 
 #SECTION: ----------------------------DATA GENERATORS------------------

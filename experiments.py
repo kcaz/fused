@@ -350,15 +350,20 @@ def test_scad_opt_params3():
 
     plt.subplot(131)
     sns.tsplot(o0, time=xax, condition=conds, value="AUPR")
+    plt.axis([0,4,0.8,0.91])
     plt.title("Orth error = 0")
 
     plt.subplot(132)
     sns.tsplot(o05, time=xax, condition=conds, value="AUPR")
+    plt.axis([0,4,0.8,0.91])
     plt.title("Orth error = 0.5")
 
     plt.subplot(133)
     sns.tsplot(o1, time=xax, condition=conds, value="AUPR")
+    plt.axis([0,4,0.8,0.91])
     plt.title("Orth error = 1")
+
+    plt.show()
 
     return (err_l, err_s)
 
@@ -2032,7 +2037,8 @@ def L2fusion_quick():
     N_TF = 20
     N_G = 200
     pct_fused = list(np.linspace(0.3,1.0,10))
-
+    reps = 2
+    
     lamR = 2
     lamSs = list(np.linspace(0,3,10)) 
     lamP = 1.0
@@ -2043,20 +2049,23 @@ def L2fusion_quick():
     if not os.path.exists(out1):
         os.mkdir(out1)
 
-    for i, N in enumerate(pct_fused):
-        out2 = os.path.join(out1,'dat_'+str(N))
-        ds.write_fake_data1(N1=5, N2=50, out_dir = out2, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.75, fuse_std = 0.3, pct_fused=N)        
-        lamP = 1.0 #priors don't matter
-        seed = 10
-        for j, lamS in enumerate(lamSs):
-            (errd1, errd2) = fg.cv_model_m(out2, lamP, lamR, lamS, k, solver='solve_ortho_direct', reverse=False, cv_both=(True,True), exclude_tfs=True, pct_priors=0, seed=seed, verbose=False)
-            #print errd1['corr'].mean()
-            print errd1['aupr'].mean()
-            aupr_array[i,j] = errd1['aupr'].mean()
+    for p in range(reps):
+        for i, N in enumerate(pct_fused):
+            out2 = os.path.join(out1,'dat_'+str(N))
+            ds.write_fake_data1(N1=2*8, N2=50*8, out_dir = out2, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.75, fuse_std = 0.35, pct_fused=N, orth_falsepos = 0)        
+            lamP = 1.0 #priors don't matter
+            seed = 10
+            for j, lamS in enumerate(lamSs):
+                (errd1, errd2) = fg.cv_model_m(out2, lamP, lamR, lamS, k, solver='solve_ortho_direct', reverse=False, cv_both=(True,True), exclude_tfs=True, pct_priors=0, seed=seed, verbose=False)
+                #print errd1['corr'].mean()
+                print errd1['R2'].mean()
+                aupr_array[i,j]+= errd1['R2'].mean()
 
+    aupr_array /= reps
     ar2 = np.zeros((aupr_array.shape[0],aupr_array.shape[1]))
     for i in range(len(aupr_array)):
         ar2[i,:] = aupr_array[i,:]/aupr_array[i,0]
+        #ar2[i,:] = aupr_array[i,:]
     df = pd.DataFrame(ar2[1:,:],index=pct_fused[1:],columns=lamSs)
     df.index.name = 'percent fused'
     df.columns.name = 'lamS'
