@@ -3,6 +3,7 @@ import fused_reg as fr
 import random
 import os
 import collections
+from itertools import combinations
 
 #SECTION: -------------UTILITY FUNCTIONS------------------------------
 #quantile normalizes conditions AND scales to mean zero/unit variance
@@ -454,8 +455,6 @@ class anthr(data_source):
 #SECTION: ----------------------------------ORTHOLOGY LOADERS----------
 
 def load_orth(orth_fn, organisms):
-    from itertools import combinations
-
     f = file(orth_fn)
     fs = f.read()
     fsn = filter(len, fs.split('\n'))
@@ -464,21 +463,12 @@ def load_orth(orth_fn, organisms):
     orths = []
     for o in fsnt:
         real = o[2] == 'True'
-        if len(o[0].split(',')) > 1:
-            op_genes = o[0].split(',')
-            for pair in combinations(op_genes,2):
-                orth = fr.orthology(genes = (fr.one_gene(name=pair[0],organism=organisms[0]), fr.one_gene(name=pair[1], organism=organisms[0])), real = real)
-                orths.append(orth)
-
-        if len(o[1].split(',')) > 1:
-            op_genes = o[0].split(',')
-            for pair in combinations(op_genes,2):
-                orth = fr.orthology(genes = (fr.one_gene(name=pair[0],organism=organisms[1]), fr.one_gene(name=pair[1], organism=organisms[1])), real = real)
-                orths.append(orth)
-
-        orth = fr.orthology(genes = (fr.one_gene(name=o[0],organism=organisms[0]), fr.one_gene(name=o[1], organism=organisms[1])), real = real)
-        orths.append(orth)
-        
+        genes1 = map(lambda n: fr.one_gene(name = n, organism = organisms[0]), o[0].split(','))
+        genes2 = map(lambda n: fr.one_gene(name = n, organism = organisms[1]), o[1].split(','))
+        genes = genes1 + genes2
+        orths_row = map(lambda g1g2: fr.orthology(genes = g1g2, real = real), combinations(genes, 2))
+        for orth in orths_row:
+            orths.append(orth)
     return orths
 
 #returns the MARKED constraints associated with a particular data directory, in standard format
@@ -502,22 +492,28 @@ ba_bs_orth = lambda: load_orth('data/bacteria1/bs_ba_ortho_804',['B_anthracis','
 #Okuda S, Katayama T, Kawashima S, Goto S, and Kanehisa M.; ODB: a database of operons accumulating known operons across multiple genomes. Nucleic Acids Res. 34(Database issue):D358-362 (2006).[pubmed]
 
 #takes downloaded operon file and writes new file with just bsu operons
-def bsu_operon_to_orth(op_file, orth_file):
+def bsu_operon_to_orth(op_file, orth_file, new_orth_file):
     f = file(op_file)
-    w = file(orth_file, 'w')
+    o = file(orth_file)
+    os = filter(len, o.read().split('\n'))
+    w = file(new_orth_file, 'w')
     f1 = f.read().split('\n')
-    f1s = (line for line in f1 if f1)
+    f1s = filter(len, f1)
     f.close()
-    bsu = filter((lambda x: x.split('\t')[1] == 'bsu', f1s)
+    bsu = filter((lambda x: x.split('\t')[1] == 'bsu', f1s))
     for line in range(len(bsu)):
         genes = bsu[line].split('\t')[3].split(',')
         w.write(','.join(genes) + '\n')
+    sub = subt()
     (bs_e, bs_t, bs_genes, bs_tfs) = sub.load_data()
     for tf in bs_tfs:
         w.write(tf + ',' + tf + '\n')
+    for line in range(len(os)):
+        genes = os[line].split('\t')
+        w.write(genes[0] + '\t' + genes[1])
     w.close()
 
-bsu_operon_to_orth('data/bacteria1/known_operon.download.txt', 'data/bacteria1/bsu_operon_orth')
+bsu_operon_to_orth('data/bacteria1/known_operon.download.txt', 'data/bacteria1/bs_ba_ortho_804', 'data/bacteria1/bsu_operon_orth')
 load_orth('data/bacteria1/bsu_operon_orth', ['B_subtilis','B_subtilis'])
 
 

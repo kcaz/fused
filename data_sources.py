@@ -498,12 +498,13 @@ def bsu_operon_to_orth(op_file, orth_file, new_orth_file):
     os = filter(len, o.read().split('\n'))
     w = file(new_orth_file, 'w')
     f1 = f.read().split('\n')
-    f1s = (line for line in f1 if f1)
+    f1s = filter(len, f1)
     f.close()
-    bsu = filter((lambda x: x.split('\t')[1] == 'bsu', f1s)
+    bsu = filter((lambda x: x.split('\t')[1] == 'bsu'), f1s)
     for line in range(len(bsu)):
         genes = bsu[line].split('\t')[3].split(',')
         w.write(','.join(genes) + '\n')
+    sub = subt()
     (bs_e, bs_t, bs_genes, bs_tfs) = sub.load_data()
     for tf in bs_tfs:
         w.write(tf + ',' + tf + '\n')
