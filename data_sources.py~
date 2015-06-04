@@ -462,6 +462,7 @@ def load_orth(orth_fn, organisms):
     
     orths = []
     for o in fsnt:
+        print o
         real = o[2] == 'True'
         genes1 = map(lambda n: fr.one_gene(name = n, organism = organisms[0]), o[0].split(','))
         genes2 = map(lambda n: fr.one_gene(name = n, organism = organisms[1]), o[1].split(','))
@@ -507,10 +508,10 @@ def bsu_operon_to_orth(op_file, orth_file, new_orth_file):
     sub = subt()
     (bs_e, bs_t, bs_genes, bs_tfs) = sub.load_data()
     for tf in bs_tfs:
-        w.write(tf + ',' + tf + '\t' + 'True' + '\n')
+        w.write(tf + ',' + tf + '\t' + '\t' + 'True' + '\n')
     for line in range(len(os)):
         genes = os[line].split('\t')
-        w.write(genes[0] + '\t' + genes[1] + '\t' + 'True')
+        w.write(genes[0] + '\t' + genes[1] + '\t' + 'True' + '\n')
     w.close()
 
 bsu_operon_to_orth('data/bacteria1/known_operon.download.txt', 'data/bacteria1/bs_ba_ortho_804', 'data/bacteria1/bsu_operon_orth')

@@ -507,7 +507,7 @@ def bsu_operon_to_orth(op_file, orth_file, new_orth_file):
     sub = subt()
     (bs_e, bs_t, bs_genes, bs_tfs) = sub.load_data()
     for tf in bs_tfs:
-        w.write(tf + ',' + tf + '\t' + 'True' + '\n')
+        w.write(tf + ',' + tf + '\t' + '\t' + 'True' + '\n')
     for line in range(len(os)):
         genes = os[line].split('\t')
         w.write(genes[0] + '\t' + genes[1] + '\t' + 'True' + '\n')
