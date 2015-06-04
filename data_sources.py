@@ -502,9 +502,11 @@ ba_bs_orth = lambda: load_orth('data/bacteria1/bs_ba_ortho_804',['B_anthracis','
 #Okuda S, Katayama T, Kawashima S, Goto S, and Kanehisa M.; ODB: a database of operons accumulating known operons across multiple genomes. Nucleic Acids Res. 34(Database issue):D358-362 (2006).[pubmed]
 
 #takes downloaded operon file and writes new file with just bsu operons
-def bsu_operon_to_orth(op_file, orth_file):
+def bsu_operon_to_orth(op_file, orth_file, new_orth_file):
     f = file(op_file)
-    w = file(orth_file, 'w')
+    o = file(orth_file)
+    os = filter(len, o.read().split('\n'))
+    w = file(new_orth_file, 'w')
     f1 = f.read().split('\n')
     f1s = (line for line in f1 if f1)
     f.close()
@@ -515,9 +517,12 @@ def bsu_operon_to_orth(op_file, orth_file):
     (bs_e, bs_t, bs_genes, bs_tfs) = sub.load_data()
     for tf in bs_tfs:
         w.write(tf + ',' + tf + '\n')
+    for line in range(len(os)):
+        genes = os[line].split('\t')
+        w.write(genes[0] + '\t' + genes[1])
     w.close()
 
-bsu_operon_to_orth('data/bacteria1/known_operon.download.txt', 'data/bacteria1/bsu_operon_orth')
+bsu_operon_to_orth('data/bacteria1/known_operon.download.txt', 'data/bacteria1/bs_ba_ortho_804', 'data/bacteria1/bsu_operon_orth')
 load_orth('data/bacteria1/bsu_operon_orth', ['B_subtilis','B_subtilis'])
 
 
