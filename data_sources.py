@@ -3,6 +3,7 @@ import fused_reg as fr
 import random
 import os
 import collections
+from itertools import combinations
 
 #SECTION: -------------UTILITY FUNCTIONS------------------------------
 #quantile normalizes conditions AND scales to mean zero/unit variance
@@ -454,8 +455,6 @@ class anthr(data_source):
 #SECTION: ----------------------------------ORTHOLOGY LOADERS----------
 
 def load_orth(orth_fn, organisms):
-    from itertools import combinations
-
     f = file(orth_fn)
     fs = f.read()
     fsn = filter(len, fs.split('\n'))
@@ -464,21 +463,12 @@ def load_orth(orth_fn, organisms):
     orths = []
     for o in fsnt:
         real = o[2] == 'True'
-        if len(o[0].split(',')) > 1:
-            op_genes = o[0].split(',')
-            for pair in combinations(op_genes,2):
-                orth = fr.orthology(genes = (fr.one_gene(name=pair[0],organism=organisms[0]), fr.one_gene(name=pair[1], organism=organisms[0])), real = real)
-                orths.append(orth)
-
-        if len(o[1].split(',')) > 1:
-            op_genes = o[0].split(',')
-            for pair in combinations(op_genes,2):
-                orth = fr.orthology(genes = (fr.one_gene(name=pair[0],organism=organisms[1]), fr.one_gene(name=pair[1], organism=organisms[1])), real = real)
-                orths.append(orth)
-
-        orth = fr.orthology(genes = (fr.one_gene(name=o[0],organism=organisms[0]), fr.one_gene(name=o[1], organism=organisms[1])), real = real)
-        orths.append(orth)
-        
+        genes1 = map(lambda n: fr.one_gene(name = n, organism = organisms[0]), o[0].split(','))
+        genes2 = map(lambda n: fr.one_gene(name = n, organism = organisms[1]), o[1].split(','))
+        genes = genes1 + genes2
+        orths_row = map(lambda g1g2: fr.orthology(genes = g1g2, real = real), combinations(genes, 2))
+        for orth in orths_row:
+            orths.append(orth)
     return orths
 
 #returns the MARKED constraints associated with a particular data directory, in standard format
