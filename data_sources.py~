@@ -500,17 +500,17 @@ def bsu_operon_to_orth(op_file, orth_file, new_orth_file):
     f1 = f.read().split('\n')
     f1s = filter(len, f1)
     f.close()
-    bsu = filter((lambda x: x.split('\t')[1] == 'bsu', f1s))
+    bsu = filter((lambda x: x.split('\t')[1] == 'bsu'), f1s)
     for line in range(len(bsu)):
         genes = bsu[line].split('\t')[3].split(',')
-        w.write(','.join(genes) + '\n')
+        w.write(','.join(genes) + '\t' + '\t' + 'True' + '\n')
     sub = subt()
     (bs_e, bs_t, bs_genes, bs_tfs) = sub.load_data()
     for tf in bs_tfs:
-        w.write(tf + ',' + tf + '\n')
+        w.write(tf + ',' + tf + '\t' + 'True' + '\n')
     for line in range(len(os)):
         genes = os[line].split('\t')
-        w.write(genes[0] + '\t' + genes[1])
+        w.write(genes[0] + '\t' + genes[1] + '\t' + 'True')
     w.close()
 
 bsu_operon_to_orth('data/bacteria1/known_operon.download.txt', 'data/bacteria1/bs_ba_ortho_804', 'data/bacteria1/bsu_operon_orth')
