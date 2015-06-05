@@ -463,8 +463,9 @@ def load_orth(orth_fn, organisms):
     orths = []
     for o in fsnt:
         real = o[2] == 'True'
-        genes1 = map(lambda n: fr.one_gene(name = n, organism = organisms[0]), o[0].split(','))
-        genes2 = map(lambda n: fr.one_gene(name = n, organism = organisms[1]), o[1].split(','))
+        genes1 = map(lambda n: fr.one_gene(name = n, organism = organisms[0]), filter(len, o[0].split(',')))
+        genes2 = map(lambda n: fr.one_gene(name = n, organism = organisms[1]), filter(len, o[1].split(',')))
+        
         genes = genes1 + genes2
         orths_row = map(lambda g1g2: fr.orthology(genes = g1g2, real = real), combinations(genes, 2))
         for orth in orths_row:
@@ -473,10 +474,10 @@ def load_orth(orth_fn, organisms):
 
 #returns the MARKED constraints associated with a particular data directory, in standard format
 
-def load_constraints(data_fn):
+def load_constraints(data_fn, orth_f='orth'):
     ds1 = standard_source(data_fn,0)
     ds2 = standard_source(data_fn,1)
-    orth_fn = os.path.join(data_fn, 'orth')
+    orth_fn = os.path.join(data_fn, orth_f)
     organisms = [ds1.name, ds2.name]
     orth = load_orth(orth_fn, organisms)
 
@@ -922,7 +923,8 @@ def voodoo():
     (bs_priors, bs_sign) = sub.get_priors()
     (ba_priors, ba_sign) = anth.get_priors()
     orths = load_orth_voodoo('data/bacteria1/bs_ba_ortho_804',['B_anthracis','B_subtilis'])
-    operons = load_orth('data/bacterai1/bsu_operon_orth',['B_subtilis','B_anthracis'])
+    bsu_operon_to_orth(os.path.join('data','bacteria1','known_operon.download.txt'), os.path.join('data','bacteria_standard','operon'))
+    #operons = load_orth('data/bacteria1/bsu_operon_orth',['B_subtilis','B_anthracis'])
     out_dir = os.path.join('data','bacteria_standard')
     if not os.path.exists(out_dir):
         os.mkdir(out_dir)
@@ -944,7 +946,7 @@ def voodoo():
     write_tfnames(out_dir+os.sep+'tfnames1',bs_tfs)
     write_tfnames(out_dir+os.sep+'tfnames2',ba_tfs)
     write_orth(out_dir+os.sep+'orth', orths)
-    write_orth(out_dir+os.sep+'operon',operons)
+    #write_orth(out_dir+os.sep+'operon',operons)
     #tc: 1/tc * log(2) = 10 minutes 
     tc = np.log(2)/10
     with file(out_dir+os.sep+'description', 'w') as f:

@@ -14,10 +14,10 @@ import collections
 
 
 
-def fit_model(data_fn, lamP, lamR, lamS, solver='solve_ortho_direct', settings = None):
+def fit_model(data_fn, lamP, lamR, lamS, solver='solve_ortho_direct', settings = None, orth_file ='orth'):
     ds1 = ds.standard_source(data_fn,0)
     ds2 = ds.standard_source(data_fn,1)
-    orth_fn = os.path.join(data_fn, 'orth')
+    orth_fn = os.path.join(data_fn, orth_file)
 
     organisms = [ds1.name, ds2.name]
     orth = ds.load_orth(orth_fn, organisms)
@@ -469,8 +469,9 @@ def fused_coeff_corr(organisms, genes_l, tfs_l, orth, B_l):
         b1 = B_l[s1][con.c1.r, con.c1.c]
         s2 = con.c2.sub
         b2 = B_l[s2][con.c2.r, con.c2.c]
-        fused_vals[s1].append(b1)
-        fused_vals[s2].append(b2)
+        #changed these to 0/1, instead of s1/s2. We don't care whether fusion constraints are within (or between) species
+        fused_vals[0].append(b1)
+        fused_vals[1].append(b2)
     fused_vals = np.array(fused_vals)
     return (np.corrcoef(fused_vals)[0,1], fused_vals)
 

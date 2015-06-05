@@ -3485,3 +3485,35 @@ def lamS_dist_fig():
             print scad_settings['cons']
             plot_fuse_lams(out, scad_settings['cons'])
 
+#looks at how many operon constraints fall both in or out of priors
+def check_operons_priors():
+    d1 = ds.standard_source('data/bacteria_standard', 0)
+    (con, marks, orth) = ds.load_constraints('data/bacteria_standard','operon')
+    (priors, signs) = d1.get_priors()
+    priors_s = set(priors)
+    def coeff_to_g(coeff):
+        tf = fr.one_gene(name = d1.tfs[coeff.r], organism = d1.name)
+        gene = fr.one_gene(name = d1.genes[coeff.c], organism = d1.name)
+        return (tf, gene)
+    con_pairs = map(lambda c: (coeff_to_g(c.c1), coeff_to_g(c.c2)), con)
+
+    both = filter(lambda cp: cp[0] in priors_s and cp[1] in priors_s, con_pairs)
+    neither = filter(lambda cp: not (cp[0] in priors_s or cp[1] in priors_s), con_pairs)
+    chance_in_priors = float(len(priors)) / (len(d1.tfs) * len(d1.genes))
+    chance_both = chance_in_priors ** 2
+
+    chance_neither = (1-chance_in_priors)**2
+
+    print (float(len(both))/len(con_pairs), float(len(neither))/len(con_pairs))
+
+    print (chance_both, chance_neither)
+
+    print (float(len(both))/len(con_pairs) / chance_both)
+
+def try_solve_operon(lamP = 1.0, lamR = 1.0, lamS = 2):
+    settings = fr.get_settings()
+    solver = 'solve_ortho_direct'    
+    out = 'data/bacteria_standard'
+    seed = 5
+    (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS =lamS, k=1, settings = settings, reverse = True, cv_both = (True, False), exclude_tfs=False, seed = seed, orth_file='operon')
+    return errd1
