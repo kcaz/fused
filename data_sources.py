@@ -473,15 +473,22 @@ def load_orth(orth_fn, organisms):
 
 #returns the MARKED constraints associated with a particular data directory, in standard format
 
-def load_constraints(data_fn):
-    ds1 = standard_source(data_fn,0)
-    ds2 = standard_source(data_fn,1)
-    orth_fn = os.path.join(data_fn, 'orth')
-    organisms = [ds1.name, ds2.name]
-    orth = load_orth(orth_fn, organisms)
+def load_constraints(data_fn, orth='orth'):
 
-    gene_ls = [ds1.genes, ds2.genes]
-    tf_ls = [ds1.tfs, ds2.tfs]
+    organisms = []
+    gene_ls = []
+    tf_ls = []
+
+    num_species = 0
+    while os.path.isfile(os.path.join(data_fn, 'expression%d' % (num_species+1))):
+        num_species += 1
+        dsi = standard_source(data_fn, num_species+1)
+        organisms.append(dsi.name)
+        gene_ls.append(dsi.genes)
+        tf_ls.append(dsi.tfs)
+
+    orth_fn = os.path.join(data_fn, orth)
+    orth = load_orth(orth_fn, organisms)
     
     (constraints, marks) = fr.orth_to_constraints_marked(organisms, gene_ls, tf_ls, orth, 1.0)
     return (constraints, marks, orth)
@@ -922,7 +929,7 @@ def voodoo():
     (bs_priors, bs_sign) = sub.get_priors()
     (ba_priors, ba_sign) = anth.get_priors()
     orths = load_orth_voodoo('data/bacteria1/bs_ba_ortho_804',['B_anthracis','B_subtilis'])
-    operons = load_orth('data/bacterai1/bsu_operon_orth',['B_subtilis','B_anthracis'])
+    operons = load_orth('data/bacteria1/bsu_operon_orth',['B_subtilis','B_anthracis'])
     out_dir = os.path.join('data','bacteria_standard')
     if not os.path.exists(out_dir):
         os.mkdir(out_dir)

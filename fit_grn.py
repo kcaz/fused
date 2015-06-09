@@ -52,25 +52,22 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
     if seed != None:
         random.seed(seed)
 
-    ds1 = ds.standard_source(data_fn,0)
-    ds2 = ds.standard_source(data_fn,1)
-    dss = [ds1, ds2]
-
-
-    #set up containers for results
-
-
     metrics1 = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con', 'auc_noncon', 'aupr_noncon', 'chance', 'chance_con', 'B_mse','top_100']
 
+    num_species = 0
+    dss = []
+    err_dicts = []
+    organisms = []
 
-    err_dict1 = {m : np.zeros((k, 1)) for m in metrics1}
-    err_dict2 = {m : np.zeros((k, 1)) for m in metrics1}
+    while os.path.isfile(os.path.join(data_fn, 'expression%d' % (num_species+1))):
+        num_species += 1
+        dsi = ds.standard_source(data_fn,num_species+1)
+        dss.append(dsi)
+        organisms.append(dsi.name)
+        err_dicts.append({m : np.zeros((k, 1)) for m in metrics1})
+        err_dicts[num_species]['params'] = (lamP, lamR, lamS, settings)
 
-    #save the parameters
-    err_dict1['params'] = (lamP, lamR, lamS, settings)
-    err_dict2['params'] = (lamP, lamR, lamS, settings)
-
-    err_dicts = [err_dict1, err_dict2] #for indexing
+    #set up containers for results
     #prc and roc are special (not individual numbers)
     metrics2 = ['prc','roc', 'prc_con','roc_con', 'prc_noncon', 'roc_noncon']
     for err_dict in err_dicts:
@@ -81,14 +78,10 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
     
 
     orth_fn = os.path.join(data_fn, orth_file)
-
-    organisms = [ds1.name, ds2.name]
     orth = ds.load_orth(orth_fn, organisms)
     
-    folds = [ds1.partition_data(k), ds2.partition_data(k)]
-    
-    (priors1, signs1) = ds1.get_priors()
-    (priors2, signs2) = ds2.get_priors()
+    folds = map((lambda x: x.partition_data(k)), dss)
+    all_priors = map((lambda x: x.get_priors()), dss)
 
     #helper to return all but ith entry of list x    
     excl = lambda x,i: x[0:i]+x[(i+1):] 
@@ -101,11 +94,8 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
         p2 = map(lambda i: x[i], inds[t:])
         return (p1, p2)
 
-    (priors1_tr, priors1_te) = r_partition(priors1, int(pct_priors*len(priors1)))
-    (priors2_tr, priors2_te) = r_partition(priors2, int(pct_priors*len(priors2)))
-
-    priors_tr = [priors1_tr, priors2_tr]
-    priors_te = [priors1_te, priors2_te]
+    priors_tr = map((lambda x: r_partition(x, int(pct_priors*len(x)))[0]), dss)
+    priors_te = map((lambda x: r_partition(x, int(pct_priors*len(x)))[1]), dss)
 
     f_te = [None, None]
     f_tr = [None, None]
