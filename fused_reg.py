@@ -184,11 +184,14 @@ def orth_to_constraints_marked(organisms, gene_ls, tf_ls, orth, lamS):
                         sub2 = org_to_ind[tf_orth.organism]
                         sub3 = org_to_ind[g_orth.organism]
                         
+
                         if not sub2 == sub3:
                             continue
                         if not tf_orth.name in tf_to_inds[sub2]:
                             continue #if a tf is orthologous to a non-tf
-                        
+                        if not tf_orth.name in tf_to_inds[sub2] or not g_orth.name in gene_to_inds[sub2]:
+                            continue #orth file might specify genes that we don't have
+
                         #now check if it's real
                         real = (g, g_orth) in real_orths and (tf, tf_orth) in real_orths
 
@@ -247,7 +250,8 @@ def orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS):
                             continue
                         if not tf_orth.name in tf_to_inds[sub2]:
                             continue #if a tf is orthologous to a non-tf
-                                              
+                        if not tf_orth.name in tf_to_inds[sub2] or not g_orth.name in gene_to_inds[sub2]:
+                            continue #orth file might specify genes that we don't have                                     
                         coeff1 = coefficient(sub1, tf_to_inds[sub1][tf.name], gene_to_inds[sub1][g.name])
                         coeff2 = coefficient(sub2, tf_to_inds[sub2][tf_orth.name], gene_to_inds[sub2][g_orth.name])
                         
