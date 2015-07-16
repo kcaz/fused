@@ -474,7 +474,6 @@ def iter_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, it):
                 ypad_l = []
                 xpad_l = []
                 
-                
                 #add in the fusion constraints
                 for con in fuse_constraints:
                     conlam = (con.lam*lam_ramp)**0.5
@@ -487,7 +486,10 @@ def iter_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, it):
                     xpad = np.vstack(xpad_l)
                 else:
                     xpad = np.zeros((0, X.shape[1]))
-                ypad = np.vstack(ypad_l)
+                if len(ypad_l):
+                    ypad = np.vstack(ypad_l)
+                else:
+                    ypad = np.zeros((0, 1))
 
                 F = np.vstack((X, xpad))
                 p = np.vstack((y, ypad))
@@ -1147,8 +1149,8 @@ def pick_a(Bs_init, fuse_constraints, percentile):
 #fuse_constraints: fusion constraints
 #ridge_constraints: ridge regression constraints. constraints not mentioned are assumed to exist with lam=lambdaR
 #it: number of iterations to run
-def iter_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, it):
-    print 'nope'
+#def iter_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, it):
+#    print 'nope'
 
 
 #this code cuts up columns by depth first search
