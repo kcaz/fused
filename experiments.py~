@@ -18,7 +18,7 @@ sns.set(palette="Set2")
 def test_bacteria(lamP, lamR, lamS):
     subt = ds.standard_source('data/bacteria_standard',0)
     anthr = ds.standard_source('data/bacteria_standard',1)
-
+    subt_eu = ds.standard_source('data/bacteria_standard',2)
     
     (bs_e, bs_t, bs_genes, bs_tfs) = subt.load_data()
     (ba_e, ba_t, ba_genes, ba_tfs) = anthr.load_data()
@@ -26,13 +26,12 @@ def test_bacteria(lamP, lamR, lamS):
     (bs_priors, bs_sign) = subt.get_priors()
     (ba_priors, ba_sign) = anthr.get_priors()
 
-
     Xs = [bs_t, ba_t]
     Ys = [bs_e, ba_e]
     genes = [bs_genes, ba_genes]
     tfs = [bs_tfs, ba_tfs]
     priors = bs_priors + ba_priors
-    orth = ds.load_orth('data/bacteria_standard/orth',[subt.name, anthr.name])
+    orth = ds.load_orth('data/bacteria_standard/orth',organisms = [subt.name, anthr.name, subt_eu.name], orgs = [subt.name, anthr.name])
     organisms = [subt.name, anthr.name]
 
     Bs = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
@@ -1063,7 +1062,7 @@ def bench1():
     N1 = 40
     N2 = 40
     out = os.path.join('data','fake_data','bench1')
-    #ds.write_fake_data1(N1 = N1, N2 = N2, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.0)
+    ds.write_fake_data1(N1 = N1, N2 = N2, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.0)
     def waka():        
         (b1, b2) = fg.fit_model(out, 1.0, 0.1, 0.5, solver='solve_ortho_direct')
     import profile
@@ -1926,6 +1925,8 @@ def test_prior_sign_corr_orth():
     priors_r = filter(lambda p: p[0].name in subt_to_anth and p[1].name in subt_to_anth, priors_r)
 
 
+    print 'there are %d mapped priors' % (len(priors_a) + len(priors_r))
+
     gene_ind_anth = {genes2[i] : i for i in range(len(genes2))}
     prior_cons_r = fr.priors_to_constraints([ds1.name], [genes1], [tfs1], priors_r, 1.0)
     prior_cons_a = fr.priors_to_constraints([ds1.name], [genes1], [tfs1], priors_a, 1.0)
@@ -2050,7 +2051,7 @@ def L2fusion_quick():
     for p in range(reps):
         for i, N in enumerate(pct_fused):
             out2 = os.path.join(out1,'dat_'+str(N))
-            ds.write_fake_data1(N1=3*8, N2=50*8, out_dir = out2, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.75, fuse_std = 0.35, pct_fused=N, orth_falsepos = 0)        
+            ds.write_fake_data1(N1=2*8, N2=50*8, out_dir = out2, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.75, fuse_std = 0.35, pct_fused=N, orth_falsepos = 0)        
             lamP = 1.0 #priors don't matter
             seed = 10
             for j, lamS in enumerate(lamSs):
@@ -2658,12 +2659,12 @@ def plot_synthetic_beta_err(N = 10, lamP=1, lamR=5,lamSs=[0,1]):
 
 #plots error dictionaries
 #this is really for debugging plot_bacteria_performance 
-def plot_synthetic_performance(lamP=1.0, lamR=5, lamSs=[0,1], k=20):
+def plot_synthetic_performance(lamP=1.0, lamR=5, lamSs=[0,1], k=20, fuse_std=0.0):
     N = 10
     N_TF = 20
     N_G = 30
     out = os.path.join('data','fake_data','plot_synthetic_performance')
-    ds.write_fake_data1(N1 = k*N, N2 = 5*k*N, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1,pct_fused=0.8, sparse=0.5, fuse_std = 0.0, orth_falsepos=0.0,orth_falseneg=0.0)
+    ds.write_fake_data1(N1 = k*N, N2 = 5*k*N, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1,pct_fused=0.8, sparse=0.5, fuse_std = fuse_std, orth_falsepos=0.0,orth_falseneg=0.0)
     
     metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con']
     err_dict1 = {m : np.zeros((k, len(lamSs))) for m in metrics} #subtilis
@@ -2711,27 +2712,40 @@ def plot_synthetic_roc(lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',normed=
     N_G = 30
     out = os.path.join('data','fake_data','plot_synthetic_performance')
     ds.write_fake_data1(N1 = k*N, N2 = 5*k*N, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1,pct_fused=0.8, sparse=0.5, fuse_std = 0.0, orth_falsepos=0.0,orth_falseneg=0.0)
-    plot_roc(out, lamP, lamR, lamSs, k, metric)
+    plot_roc(out, lamP, lamR, lamSs, k, metric,normed=normed)
 
 #as plot synthetic performance, except it plots overlaid ROC curves for different values of lamS
-def plot_bacteria_roc(lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,normed=False):
+def plot_bacteria_roc(lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,normed=False,scad=False, cv_both=(True,False), roc_species=0, orgs=None, unfused=False, lamS_opt=None, orth_file=['orth']):
     out = os.path.join('data','bacteria_standard')
-    plot_roc(out, lamP, lamR, lamSs, k, metric, savef=savef)
+    plot_roc(out, lamP, lamR, lamSs, k, metric, savef,normed,scad, cv_both, roc_species, orgs, lamS_opt, unfused, orth_file)
 
 #generic function for above two
-def plot_roc(out, lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,normed=False):
+#use a list of dictionaries for lamS_opt if using more than one lamS_opt; always include all pairwise lamS for fused species  
+def plot_roc(out, lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,normed=False,scad=False, cv_both=(True,False), roc_species=0, orgs=None, lamS_opt = None, unfused = False, orth_file=['orth']):
     seed = np.random.randn()
+    scad = False
+    if scad:
+        settings = fr.get_settings({'per' : 75})
+        solver = 'solve_ortho_direct_scad'
+    else:
+        settings = fr.get_settings()
+        solver = 'solve_ortho_direct'
+
     if metric[0:3] == 'roc':
         xl = 'false alarm'
         yl = 'hit'
+        summary_measure = 'auc'
     if metric[0:3] == 'prc':
         xl = 'recall'
         yl = 'precision'
+        summary_measure = 'aupr'
     
     if 'con' in metric:
         chancek = 'chance_con'
+        summary_measure = summary_measure + '_con'
     else:
         chancek = 'chance'
+        #summary_measure = summary_measure + '_con'
     all_roc_curves = []
     import pickle
     if savef != None:
@@ -2743,28 +2757,79 @@ def plot_roc(out, lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,n
             errdls = pickle.load(f)
     else:
         errdls = []
-    
-        for i, lamS in enumerate(lamSs):
-            (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='solve_ortho_direct', reverse = True, cv_both = (True, False), exclude_tfs=False, seed = seed)
-            errdls.append( (errd1, errd2) )
-    
+
+        if unfused == True:
+            errd = fg.cv_unfused(out, lamP=lamP, lamR=lamR, k=k, solver = solver, settings = settings, reverse = True, cv_both = cv_both, exclude_tfs=False, seed = seed, orgs = orgs, lamS_opt = lamS_opt)
+            errdls.append(errd)
+            for i, lamS in enumerate(lamSs):
+                errdf = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver = solver, settings = settings, reverse = True, cv_both = cv_both, exclude_tfs=False, seed = seed, orgs = orgs, lamS_opt = None, orth_file = orth_file)[roc_species]
+                errdls.append(errdf)
+            if lamS_opt != None:
+                errdf = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver = solver, settings = settings, reverse = True, cv_both = cv_both, exclude_tfs=False, seed = seed, orgs = orgs, lamS_opt = lamS_opt, orth_file = orth_file)[roc_species]
+                errdls.append(errdf)
+        
+        else:
+            for i, lamS in enumerate(lamSs):
+                print i
+                errdf = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver = solver, settings = settings, reverse = True, cv_both = cv_both, exclude_tfs=False, seed = seed, orgs = orgs, lamS_opt = None, orth_file = orth_file)[roc_species]
+                errdls.append(errdf)
+            if lamS_opt != None:
+                errdf = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver = solver, settings = settings, reverse = True, cv_both = cv_both, exclude_tfs=False, seed = seed, orgs = orgs, lamS_opt = lamS_opt, orth_file = orth_file)[roc_species]
+                errdls.append(errdf)
+                
+    print len(errdls)
     if savef != None and not loaded:
         with file(savef, 'w') as f:
             pickle.dump(errdls, f)
 
     chance_rates = []
-    for i, lamS in enumerate(lamSs):
-        (errd1, errd2) = errdls[i]        
-        rocs = errd1[metric]
-        
+
+    if unfused == True:
+        errd = errdls[0]
+        rocs = errd[metric]
+        print (errd[summary_measure].mean())
         all_roc_curves.append(rocs)
-        chance_rates.append(errd1[chancek])
+        chance_rates.append(errd[chancek])
+        for i, lamS in enumerate(lamSs):
+            errdf = errdls[i+1]      
+            rocs = errdf[metric]
+            print (lamS, errdf[summary_measure].mean())
+            all_roc_curves.append(rocs)
+            chance_rates.append(errdf[chancek])
+        errd_opt = errdls[-1]
+        rocs_opt = errd_opt[metric]
+        print (lamS_opt, errd_opt[summary_measure].mean())
+        all_roc_curves.append(rocs_opt)
+        chance_rates.append(errd_opt[chancek])
+
+        toplots = ['rank combined']
+        toplots.extend(map(str, lamSs))
+        toplots.append(str(lamS_opt))
+        linedesc = pd.Series(toplots, name='method') 
+    
+    else:
+        for i, lamS in enumerate(lamSs):
+            print lamS
+            print i
+            errd = errdls[i]      
+            rocs = errd[metric]
+            print (lamS, errd[summary_measure].mean())
+            all_roc_curves.append(rocs)
+            chance_rates.append(errd[chancek])
+        errd_opt = errdls[-1]
+        rocs_opt = errd_opt[metric]
+        print (lamS_opt, errd_opt[summary_measure].mean())
+        all_roc_curves.append(rocs_opt)
+        chance_rates.append(errd_opt[chancek])
+        toplots = []
+        toplots.extend(map(str, lamSs))
+        toplots.append(str(lamS_opt))
+        linedesc = pd.Series(toplots, name='method')
+
     pss = []
     for roc_curve_group in all_roc_curves:
         (rs, ps, ts) = fg.pool_roc(roc_curve_group, all_roc_curves, max_x = 1000)
         pss.append(ps)
-    
-    linedesc = pd.Series(map(str, lamSs), name='lambdaS')
     
     if normed:
         to_plot = np.dstack(pss) / np.repeat(pss[0][:,:,None], len(pss), axis=2)
@@ -2779,8 +2844,6 @@ def plot_roc(out, lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,n
     chance_y = [np.mean(chance_rates), np.mean(chance_rates)]
     #plt.plot(chance_x, chance_y,'--k')
     plt.show()
-
-
 
 #plots error dictionaries
 #this one includes lots of incorrect orthology
@@ -3358,6 +3421,25 @@ def scad_priors():
     return (err_dict)
 
 
+#returns a list of the top k (pre-specified when running model) interactions that are in the prior, appear in network 1, but not in network 2. and vice versa
+def top_k_diff(top_k_1, labels1, top_k_2, labels2, k):
+    top_k_1 = top_k_1[0:k]
+    top_k_2 = top_k_2[0:k]
+    top_k_true_1 = map(lambda i: top_k_1[i], filter(lambda j: labels1[j] == 1, range(len(top_k_1))))
+    top_k_true_2 = map(lambda i: top_k_2[i], filter(lambda j: labels2[j] == 1, range(len(top_k_2))))
+
+    #top_k_true_1 = top_k_true_1[0:k]
+    #top_k_true_2 = top_k_true_2[0:k]
+
+    top_k_true_s_2 = set(top_k_true_2)
+    top_k_true_s_1 = set(top_k_true_1)
+
+    top_k_true_excl_1 = filter(lambda tki: not tki in top_k_true_s_2, top_k_true_1)
+    top_k_true_excl_2 = filter(lambda tki: not tki in top_k_true_s_1, top_k_true_2)
+
+    return (top_k_true_excl_1, top_k_true_excl_2)
+
+
 
 #compares performance on constrained and non-constrained portions of the network
 def con_noncon():
@@ -3450,3 +3532,36 @@ def lamS_dist_fig():
             (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=5, solver='solve_ortho_direct_scad', reverse = False, settings = scad_settings, cv_both = (True, True))
             print scad_settings['cons']
             plot_fuse_lams(out, scad_settings['cons'])
+
+#looks at how many operon constraints fall both in or out of priors
+def check_operons_priors():
+    d1 = ds.standard_source('data/bacteria_standard', 0)
+    (con, marks, orth) = ds.load_constraints('data/bacteria_standard','operon')
+    (priors, signs) = d1.get_priors()
+    priors_s = set(priors)
+    def coeff_to_g(coeff):
+        tf = fr.one_gene(name = d1.tfs[coeff.r], organism = d1.name)
+        gene = fr.one_gene(name = d1.genes[coeff.c], organism = d1.name)
+        return (tf, gene)
+    con_pairs = map(lambda c: (coeff_to_g(c.c1), coeff_to_g(c.c2)), con)
+
+    both = filter(lambda cp: cp[0] in priors_s and cp[1] in priors_s, con_pairs)
+    neither = filter(lambda cp: not (cp[0] in priors_s or cp[1] in priors_s), con_pairs)
+    chance_in_priors = float(len(priors)) / (len(d1.tfs) * len(d1.genes))
+    chance_both = chance_in_priors ** 2
+
+    chance_neither = (1-chance_in_priors)**2
+
+    print (float(len(both))/len(con_pairs), float(len(neither))/len(con_pairs))
+
+    print (chance_both, chance_neither)
+
+    print (float(len(both))/len(con_pairs) / chance_both)
+
+def try_solve_operon(lamP = 1.0, lamR = 1.0, lamS = 2):
+    settings = fr.get_settings()
+    solver = 'solve_ortho_direct'    
+    out = 'data/bacteria_standard'
+    seed = 5
+    (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS =lamS, k=1, settings = settings, reverse = True, cv_both = (True, False), exclude_tfs=False, seed = seed, orth_file='operon')
+    return errd1
