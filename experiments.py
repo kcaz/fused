@@ -2721,7 +2721,7 @@ def plot_bacteria_roc(lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=No
     plot_roc(out, lamP, lamR, lamSs, k, metric, savef=savef,normed=normed,scad=scad)
 
 #generic function for above two
-def plot_roc(out, lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,normed=False,scad=False):
+def plot_roc(out, lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,normed=False,scad=False, orth_file='orth'):
     seed = np.random.randn()
     scad = False
     if scad:
@@ -3517,3 +3517,8 @@ def try_solve_operon(lamP = 1.0, lamR = 1.0, lamS = 2):
     seed = 5
     (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS =lamS, k=1, settings = settings, reverse = True, cv_both = (True, False), exclude_tfs=False, seed = seed, orth_file='operon')
     return errd1
+
+#as plot synthetic performance, except it plots overlaid ROC curves for different values of lamS
+def plot_operon_roc(lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,normed=False,scad=False):
+    out = os.path.join('data','bacteria_standard')
+    plot_roc(out, lamP, lamR, lamSs, k, metric, savef=savef,normed=normed,scad=scad, orth_file='operon')
