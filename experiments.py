@@ -18,7 +18,7 @@ sns.set(palette="Set2")
 def test_bacteria(lamP, lamR, lamS):
     subt = ds.standard_source('data/bacteria_standard',0)
     anthr = ds.standard_source('data/bacteria_standard',1)
-
+    subt_eu = ds.standard_source('data/bacteria_standard',2)
     
     (bs_e, bs_t, bs_genes, bs_tfs) = subt.load_data()
     (ba_e, ba_t, ba_genes, ba_tfs) = anthr.load_data()
@@ -26,13 +26,12 @@ def test_bacteria(lamP, lamR, lamS):
     (bs_priors, bs_sign) = subt.get_priors()
     (ba_priors, ba_sign) = anthr.get_priors()
 
-
     Xs = [bs_t, ba_t]
     Ys = [bs_e, ba_e]
     genes = [bs_genes, ba_genes]
     tfs = [bs_tfs, ba_tfs]
     priors = bs_priors + ba_priors
-    orth = ds.load_orth('data/bacteria_standard/orth',[subt.name, anthr.name])
+    orth = ds.load_orth('data/bacteria_standard/orth',organisms = [subt.name, anthr.name, subt_eu.name], orgs = [subt.name, anthr.name])
     organisms = [subt.name, anthr.name]
 
     Bs = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
@@ -1063,11 +1062,13 @@ def bench1():
     N1 = 40
     N2 = 40
     out = os.path.join('data','fake_data','bench1')
-    #ds.write_fake_data1(N1 = N1, N2 = N2, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.0)
+    ds.write_fake_data1(N1 = N1, N2 = N2, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.0)
     def waka():        
         (b1, b2) = fg.fit_model(out, 1.0, 0.1, 0.5, solver='solve_ortho_direct')
+    def waka2():
+        plot_bacteria_roc(lamP=1.0, lamR=5, lamSs=[0,10], k=1, metric='roc',savef='profiletest',normed=False,scad=False, cv_both=(True,False,True), roc_species=0, orgs=None, unfused=False, lamS_opt=None, orth_file=['orth','operon'])
     import profile
-    profile.runctx("waka()",globals(),locals(),sort='cumulative',filename=os.path.join(out,'stats'))
+    profile.runctx("waka2()",globals(),locals(),sort='cumulative',filename=os.path.join(out,'stats'))
     import pstats
     p = pstats.Stats(os.path.join(out,'stats'))
     p.sort_stats('cumulative').print_stats(20)
@@ -2716,12 +2717,17 @@ def plot_synthetic_roc(lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',normed=
     plot_roc(out, lamP, lamR, lamSs, k, metric,normed=normed)
 
 #as plot synthetic performance, except it plots overlaid ROC curves for different values of lamS
-def plot_bacteria_roc(lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,normed=False,scad=False):
+def plot_bacteria_roc(lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,normed=False,scad=False, cv_both=(True,False), roc_species=0, orgs=None, unfused=False, lamS_opt=None, orth_file=['orth']):
     out = os.path.join('data','bacteria_standard')
-    plot_roc(out, lamP, lamR, lamSs, k, metric, savef=savef,normed=normed,scad=scad)
+    plot_roc(out, lamP, lamR, lamSs, k, metric, savef,normed,scad, cv_both, roc_species, orgs, lamS_opt, unfused, orth_file)
 
 #generic function for above two
+<<<<<<< HEAD
 def plot_roc(out, lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,normed=False,scad=False, orth_file='orth'):
+=======
+#use a list of dictionaries for lamS_opt if using more than one lamS_opt; always include all pairwise lamS for fused species  
+def plot_roc(out, lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,normed=False,scad=False, cv_both=(True,False), roc_species=0, orgs=None, lamS_opt = None, unfused = False, orth_file=['orth']):
+>>>>>>> c0941a18cb883cb52767159e5c37fc3cafc83c46
     seed = np.random.randn()
     scad = False
     if scad:
@@ -2745,7 +2751,7 @@ def plot_roc(out, lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,n
         summary_measure = summary_measure + '_con'
     else:
         chancek = 'chance'
-        summary_measure = summary_measure + '_con'
+        #summary_measure = summary_measure + '_con'
     all_roc_curves = []
     import pickle
     if savef != None:
@@ -2757,29 +2763,79 @@ def plot_roc(out, lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,n
             errdls = pickle.load(f)
     else:
         errdls = []
-    
-        for i, lamS in enumerate(lamSs):
-            (errd1, errd2) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver = solver, settings = settings, reverse = True, cv_both = (True, False), exclude_tfs=False, seed = seed)
-            errdls.append( (errd1, errd2) )
-    
+
+        if unfused == True:
+            errd = fg.cv_unfused(out, lamP=lamP, lamR=lamR, k=k, solver = solver, settings = settings, reverse = True, cv_both = cv_both, exclude_tfs=False, seed = seed, orgs = orgs, lamS_opt = lamS_opt)
+            errdls.append(errd)
+            for i, lamS in enumerate(lamSs):
+                errdf = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver = solver, settings = settings, reverse = True, cv_both = cv_both, exclude_tfs=False, seed = seed, orgs = orgs, lamS_opt = None, orth_file = orth_file)[roc_species]
+                errdls.append(errdf)
+            if lamS_opt != None:
+                errdf = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver = solver, settings = settings, reverse = True, cv_both = cv_both, exclude_tfs=False, seed = seed, orgs = orgs, lamS_opt = lamS_opt, orth_file = orth_file)[roc_species]
+                errdls.append(errdf)
+        
+        else:
+            for i, lamS in enumerate(lamSs):
+                print i
+                errdf = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver = solver, settings = settings, reverse = True, cv_both = cv_both, exclude_tfs=False, seed = seed, orgs = orgs, lamS_opt = None, orth_file = orth_file)[roc_species]
+                errdls.append(errdf)
+            if lamS_opt != None:
+                errdf = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver = solver, settings = settings, reverse = True, cv_both = cv_both, exclude_tfs=False, seed = seed, orgs = orgs, lamS_opt = lamS_opt, orth_file = orth_file)[roc_species]
+                errdls.append(errdf)
+                
+    print len(errdls)
     if savef != None and not loaded:
         with file(savef, 'w') as f:
             pickle.dump(errdls, f)
 
     chance_rates = []
-    for i, lamS in enumerate(lamSs):
-        (errd1, errd2) = errdls[i]        
-        rocs = errd1[metric]
-        
-        print (lamS, errd1[summary_measure].mean())
+
+    if unfused == True:
+        errd = errdls[0]
+        rocs = errd[metric]
+        print (errd[summary_measure].mean())
         all_roc_curves.append(rocs)
-        chance_rates.append(errd1[chancek])
+        chance_rates.append(errd[chancek])
+        for i, lamS in enumerate(lamSs):
+            errdf = errdls[i+1]      
+            rocs = errdf[metric]
+            print (lamS, errdf[summary_measure].mean())
+            all_roc_curves.append(rocs)
+            chance_rates.append(errdf[chancek])
+        errd_opt = errdls[-1]
+        rocs_opt = errd_opt[metric]
+        print (lamS_opt, errd_opt[summary_measure].mean())
+        all_roc_curves.append(rocs_opt)
+        chance_rates.append(errd_opt[chancek])
+
+        toplots = ['rank combined']
+        toplots.extend(map(str, lamSs))
+        toplots.append(str(lamS_opt))
+        linedesc = pd.Series(toplots, name='method') 
+    
+    else:
+        for i, lamS in enumerate(lamSs):
+            print lamS
+            print i
+            errd = errdls[i]      
+            rocs = errd[metric]
+            print (lamS, errd[summary_measure].mean())
+            all_roc_curves.append(rocs)
+            chance_rates.append(errd[chancek])
+        errd_opt = errdls[-1]
+        rocs_opt = errd_opt[metric]
+        print (lamS_opt, errd_opt[summary_measure].mean())
+        all_roc_curves.append(rocs_opt)
+        chance_rates.append(errd_opt[chancek])
+        toplots = []
+        toplots.extend(map(str, lamSs))
+        toplots.append(str(lamS_opt))
+        linedesc = pd.Series(toplots, name='method')
+
     pss = []
     for roc_curve_group in all_roc_curves:
         (rs, ps, ts) = fg.pool_roc(roc_curve_group, all_roc_curves, max_x = 1000)
         pss.append(ps)
-    
-    linedesc = pd.Series(map(str, lamSs), name='lambdaS')
     
     if normed:
         to_plot = np.dstack(pss) / np.repeat(pss[0][:,:,None], len(pss), axis=2)
@@ -2794,8 +2850,6 @@ def plot_roc(out, lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,n
     chance_y = [np.mean(chance_rates), np.mean(chance_rates)]
     #plt.plot(chance_x, chance_y,'--k')
     plt.show()
-
-
 
 #plots error dictionaries
 #this one includes lots of incorrect orthology

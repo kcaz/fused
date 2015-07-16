@@ -7,17 +7,69 @@ import os
 import collections
 #SECTION: ------------------UTILITY FUNCTIONS-----------------
 
+def get_rank(scores, labels, coords):
+    score_array = np.array(scores)
+    label_array = np.array(labels)
+    coord_array = np.array(coords)
 
+    temp = score_array.argsort()
+    sorted_scores = score_array[temp]
+    sorted_labels = label_array[temp].tolist()
+    sorted_coords = coord_array[temp].tolist()
+
+    rank = 0
+    ranks = []
+    tied_ranks = []
+    for i in range(len(sorted_scores)):
+        rank += 1
+        if i < len(sorted_scores)-1:
+            if sorted_scores[i] == sorted_scores[i+1]:
+                tied_ranks.append(rank)
+                for j in range(i+1, len(sorted_scores)):
+                    while sorted_scores[i] == sorted_scores[j]:
+                        rank += 1
+                        tied_ranks.append(rank)
+                    to_append = (j-i+1) * [np.mean(tied_ranks)]
+                    ranks += to_append
+            else:
+                ranks.append(rank)
+        if i == len(sorted_scores)-1:
+            ranks.append(rank)
+
+    return (ranks, sorted_labels, sorted_coords)
+
+#take lists and averages ranks across coords, where each coords is a list of (tf, g) pairs corresponding to ranks
+#labels_combined should be a list of 0s and 1s, unless there is disagreement among gold standards
+def rank_combine(rankslist, labelslist, coordslist):
+    rank_dict = {}
+    for i in range(len(coordslist)):
+        for count, [tf,g] in enumerate(coordslist[i]):
+            if (tf,g) in rank_dict:
+                rank_dict[(tf,g)][0] += rankslist[i][count]
+                rank_dict[(tf,g)][1] += labelslist[i][count]
+                rank_dict[(tf,g)][2] += 1
+            else:
+                rank_dict[(tf,g)] = [rankslist[i][count], labelslist[i][count], 1]
+
+    ranks_combined = []
+    labels_combined = []
+    coords_combined = []
+
+    for (tf, g) in rank_dict:
+        denom = rank_dict[(tf, g)][2]
+        (rank, label, one) = map(lambda x: float(x)/denom, rank_dict[(tf, g)])
+        ranks_combined.append(rank)
+        labels_combined.append(label)
+        coords_combined.append((tf,g))
+    return (ranks_combined, labels_combined, coords_combined)
 
 
 #SECTION: ------------------FOR RUNNING BACTERIAL DATA
 
-
-
-def fit_model(data_fn, lamP, lamR, lamS, solver='solve_ortho_direct', settings = None):
+def fit_model(data_fn, lamP, lamR, lamS, solver='solve_ortho_direct', settings = None, orth_file ='orth'):
     ds1 = ds.standard_source(data_fn,0)
     ds2 = ds.standard_source(data_fn,1)
-    orth_fn = os.path.join(data_fn, 'orth')
+    orth_fn = os.path.join(data_fn, orth_file)
 
     organisms = [ds1.name, ds2.name]
     orth = ds.load_orth(orth_fn, organisms)
@@ -46,49 +98,51 @@ def fit_model(data_fn, lamP, lamR, lamS, solver='solve_ortho_direct', settings =
     
     return Bs
 
-
-#this is the master cross-validator!
-def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',settings = None, reverse=False, cv_both=(True,True), exclude_tfs=True, pct_priors=0, seed=None, verbose=False, orth_file='orth'):
+#solves networks separately, then rank combines to get network
+def cv_unfused(data_fn, lamP, lamR, k, solver='solve_ortho_direct', settings=None, reverse=False, cv_both=(True,True), exclude_tfs=True, pct_priors=0, seed=None, verbose=False, orth_file='orth', orgs=None, lamS_opt=None):
+    lamS = 0
     if seed != None:
         random.seed(seed)
 
-    ds1 = ds.standard_source(data_fn,0)
-    ds2 = ds.standard_source(data_fn,1)
-    dss = [ds1, ds2]
+    metrics1 = ['aupr','auc','chance']
+    num_species = 0
+    dss = []
+    err_dict = {m : np.zeros((k, 1)) for m in metrics1}
+    err_dict['params'] = (lamP, lamR)
+    all_orgs = []
+    organisms = []
 
+    if orgs == None:
+        while os.path.isfile(os.path.join(data_fn, 'expression%d' % (num_species+1))):
+            dsi = ds.standard_source(data_fn,num_species)
+            dss.append(dsi)
+            organisms.append(dsi.name)
+            all_orgs.append(dsi.name)
+            err_dict['params'] = (lamP, lamR)
+            num_species += 1
 
-    #set up containers for results
+    else:
+        while os.path.isfile(os.path.join(data_fn, 'expression%d' % (num_species+1))):
+            dsi = ds.standard_source(data_fn,num_species)
+            all_orgs.append(dsi.name)
+            if dsi.name in orgs:
+                dss.append(dsi)
+                organisms.append(dsi.name)
+                err_dict['params'] = (lamP, lamR)
+            num_species +=1
+        num_species-=1
 
-
-    metrics1 = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con', 'auc_noncon', 'aupr_noncon', 'chance', 'chance_con', 'B_mse','top_100']
-
-
-    err_dict1 = {m : np.zeros((k, 1)) for m in metrics1}
-    err_dict2 = {m : np.zeros((k, 1)) for m in metrics1}
-
-    #save the parameters
-    err_dict1['params'] = (lamP, lamR, lamS, settings)
-    err_dict2['params'] = (lamP, lamR, lamS, settings)
-
-    err_dicts = [err_dict1, err_dict2] #for indexing
-    #prc and roc are special (not individual numbers)
-    metrics2 = ['prc','roc', 'prc_con','roc_con', 'prc_noncon', 'roc_noncon']
-    for err_dict in err_dicts:
-        for metric in metrics2:
-            err_dict[metric] = map(lambda x: [], range(k))
+    metrics2 = ['prc','roc']
+    for metric in metrics2:
+        err_dict[metric] = map(lambda x: [], range(k))
     metrics = metrics1 + metrics2
-    (constraints, marks, orth) = ds.load_constraints(data_fn)
-    
+    (constraints, marks, orth) = ds.load_constraints(data_fn, orgs=organisms)
 
     orth_fn = os.path.join(data_fn, orth_file)
-
-    organisms = [ds1.name, ds2.name]
-    orth = ds.load_orth(orth_fn, organisms)
+    orth = ds.load_orth(orth_fn, all_orgs, organisms)
     
-    folds = [ds1.partition_data(k), ds2.partition_data(k)]
-    
-    (priors1, signs1) = ds1.get_priors()
-    (priors2, signs2) = ds2.get_priors()
+    folds = map((lambda x: x.partition_data(k)), dss)
+    all_priors = map((lambda x: x.get_priors()[0]), dss)
 
     #helper to return all but ith entry of list x    
     excl = lambda x,i: x[0:i]+x[(i+1):] 
@@ -101,20 +155,213 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
         p2 = map(lambda i: x[i], inds[t:])
         return (p1, p2)
 
-    (priors1_tr, priors1_te) = r_partition(priors1, int(pct_priors*len(priors1)))
-    (priors2_tr, priors2_te) = r_partition(priors2, int(pct_priors*len(priors2)))
+    allpriors = map(lambda x: r_partition(x, int(pct_priors*len(x))), all_priors)
+    priors_tr = map(lambda x: x[0], allpriors)
+    priorstr = []
+    for priorslist in priors_tr:
+        priorstr.extend(priorslist)
+    priors_te = map(lambda x: x[1], allpriors)
+    priorste = []
+    for priorslist in priors_te:
+        priorste.extend(priorslist)
 
-    priors_tr = [priors1_tr, priors2_tr]
-    priors_te = [priors1_te, priors2_te]
+    f_te = [None]*num_species
+    f_tr = [None]*num_species
+    genes = [None]*num_species
+    tfs = [None]*num_species
+    Xs = [None]*num_species
+    Ys = [None]*num_species
+    Xs_te = [None]*num_species
+    Ys_te = [None]*num_species
+    Bs = [None]*num_species
 
-    f_te = [None, None]
-    f_tr = [None, None]
-    genes = [None, None]
-    tfs = [None, None]
-    Xs = [None, None]
-    Ys = [None, None]
-    Xs_te = [None, None]
-    Ys_te = [None, None]
+        #downsamples the ROC, or PRC, curve
+    def downsample_roc(roc):
+        if roc[0] == None:
+            return roc
+        (roc_f, roc_h, roc_t) = pool_roc([roc], max_x=10000)
+            
+            #hrm?
+        return (roc_f[:], roc_h[0,:], roc_t[0,:])
+
+    for fold in range(k):
+        if verbose:
+            print 'working on %d'  % fold
+        #get conditions for current cross-validation fold
+        for si in range(num_species):
+            if cv_both[si] and k > 1:
+                f_te[si] = folds[si][fold]
+                f_tr[si] = np.hstack(excl(folds[si], fold))    
+            if reverse:
+                tmp = f_tr[si]
+                f_tr[si] = f_te[si]
+                f_te[si] = tmp
+            (e_tr, t_tr, genes_si, tfs_si) = dss[si].load_data(f_tr[si])
+            (e_te, t_te, genes_si, tfs_si) = dss[si].load_data(f_te[si])
+
+            Xs[si] = t_tr
+            Xs_te[si] = t_te
+
+            Ys[si] = e_tr
+            Ys_te[si] = e_te
+
+            genes[si] = genes_si
+            tfs[si] = tfs_si
+
+        #solve the model
+        for si in range(num_species):
+            if solver == 'solve_ortho_direct':
+                B = fl.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priorstr, lamP, lamR, lamS, lamS_opt, settings = settings)[si]
+            if solver == 'solve_ortho_direct_scad':
+                B = fl.solve_ortho_direct_scad(organisms[si], genes[si], tfs[si], Xs[si], Ys[si], orth, priors_tr_fl[si], lamP, lamR, lamS, settings = settings)
+            if solver == 'solve_ortho_direct_scad_plot':
+                B = fl.solve_ortho_direct_scad_plot(data_fn, organisms[si], genes[si], tfs[si], Xs[si], Ys[si], orth, priors_tr_fl[si], lamP, lamR, lamS, settings = settings)
+            if solver == 'solve_ortho_direct_mcp':
+                B = fl.solve_ortho_direct_mcp(organisms[si], genes[si], tfs[si], Xs[si], Ys[si], orth, priors_tr_fl[si], lamP, lamR, lamS, settings = settings)
+            if solver == 'solve_ortho_direct_em':
+                B = fl.solve_ortho_direct_em(organisms[si], genes[si], tfs[si], Xs[si], Ys[si], orth, priors_tr_fl[si], lamP, lamR, lamS, settings = settings)
+            Bs[si] = (B)
+
+        allranks = []
+        alllabels = []
+        allcoords = []
+    
+        for si in range(num_species):
+            Xsi = Xs[si]    
+            Ysi = Ys[si]
+            Bsi = Bs[si]
+
+            if True: #always rescale the beta matrix now
+                S = rescale_betas(Xsi, Ysi, Bsi)
+            else:
+                S = Bsi
+
+            (scores, labels, coords) = get_scores_labels(S, genes[si], tfs[si], all_priors[si], tr_priors=priors_tr[si], exclude_tfs = False, constraints = None, non_con = False, sub=None)
+
+            (ranks, sorted_labels, sorted_coords) = get_rank(scores, labels, coords)
+
+            allranks.append(ranks)
+            alllabels.append(sorted_labels)
+            allcoords.append(sorted_coords)
+
+        (ranks_combined, labels_combined, coords_combined) = rank_combine(allranks, alllabels, allcoords)                  
+
+        rc_tfs = []
+        for tf_list in tfs:
+            rc_tfs.extend(tf_list)        
+        rc_genes = []
+        for g_list in genes:
+            rc_genes.extend(g_list)
+
+        rc_B = np.zeros((len(rc_tfs), len(rc_genes)))
+
+        gene_to_ind = {rc_genes[x] : x for x in range(len(rc_genes))}    
+        tf_to_ind = {rc_tfs[x] : x for x in range(len(rc_tfs))}
+
+        for i, (tf, g) in enumerate(coords_combined):
+            rc_B[tf_to_ind[tf], gene_to_ind[g]] = ranks_combined[i]
+
+        (aupr, prc) = eval_network_pr(rc_B, rc_genes, rc_tfs, priorste, tr_priors=priorstr, exclude_tfs=exclude_tfs, constraints = None)
+        err_dict['aupr'][fold,0] = aupr
+        err_dict['prc'][fold] = prc    
+    
+        (auc, roc) = eval_network_roc(rc_B, rc_genes, rc_tfs, priorste, tr_priors=priorstr, exclude_tfs=exclude_tfs, constraints = None)
+        err_dict['auc'][fold,0] = auc
+        err_dict['roc'][fold] = downsample_roc(roc)
+        
+        #chance precision and chance constrained interactions precision
+        chance = compute_chance_precision(rc_B, rc_genes, rc_tfs, priorste, tr_priors=priorstr, exclude_tfs=exclude_tfs, constraints = None, sub = si)
+        err_dict['chance'][fold, 0] = chance
+        
+        #top 100 interactions
+        err_dict['top_100'] = top_k_interactions(rc_B, rc_genes, rc_tfs, priorste, org=organisms[si], k=np.inf)
+
+    return err_dict
+
+
+
+#this is the master cross-validator!
+#if orgs=[], then use all the organisms in folder; otherwise use the organisms listed in orgs
+#orth_file can be a list of orth file names. if it is a list then it uses all the orth files. 
+def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',settings = None, reverse=False, cv_both=(True,True), exclude_tfs=True, pct_priors=0, seed=None, verbose=False, orth_file=['orth'], orgs=None, lamS_opt = None):
+    print orth_file
+    if seed != None:
+        random.seed(seed)
+
+    metrics1 = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con', 'auc_noncon', 'aupr_noncon', 'chance', 'chance_con', 'B_mse','top_100']
+    num_species = 0
+    dss = []
+    all_orgs = []
+    err_dicts = []
+    organisms = []
+
+    if orgs == None:
+        while os.path.isfile(os.path.join(data_fn, 'expression%d' % (num_species+1))):
+            dsi = ds.standard_source(data_fn,num_species)
+            dss.append(dsi)
+            organisms.append(dsi.name)
+            all_orgs.append(dsi.name)
+            err_dicts.append({m : np.zeros((k, 1)) for m in metrics1})
+            err_dicts[num_species]['params'] = (lamP, lamR, lamS, settings)
+            num_species += 1
+
+    else:
+        while os.path.isfile(os.path.join(data_fn, 'expression%d' % (num_species+1))):
+            dsi = ds.standard_source(data_fn,num_species)
+            all_orgs.append(dsi.name)
+            if dsi.name in orgs:
+                dss.append(dsi)
+                organisms.append(dsi.name)
+                err_dicts.append({m : np.zeros((k, 1)) for m in metrics1})
+                err_dicts[len(err_dicts)-1]['params'] = (lamP, lamR, lamS, settings)
+            num_species +=1
+        num_species-=1
+
+    #set up containers for results
+    #prc and roc are special (not individual numbers)
+    metrics2 = ['prc','roc', 'prc_con','roc_con', 'prc_noncon', 'roc_noncon']
+    for err_dict in err_dicts:
+        for metric in metrics2:
+            err_dict[metric] = map(lambda x: [], range(k))
+    metrics = metrics1 + metrics2
+    (constraints, marks, orth) = ds.load_constraints(data_fn, orth_f='orth', orgs=organisms)
+
+    if len(orth_file) == 1:
+        orth_fn = os.path.join(data_fn, orth_file[0])
+        orth = ds.load_orth(orth_fn, all_orgs, organisms)
+    else:
+        orth = []
+        for i in range(len(orth_file)):
+            print orth_file[i]
+            orth_fn = os.path.join(data_fn, orth_file[i])
+            orth += ds.load_orth(orth_fn, all_orgs, organisms)
+    
+    folds = map((lambda x: x.partition_data(k)), dss)
+    all_priors = map((lambda x: x.get_priors()[0]), dss)
+
+    #helper to return all but ith entry of list x    
+    excl = lambda x,i: x[0:i]+x[(i+1):] 
+    
+    #helper function for dividing priors
+    def r_partition(x, t):
+        inds = np.arange(len(x))
+        random.shuffle(inds)
+        p1 = map(lambda i: x[i], inds[0:t])
+        p2 = map(lambda i: x[i], inds[t:])
+        return (p1, p2)
+
+    allpriors = map(lambda x: r_partition(x, int(pct_priors*len(x))), all_priors)
+    priors_tr = map(lambda x: x[0], allpriors)
+    priors_te = map(lambda x: x[1], allpriors)
+
+    f_te = [None]*num_species
+    f_tr = [None]*num_species
+    genes = [None]*num_species
+    tfs = [None]*num_species
+    Xs = [None]*num_species
+    Ys = [None]*num_species
+    Xs_te = [None]*num_species
+    Ys_te = [None]*num_species
 
         #downsamples the ROC, or PRC, curve
     def downsample_roc(roc):
@@ -129,7 +376,7 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
         if verbose:
             print 'working on %d' % fold
         #get conditions for current cross-validation fold
-        for si in (0,1):
+        for si in range(num_species):
             if cv_both[si] and k > 1:
                 f_te[si] = folds[si][fold]
                 f_tr[si] = np.hstack(excl(folds[si], fold))    
@@ -152,7 +399,7 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
         priors_tr_fl = priors_tr[0] + priors_tr[1]
         #solve the model
         if solver == 'solve_ortho_direct':
-            Bs = fl.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors_tr_fl, lamP, lamR, lamS, settings = settings)
+            Bs = fl.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors_tr_fl, lamP, lamR, lamS, lamS_opt, settings = settings)
         if solver == 'solve_ortho_direct_scad':
             Bs = fl.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, orth, priors_tr_fl, lamP, lamR, lamS, settings = settings)
         if solver == 'solve_ortho_direct_scad_plot':
@@ -165,7 +412,7 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
          #evaluate a bunch of metrics
         (corr, fused_coeffs) = fused_coeff_corr(organisms, genes, tfs, orth, Bs)
             
-        for si in [0,1]:
+        for si in range(num_species):
             #correlation of fused coefficients
             err_dicts[si]['corr'][fold,0] = corr
 
@@ -226,7 +473,7 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
             err_dicts[si]['chance_con'][fold, 0] = chance
             
             #top 100 interactions
-            err_dicts[si]['top_100'] = top_k_interactions(S, genes[si], tfs[si], priors_te[si], org=organisms[si], k=np.inf)
+            err_dicts[si]['top_100'] = top_k_interactions(S, genes[si], tfs[si], priors_te[si], k=np.inf)
     return err_dicts
 
 
@@ -354,7 +601,7 @@ def rescale_betas(X, Y, B):
 def get_scores_labels(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False, constraints = None, non_con = False, sub=None):
     #from matplotlib import pyplot as plt
     if len(priors)==0:
-        return ([], [])
+        return ([], [], [])
     org = priors[0][0].organism
     priors_set = set(priors)
     tr_priors_set = set(tr_priors)
@@ -387,6 +634,7 @@ def get_scores_labels(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False
     net = net[tf_marked, :]
     scores = []#np.zeros(len(genes)*len(tfs))
     labels = []#np.zeros(len(genes)*len(tfs))
+    coords = []
     i=0
     for tfi in range(len(tfs)):
         for gi in range(len(genes)):
@@ -402,6 +650,7 @@ def get_scores_labels(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False
                         continue
             tf = tfs[tfi]
             g = genes[gi]
+            coord = (tf, g)
             score = np.abs(net[tfi, gi])
             label = 0
             if (fl.one_gene(tf, org), fl.one_gene(g, org)) in tr_priors_set:
@@ -416,7 +665,8 @@ def get_scores_labels(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False
             
             scores.append(score)#scores[i] = score
             labels.append(label)#labels[i] = label
-    return (scores, labels)
+            coords.append(coord)
+    return (scores, labels, coords)
 
 #evaluates the area under the precision recall curve, with respect to some given priors
 # exclude_tfs: do not evaluate on tf x tf interactions
@@ -424,7 +674,7 @@ def get_scores_labels(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False
 #sub: name of subproblem. used if constraints != None
 #tr_priors are the training set priors
 def eval_network_pr(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False, constraints = None, non_con = False, sub=None):
-    (scores, labels) = get_scores_labels(net, genes, tfs, priors, tr_priors, exclude_tfs, constraints, non_con, sub)
+    (scores, labels, coords) = get_scores_labels(net, genes, tfs, priors, tr_priors, exclude_tfs, constraints, non_con, sub)
     if len(scores):
             
         (precision, recall,t) = precision_recall_curve(labels, scores)#prc(scores, labels)
@@ -441,7 +691,7 @@ def eval_network_pr(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False, 
 #evaluates the area under the roc, with respect to some given priors
 
 def eval_network_roc(net, genes, tfs, priors, tr_priors=[], exclude_tfs = True, constraints = None, non_con = False, sub=None):
-    (scores, labels) = get_scores_labels(net, genes, tfs, priors, tr_priors, exclude_tfs, constraints, non_con, sub)
+    (scores, labels, coords) = get_scores_labels(net, genes, tfs, priors, tr_priors, exclude_tfs, constraints, non_con, sub)
     if len(scores):
         (fpr, tpr, t) = roc_curve(labels, scores)
         if any(np.isnan(fpr)) or any(np.isnan(tpr)):
@@ -469,8 +719,9 @@ def fused_coeff_corr(organisms, genes_l, tfs_l, orth, B_l):
         b1 = B_l[s1][con.c1.r, con.c1.c]
         s2 = con.c2.sub
         b2 = B_l[s2][con.c2.r, con.c2.c]
-        fused_vals[s1].append(b1)
-        fused_vals[s2].append(b2)
+        #changed these to 0/1, instead of s1/s2. We don't care whether fusion constraints are within (or between) species
+        fused_vals[0].append(b1)
+        fused_vals[1].append(b2)
     fused_vals = np.array(fused_vals)
     return (np.corrcoef(fused_vals)[0,1], fused_vals)
 
@@ -607,7 +858,7 @@ def pool_roc_f(roc_curves, all_roc_curves = None, beta=1.0):
 #returns the fraction of true labels for the given constraints and priors
 def compute_chance_precision(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False, constraints = None, sub=None):
     
-    (scores, labels) = get_scores_labels(net, genes, tfs, priors, tr_priors, exclude_tfs, constraints, sub)
+    (scores, labels, coords) = get_scores_labels(net, genes, tfs, priors, tr_priors, exclude_tfs, constraints, sub)
     if len(scores) == 0:
         return np.nan
     return np.mean(labels)

@@ -374,7 +374,7 @@ class subt(data_source):
 
         tfs_set = set(tfs)
 
-
+    
         conds = fslc[0]
         genes = map(lambda x: x[0], fslc[1:])
         exp_mat_t = np.zeros((len(genes), len(conds)))
@@ -412,6 +412,71 @@ class subt(data_source):
         psnt = map(lambda x: x.split('\t'), psn)
         priors = map(lambda x: (fr.one_gene(x[0], self.name), fr.one_gene(x[1], self.name)), psnt)
         signs = map(lambda x: [-1,1][x[2]=='activation'], psnt)
+        p.close()
+        return (priors, signs)
+
+#just copied subt
+class subt_eu(data_source):
+    def __init__(self):
+    
+        expr_fn = 'data/bacteria1/B_subtilis_eu.csv'
+        tfs_fn = 'data/bacteria1/tfNames_subtilis_eu.txt'
+        f = file(expr_fn)
+        fs = f.read()
+        fsl = filter(len, fs.split('\n'))
+        fslc = map(lambda x: x.split(','), fsl)
+        f.close()
+    
+        t = file(tfs_fn)
+        ts = t.read()
+        tfs = filter(len, ts.split('\n'))
+        t.close()
+
+        tfs_set = set(tfs)
+
+
+        conds = fslc[0]
+        genes = map(lambda x: x[0], fslc[1:])
+        exp_mat_t = np.zeros((len(genes), len(conds)))
+        for r in range(len(genes)):
+            conds_f = map(float, fslc[1+r][1:])
+            conds_a = np.array(conds_f)
+            exp_mat_t[r, :] = conds_a
+
+        tf_mat_t = np.zeros((len(tfs), len(conds)))
+        gene_to_ind = {genes[x] : x for x in range(len(genes))}
+    
+        for ti in range(len(tfs)):
+            gi = gene_to_ind[tfs[ti]]
+            tf_mat_t[ti, :] = exp_mat_t[gi, :]
+
+        exp_mat = exp_mat_t.T
+        tf_mat = tf_mat_t.T
+        #NOTE: removed normalization
+        #NOTE: adding back in, removed from standard source
+        self.exp_mat = normalize(exp_mat, True)
+        self.tf_mat = normalize(tf_mat, False)
+        #self.exp_mat = exp_mat
+        #self.tf_mat = tf_mat
+        self.genes = genes
+        self.tfs = tfs
+        self.N = exp_mat.shape[0]
+        self.offset = 0
+        self.name = 'B_subtilis'
+
+    def get_priors(self):
+        priors_fn = 'data/bacteria1/gsSDnamesWithActivitySign082213'
+        p = file(priors_fn)
+        ps = p.read()
+        psn = filter(len, ps.split('\n'))
+        psnt = map(lambda x: x.split('\t'), psn)
+        priors = []
+        signs = []
+        for line in psnt:
+            if line[0] in self.genes:
+                if line[1] in self.genes:
+                    priors.append((fr.one_gene(line[0], self.name),fr.one_gene(line[1], self.name)))
+                    signs.append([-1,1][line[2]=='activation'])
         p.close()
         return (priors, signs)
 
@@ -454,19 +519,31 @@ class anthr(data_source):
 
 #SECTION: ----------------------------------ORTHOLOGY LOADERS----------
 
-def load_orth(orth_fn, organisms):
+#orgs is a list of organisms of interest, if we are interested in just a subset of the organisms in a folder
+def load_orth(orth_fn, organisms, orgs=None):
     f = file(orth_fn)
     fs = f.read()
     fsn = filter(len, fs.split('\n'))
     fsnt = map(lambda x: x.split('\t'), fsn)
-    
+    f.close()    
+
+    cols = []
+    if orgs != None:
+        cols = map(lambda x: organisms.index(x), orgs)
+    else:
+        cols = np.arange(len(organisms))
+
     orths = []
     for o in fsnt:
-        real = o[2] == 'True'
-        genes1 = map(lambda n: fr.one_gene(name = n, organism = organisms[0]), filter(len, o[0].split(',')))
-        genes2 = map(lambda n: fr.one_gene(name = n, organism = organisms[1]), filter(len, o[1].split(',')))
+        real = o[-1] == 'True'
         
-        genes = genes1 + genes2
+        genes = []
+        for org in range(len(o)-1):
+            if org in cols:
+                gs = filter(len, o[org].split(','))
+                for g in gs:
+                    genes.append(fr.one_gene(name = g, organism = organisms[org]))
+
         orths_row = map(lambda g1g2: fr.orthology(genes = g1g2, real = real), combinations(genes, 2))
         for orth in orths_row:
             orths.append(orth)
@@ -474,16 +551,37 @@ def load_orth(orth_fn, organisms):
 
 #returns the MARKED constraints associated with a particular data directory, in standard format
 
-def load_constraints(data_fn, orth_f='orth'):
-    ds1 = standard_source(data_fn,0)
-    ds2 = standard_source(data_fn,1)
-    orth_fn = os.path.join(data_fn, orth_f)
-    organisms = [ds1.name, ds2.name]
-    orth = load_orth(orth_fn, organisms)
+def load_constraints(data_fn, orth_f='orth', orgs=None):
 
-    gene_ls = [ds1.genes, ds2.genes]
-    tf_ls = [ds1.tfs, ds2.tfs]
-    
+    organisms = []
+    all_orgs = []
+    gene_ls = []
+    tf_ls = []
+    num_species = 0
+    if orgs != None:
+        while os.path.isfile(os.path.join(data_fn, 'expression%d' % (num_species+1))):
+            dsi = standard_source(data_fn,num_species)
+            all_orgs.append(dsi.name)
+            if dsi.name in orgs:
+                organisms.append(dsi.name)
+                gene_ls.append(dsi.genes)
+                tf_ls.append(dsi.tfs)
+            num_species +=1
+        num_species-=1
+
+    else:
+        while os.path.isfile(os.path.join(data_fn, 'expression%d' % (num_species+1))):
+            dsi = standard_source(data_fn,num_species)
+            organisms.append(dsi.name)
+            all_orgs.append(dsi.name)
+            gene_ls.append(dsi.genes)
+            tf_ls.append(dsi.tfs)
+            num_species +=1
+        num_species-=1
+
+    orth_fn = os.path.join(data_fn, orth_f)
+    orth = load_orth(orth_fn, all_orgs, organisms)
+
     (constraints, marks) = fr.orth_to_constraints_marked(organisms, gene_ls, tf_ls, orth, 1.0)
     return (constraints, marks, orth)
 
@@ -762,7 +860,7 @@ def write_fake_data1(out_dir=None, tfg_count1=(5,10), tfg_count2=(5,10), N1=10, 
 
 
 
-    write_orth(out_dir+os.sep+'orth', orths)
+    write_orth(out_dir+os.sep+'orth', orths, organisms)
     descr_dict = {'tfg_count' : str(tfg_count1), 'tfg_count2':str(tfg_count2), 'N1':N1,'N2':N2, 'max_grp_size':max_grp_size,'pct_fused':pct_fused,'fuse_std':fuse_std,'sparse':sparse,'organism1':organisms[0],'organism2':organisms[1],'prior_falsepos':prior_falsepos,'prior_falseneg':prior_falseneg,'measure_noise1':measure_noise1,'measure_noise2':measure_noise2,'tc1':'inf','tc2':'inf'}
 
     with file(out_dir+os.sep+'description', 'w') as f:
@@ -828,20 +926,32 @@ def write_priors(outf, priors, signs=None):
         #f.write('%s\t%s\t%s\n' % (tf.name, gene.name, sign))
     f.close()
 
-#write orth.
-#format is: lines 1-N gene gene
+#write orth
+#format is: each column contains comma delimited lists of genes, each column corresponds to a species, last column is mark
 #orth is pairs of one_genes
-def write_orth(outf, orth):
+def write_orth(outf, orth, organisms):
     f = file(outf, 'w')
+
+    def which_org(org, organisms):
+        arr = map(lambda x: x == org, organisms)
+        ind = [i for i, x in enumerate(arr) if x]
+        return ind[0]
+
     for o in orth:
-        
         if len(o.genes) > 2:
             
             print 'WARNING TRYING TO WRITE NON 1-1 ORTHOLOGY'
         gene1 = o.genes[0].name
+        org1 = which_org(o.genes[0].organism, organisms)  
         gene2 = o.genes[1].name
+        org2 = which_org(o.genes[1].organism, organisms)
         real = o.real
-        f.write('%s\t%s\t%s\n' % (gene1, gene2,real))
+
+        row_str = map(lambda x: [], range(len(organisms)))
+        row_str[org1].append(gene1)
+        row_str[org2].append(gene2)
+        f.write('\t'.join(map(lambda x: ','.join(x), row_str))+ '\t'
+ + 'True' + '\n')
 
     f.close()
 
@@ -913,16 +1023,29 @@ def voodoo():
             orths.append(orth)
         return orths
 
-
     sub = subt()
+    sub_eu = subt_eu()
     anth = anthr()
     
     (bs_e, bs_t, bs_genes, bs_tfs) = sub.load_data()
+    (bseu_e, bseu_t, bseu_genes, bseu_tfs) = sub_eu.load_data()
     (ba_e, ba_t, ba_genes, ba_tfs) = anth.load_data()
 
+    def orth_sub(bs_genes, bseu_genes, bs_tfs, bseu_tfs):
+        organisms = ['B_subtilis', 'B_subtilis_eu']
+        orths = []
+        for g in bs_genes:
+            if g in bseu_genes:	
+                orth = fr.orthology(genes = (fr.one_gene(name=g,organism=organisms[0]), fr.one_gene(name=g, organism=organisms[1])), real = True)
+                orths.append(orth)
+        return orths
+
     (bs_priors, bs_sign) = sub.get_priors()
+    (bseu_priors, bseu_sign) = sub_eu.get_priors()
     (ba_priors, ba_sign) = anth.get_priors()
     orths = load_orth_voodoo('data/bacteria1/bs_ba_ortho_804',['B_anthracis','B_subtilis'])
+    orths_sub = orth_sub(bs_genes, bseu_genes, bs_tfs, bseu_tfs)
+    allorths = orths + orths_sub
     bsu_operon_to_orth(os.path.join('data','bacteria1','known_operon.download.txt'), os.path.join('data','bacteria_standard','operon'))
     #operons = load_orth('data/bacteria1/bsu_operon_orth',['B_subtilis','B_anthracis'])
     out_dir = os.path.join('data','bacteria_standard')
@@ -930,28 +1053,28 @@ def voodoo():
         os.mkdir(out_dir)
     write_expr_mat(out_dir+os.sep+'expression1', bs_e, bs_genes)
     write_expr_mat(out_dir+os.sep+'expression2', ba_e, ba_genes)
-    
+    write_expr_mat(out_dir+os.sep+'expression3', bseu_e, bseu_genes)
     #ss td files
     #write_ss_td(os.path.join(out_dir, 'time_diffs1'), bs_e)
     #write_ss_td(os.path.join(out_dir, 'time_diffs2'), ba_e)
     #'real' td files
     subtilis_td()
     anthracis_td()
+    subtilis_eu_td()
     
-    
-    
-
     write_priors_voodoo(out_dir+os.sep+'priors1',bs_priors, bs_sign)
     write_priors_voodoo(out_dir+os.sep+'priors2',ba_priors, ba_sign)
+    write_priors_voodoo(out_dir+os.sep+'priors3',bseu_priors, bseu_sign)
     write_tfnames(out_dir+os.sep+'tfnames1',bs_tfs)
     write_tfnames(out_dir+os.sep+'tfnames2',ba_tfs)
-    write_orth(out_dir+os.sep+'orth', orths)
+    write_tfnames(out_dir+os.sep+'tfnames3',bseu_tfs)
+    write_orth(out_dir+os.sep+'orth', allorths, ['B_subtilis', 'B_anthracis', 'B_subtilis_eu'])
     #write_orth(out_dir+os.sep+'operon',operons)
     #tc: 1/tc * log(2) = 10 minutes 
     tc = np.log(2)/10
     with file(out_dir+os.sep+'description', 'w') as f:
-        f.write('organism1\t%s\norganism2\t%s\n' % ('B_subtilis','B_anthracis'))
-        f.write('tc1\t%f\ntc2\t%f\n' %(tc,tc))
+        f.write('organism1\t%s\norganism2\t%s\norganism3\t%s\n' % ('B_subtilis','B_anthracis','B_subtilis_eu'))
+        f.write('tc1\t%f\ntc2\t%f\ntc3\t%f' %(tc,tc,tc))
     
 
 
@@ -1026,6 +1149,36 @@ def subtilis_td():
                 next_cond[prev_ind] = (cond_ind, elapsed)
     
     with file('data/bacteria_standard/time_diffs1', 'w') as td_file:
+        #let's make the conditions come out in basically the same order as they appera in the data
+        
+        for cond1 in range(len(cond_names)):
+            
+            if cond1 in next_cond:
+            
+                (cond2, td) = next_cond[cond1]
+                td_file.write('%d\t%d\t%f\n' % (cond1, cond2, td))
+
+def subtilis_eu_td():
+    import pandas
+    mdata = pandas.read_table(os.path.join('data','bacteria1','subtilis_eu_metadata'), sep=' ')
+    exp = pandas.read_table(os.path.join('data','bacteria1','B_subtilis_eu.csv'), sep=',')
+    cond_names = exp.columns
+    cond_names_ind = {cond_names[i] : i for i in range(len(cond_names))}
+    
+    next_cond = dict() #maps condition number to (next_cond, time elapsed) tuples
+    for r in range(len(mdata.index)):
+        #figure out what  condition number this is
+        cond_ind = cond_names_ind[mdata['condName'][r]]
+        if not mdata['isTs'][r]:
+            next_cond[cond_ind] = (cond_ind, 1.0)
+        else:
+            prev = mdata['prevCol'][r]
+            if not str(prev) == 'nan': #this is insane
+                prev_ind = cond_names_ind[prev]
+                elapsed = mdata['del.t'][r]
+                next_cond[prev_ind] = (cond_ind, elapsed)
+    
+    with file('data/bacteria_standard/time_diffs3', 'w') as td_file:
         #let's make the conditions come out in basically the same order as they appera in the data
         
         for cond1 in range(len(cond_names)):

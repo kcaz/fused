@@ -152,7 +152,6 @@ def orth_to_constraints_marked(organisms, gene_ls, tf_ls, orth, lamS):
     #turn orth into a list of all pairs of coefficients
     #orth_pairs = reduce(lambda x,y: x+y, map(all_pairs, orth),[])
     orth_pairs = orth_to_one_one_orth(orth)
-    
 
     #build a set to use for checking on the realness of an orthology
     real_orths = set()
@@ -176,7 +175,7 @@ def orth_to_constraints_marked(organisms, gene_ls, tf_ls, orth, lamS):
             for g_i in range(len(gene_ls[org_i])):
                 tf = one_gene(tf_ls[org_i][tf_i], organisms[org_i])
                 g = one_gene(gene_ls[org_i][g_i], organisms[org_i])
-                
+
                 for tf_orth in ortho_dict[tf]:
                     for g_orth in ortho_dict[g]:
                         
@@ -184,7 +183,6 @@ def orth_to_constraints_marked(organisms, gene_ls, tf_ls, orth, lamS):
                         sub2 = org_to_ind[tf_orth.organism]
                         sub3 = org_to_ind[g_orth.organism]
                         
-
                         if not sub2 == sub3:
                             continue
                         if not tf_orth.name in tf_to_inds[sub2]:
@@ -208,7 +206,7 @@ def orth_to_constraints_marked(organisms, gene_ls, tf_ls, orth, lamS):
 #args as in solve_ortho_direct
 #returns list of constraints. individual constraints are pairs of coefficients, with an associated weight lamS
 #NOTE!!!! THIS IS FUCKED UP IF THEY HAVE OVERLAPPING GENE NAMES! FIX FIX FIX FIX FIX
-def orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS):
+def orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS, lamS_opt=None):
     #build some maps
     
     org_to_ind = {organisms[x] : x for x in range(len(organisms))}
@@ -226,11 +224,6 @@ def orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS):
         ortho_dict[gene1].append(gene2)
         ortho_dict[gene2].append(gene1)
     
-    #print 'hallo, here i am'
-    #print organisms
-    #print len(tf_ls[0])
-    #print len(gene_ls[0])
-    #print orth
     constraints = []
     for org_i in range(len(organisms)):
         for tf_i in range(len(tf_ls[org_i])):
@@ -256,7 +249,21 @@ def orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS):
                         coeff2 = coefficient(sub2, tf_to_inds[sub2][tf_orth.name], gene_to_inds[sub2][g_orth.name])
                         
 
-                        constr = constraint(coeff1, coeff2, lamS)
+                        if lamS_opt != None:
+                            nlamS = 0
+                            if (tf_orth.organism, g_orth.organism) in lamS_opt:
+                                nlamS = lamS_opt[(tf_orth.organism, g_orth.organism)]
+                                print 'new lamS'
+                                print nlamS
+                            if (g_orth.organism, tf_orth.organism) in lamS_opt:
+                                nlamS = lamS_opt[(g_orth.organism, tf_orth.organism)]
+                                print 'new lamS'
+                                print nlamS
+                            else:
+                                print 'whats going on'
+                            constr = constraint(coeff1, coeff2, nlamS)
+                        else:
+                            constr = constraint(coeff1, coeff2, lamS)
                         constraints.append(constr)
     
     return constraints
@@ -440,6 +447,57 @@ def adjust_vol(Xs, cols, fuse_cons, ridge_cons, lamR):
 
 
 #SECTION: ----------------CODE FOR SOLVING THE MODEL-------------------
+#solves W = argmin_W ((XW - Y)**2).sum() + constraint related terms
+#Xs, Ys: X and Y for each subproblem
+#fuse_constraints: fusion constraints
+#ridge_constraints: ridge regression constraints. constraints not mentioned are assumed to exist with lam=lambdaR
+#it: number of iterations to run
+def iter_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, it):
+    Bs = []
+    #set the initial guess (all zero)
+    for j in range(len(Xs)):
+        Bs.append(np.zeros((Xs[j].shape[1], Ys[j].shape[1])))
+    Bss = []
+    for i in range(it):
+        Bss.append(map(lambda x: x.copy(), Bs))
+        
+    for i in range(1,it):
+        cB = Bss[i]
+        pB = Bss[i-1]
+        lam_ramp = (i-1)/(it-2) #constant to multiply by lam
+        for s in range(len(Xs)):
+            X = Xs[s] #X, Y for current subproblem s
+            Y = Ys[s]
+            for c in range(X.shape[1]): #column of B we are solving
+                y = Y[:, [c]]
+                #I = np.eye(X.shape[1])*lambdaR*lam_ramp
+                ypad_l = []
+                xpad_l = []
+                
+                
+                #add in the fusion constraints
+                for con in fuse_constraints:
+                    conlam = (con.lam*lam_ramp)**0.5
+                    if con.c1.c == c and con.c1.sub == s:
+                        targ = pB[con.c2.sub][con.c2.r,con.c2.c]*conlam
+                        xpad_l.append(np.zeros((1,X.shape[1])))
+                        ypad_l.append(targ)
+                        xpad_l[-1][0, con.c1.r] = conlam                     
+                if len(xpad_l):
+                    xpad = np.vstack(xpad_l)
+                else:
+                    xpad = np.zeros((0, X.shape[1]))
+                ypad = np.vstack(ypad_l)
+
+                F = np.vstack((X, xpad))
+                p = np.vstack((y, ypad))
+                #we solve b that minimizes Fb = p
+                
+                (b, resid, rank, sing) = np.linalg.lstsq(F, p)
+                
+                cB[s][:, [c]] = b
+    return Bss
+
 
 #no cleverness at all
 #this is here as a sanity check
@@ -498,11 +556,11 @@ def direct_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR):
 #YS: list of gene expression matrices
 #Orth: list of lists of one_genes
 #priors: list of lists of one_gene pairs
-def solve_ortho_ref(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors,lamP, lamR, lamS, settings=None):
+def solve_ortho_ref(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors,lamP, lamR, lamS, lamS_opt, settings=None):
     if settings == None:
         settings = get_settings()
     ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
-    fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
+    fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS, lamS_opt)
     Bs = direct_solve(Xs, Ys, fuse_con, ridge_con, lamR, adjust = settings['adjust'])
     return Bs
 
@@ -512,11 +570,11 @@ def solve_ortho_ref(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors,lamP, lamR, 
 #YS: list of gene expression matrices
 #Orth: list of lists of one_genes
 #priors: list of lists of one_gene pairs
-def solve_ortho_direct(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors,lamP, lamR, lamS, adjust=False, self_reg_pen = 0, settings=None):   
+def solve_ortho_direct(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors,lamP, lamR, lamS, lamS_opt=None, adjust=False, self_reg_pen = 0, settings=None):   
     if settings == None:
         settings = get_settings()    
     ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
-    fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
+    fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS, lamS_opt)
     Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR, adjust = settings['adjust'])    
     
     return Bs
