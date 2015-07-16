@@ -28,6 +28,7 @@ def get_settings(override = None):
     d['per'] = 0
     d['s_it'] = 5
     d['m_it'] = 5
+    d['it'] = 100
     if override != None:
         for k in override.keys():
             if k in d:
@@ -468,7 +469,7 @@ def iter_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, it):
         for s in range(len(Xs)):
             X = Xs[s] #X, Y for current subproblem s
             Y = Ys[s]
-            for c in range(X.shape[1]): #column of B we are solving
+            for c in range(Y.shape[1]): #column of B we are solving
                 y = Y[:, [c]]
                 #I = np.eye(X.shape[1])*lambdaR*lam_ramp
                 ypad_l = []
@@ -576,6 +577,22 @@ def solve_ortho_direct(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors,lamP, lam
     ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
     fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS, lamS_opt)
     Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR, adjust = settings['adjust'])    
+    
+    return Bs
+
+#iterative solver
+#gene_ls/tf_ls: lists of gene names and tf names for each problem
+#Xs: list of TF expression matrices
+#YS: list of gene expression matrices
+#Orth: list of lists of one_genes
+#priors: list of lists of one_gene pairs
+def solve_ortho_iter(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors,lamP, lamR, lamS, lamS_opt=None, adjust=False, self_reg_pen = 0, settings=None):   
+    if settings == None:
+        settings = get_settings()    
+    ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
+    fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS, lamS_opt)
+    
+    Bs = iter_solve(Xs, Ys, fuse_con, ridge_con, lamR, settings['it'])
     
     return Bs
 
@@ -1142,13 +1159,6 @@ def pick_a(Bs_init, fuse_constraints, percentile):
     return a
 
 
-#solves W = argmin_W ((XW - Y)**2).sum() + constraint related terms iteratively
-#Xs, Ys: X and Y for each subproblem
-#fuse_constraints: fusion constraints
-#ridge_constraints: ridge regression constraints. constraints not mentioned are assumed to exist with lam=lambdaR
-#it: number of iterations to run
-def iter_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, it):
-    print 'nope'
 
 
 #this code cuts up columns by depth first search

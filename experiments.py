@@ -2722,12 +2722,10 @@ def plot_bacteria_roc(lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=No
     plot_roc(out, lamP, lamR, lamSs, k, metric, savef,normed,scad, cv_both, roc_species, orgs, lamS_opt, unfused, orth_file)
 
 #generic function for above two
-<<<<<<< HEAD
-def plot_roc(out, lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,normed=False,scad=False, orth_file='orth'):
-=======
+
 #use a list of dictionaries for lamS_opt if using more than one lamS_opt; always include all pairwise lamS for fused species  
 def plot_roc(out, lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,normed=False,scad=False, cv_both=(True,False), roc_species=0, orgs=None, lamS_opt = None, unfused = False, orth_file=['orth']):
->>>>>>> c0941a18cb883cb52767159e5c37fc3cafc83c46
+
     seed = np.random.randn()
     scad = False
     if scad:
@@ -3576,3 +3574,20 @@ def try_solve_operon(lamP = 1.0, lamR = 1.0, lamS = 2):
 def plot_operon_roc(lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,normed=False,scad=False):
     out = os.path.join('data','bacteria_standard')
     plot_roc(out, lamP, lamR, lamSs, k, metric, savef=savef,normed=normed,scad=scad, orth_file='operon')
+
+
+#tests to see if the iterative solver is getting the same solution as the non iterative solver on a small network
+def test_iter1():
+    N_TF = 5
+    N_G = 10
+    N1 = 4
+    N2 = 4
+    out = os.path.join('data','fake_data','iter_test1')
+    ds.write_fake_data1(N1 = N1, N2 = N2, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.0)
+    
+    (b1n, b2n) = fg.fit_model(out, 1.0, 0.1, 0.0, solver='solve_ortho_direct')
+    (b1d, b2d) = fg.fit_model(out, 1.0, 0.1, 0.5, solver='solve_ortho_direct')
+    si = fr.get_settings({'it':100})
+    (b1i, b2i) = fg.fit_model(out, 1.0, 0.1, 0.5, solver='iter_solve', settings=si)
+    return (b1n, b1d, b1i)
+    
