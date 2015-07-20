@@ -2722,8 +2722,10 @@ def plot_bacteria_roc(lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=No
     plot_roc(out, lamP, lamR, lamSs, k, metric, savef,normed,scad, cv_both, roc_species, orgs, lamS_opt, unfused, orth_file)
 
 #generic function for above two
+
 #use a list of dictionaries for lamS_opt if using more than one lamS_opt; always include all pairwise lamS for fused species  
 def plot_roc(out, lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,normed=False,scad=False, cv_both=(True,False), roc_species=0, orgs=None, lamS_opt = None, unfused = False, orth_file=['orth']):
+
     seed = np.random.randn()
     scad = False
     if scad:
@@ -3569,91 +3571,58 @@ def try_solve_operon(lamP = 1.0, lamR = 1.0, lamS = 2):
     return errd1
 
 
-def test_opt():
-    import copy
-    N_TF = 20
-    N_G = 200
-    amt_fuseds = 0.5
-    seed = 10
-    k = 5
+#as plot synthetic performance, except it plots overlaid ROC curves for different values of lamS
+def plot_operon_roc(lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,normed=False,scad=False):
+    out = os.path.join('data','bacteria_standard')
+    plot_roc(out, lamP, lamR, lamSs, k, metric, savef=savef,normed=normed,scad=scad, orth_file='operon')
 
-    metrics = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con','auc_noncon', 'aupr_noncon', 'B_mse']
 
-    if not os.path.exists(os.path.join('data','fake_data','test_opt')):
-        os.mkdir(os.path.join('data','fake_data','test_opt'))
-    #iterate over how much fusion
-
-    f = 5
-    out1 = os.path.join('data','fake_data','test_opt','dat_'+str(f))
-    if not os.path.exists(out1):
-        os.mkdir(os.path.join('data','fake_data','test_opt','dat_'+str(f)))
-        
-        ds.write_fake_data1(N1 = 3*5, N2 = 3*50, out_dir = out1, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.5, fuse_std = 0.1)
-        #lamR = 2
+#tests to see if the iterative solver is getting the same solution as the non iterative solver on a small network
+def test_iter1():
+    N_TF = 5
+    N_G = 10
+    N1 = 4
+    N2 = 4
+    out = os.path.join('data','fake_data','iter_test1')
+    ds.write_fake_data1(N1 = N1, N2 = N2, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.0)
     
-    lamP = 1.0 #priors don't matter
-    lamR = 1.0
-    lamS = 1.0
-        
-    organisms = []
-    all_orgs = []
+    (b1n, b2n) = fg.fit_model(out, 1.0, 0.1, 0.0, solver='solve_ortho_direct')
+    (b1d, b2d) = fg.fit_model(out, 1.0, 0.1, 0.5, solver='solve_ortho_direct')
+    si = fr.get_settings({'it':1000})
+    (b1i, b2i) = fg.fit_model(out, 1.0, 0.1, 0.5, solver='iter_solve', settings=si)
+    return (b1n, b1d, b1i)
 
-    excl = lambda x,i: x[0:i]+x[(i+1):] 
-    dss = []
+def test_iter2(start,stop,num,reps):
+    N_TF = 5
+    N_G = 10
+    N1 = 4
+    N2 = 4
+    out = os.path.join('data','fake_data','iter_test1')
+    ds.write_fake_data1(N1 = N1, N2 = N2, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.0)
 
-    for num_species in range(2):
-        dsi = ds.standard_source(out1,num_species)
-        dss.append(dsi)
-        organisms.append(dsi.name)
-        all_orgs.append(dsi.name)
+    its = np.linspace(start,stop,num)
+    iterdiff = []
+    noniterdiff = []
+    for i in range(len(its)):
+        iterdiff.append(np.zeros((reps)))
+        noniterdiff.append(np.zeros((reps)))
+    
+    for j in range(reps):
+        for i in range(len(its)):
+            (b1n, b2n) = fg.fit_model(out, 1.0, 0.1, 0.0, solver='solve_ortho_direct')
+            (b1d, b2d) = fg.fit_model(out, 1.0, 0.1, 0.5, solver='solve_ortho_direct')
+            si = fr.get_settings({'it':int(its[i])})
+            (b1i, b2i) = fg.fit_model(out, 1.0, 0.1, 0.5, solver='iter_solve', settings=si)
+            iterdiff[i][j] = abs(b1d-b1i).sum()
+            #print iterdiff[i][j]
+            noniterdiff[i][j] = abs(b1n-b1i).sum()
+            #print noniterdiff[i][j]
+    toplot = np.dstack((iterdiff, noniterdiff))
+    return toplot	
+    xax = pd.Series(its, name="iterations")
+    conds = pd.Series(["iter-direct fused", "iter-direct unfused"], name="type")
+    sns.tsplot(toplot, time=xax, condition=conds)
+    plt.axis(its)
 
-    for i in range(k):
-        f_te = [None]*2
-        f_tr = [None]*2
-        genes = [None]*2
-        tfs = [None]*2
-        Xs = [None]*2
-        Ys = [None]*2
-        Xs_te = [None]*2
-        Ys_te = [None]*2
-
-    folds = map((lambda x: x.partition_data(k)), dss)
-
-    orth_fn = os.path.join(out1, 'orth')
-    orth = ds.load_orth(orth_fn, organisms)
-    priors = dss[0].get_priors()[0]+dss[1].get_priors()[0]
-    it = 5
-
-    for fold in range(k):
-        print 'working on %d' % fold
-        #get conditions for current cross-validation fold
-        for si in range(2):
-            if k > 1:
-                f_te[si] = folds[si][fold]
-                f_tr[si] = np.hstack(excl(folds[si], fold))    
-
-            (e_tr, t_tr, genes_si, tfs_si) = dss[si].load_data(f_tr[si])
-            (e_te, t_te, genes_si, tfs_si) = dss[si].load_data(f_te[si])
-
-            Xs[si] = t_tr
-            Xs_te[si] = t_te
-
-            Ys[si] = e_tr
-            Ys_te[si] = e_te
-
-            genes[si] = genes_si
-            tfs[si] = tfs_si
-
-        lamS_opt = None
-        settings = None
-        ridge_con = fr.priors_to_constraints(organisms, genes, tfs, priors, lamP*lamR)
-        fuse_con = fr.orth_to_constraints(organisms, genes, tfs, orth, lamS, lamS_opt)
-
-        Bss = fr.iter_solve(Xs, Ys, fuse_con, ridge_con, lamR, it)
-        Bs = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, lamS_opt, settings = settings)
-        print abs(Bss[0][0]-Bs[0]).
-        print Bss[0][0].shape
-        print Bs[0].shape
-
-    return Bss
+    
 

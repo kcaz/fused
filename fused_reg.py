@@ -6,6 +6,7 @@ import time
 import scipy.sparse
 import scipy.sparse.linalg
 from sklearn import mixture
+from glmnetpython import ElasticNet
 try:
     import rpy2
     import rpy2.robjects.packages as rpackages
@@ -28,6 +29,8 @@ def get_settings(override = None):
     d['per'] = 0
     d['s_it'] = 5
     d['m_it'] = 5
+    d['it'] = 100 #number of iterative solver iterations (lamS steps)
+    d['lamR_steps'] = 100
     if override != None:
         for k in override.keys():
             if k in d:
@@ -452,23 +455,42 @@ def adjust_vol(Xs, cols, fuse_cons, ridge_cons, lamR):
 #fuse_constraints: fusion constraints
 #ridge_constraints: ridge regression constraints. constraints not mentioned are assumed to exist with lam=lambdaR
 #it: number of iterations to run
-def iter_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, it):
+def opt_lamR(Xs, Ys, ridge_constraints, it):
+    for i in range(it):
+        enet=ElasticNet(alpha=0)
+
+
+
+def iter_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, it, lambdaR_steps):
+    from glmnetpython import ElasticNet
+
     Bs = []
     #set the initial guess (all zero)
     for j in range(len(Xs)):
         Bs.append(np.zeros((Xs[j].shape[1], Ys[j].shape[1])))
     Bss = []
     for i in range(it):
-        Bss.append(map(lambda x: x.copy(), Bs))
-        
+        Bss.append([])
+        for j in range(lambdaR_steps):
+            Bss[i].append(map(lambda x: x.copy(),Bs))
+    print lambdaR_steps
+    print len(Bss[1][0])
+    
+
+    #for i in range(it):
+    #    Bss.append(map(lambda x: x.copy(), Bs))
+
     for i in range(1,it):
         cB = Bss[i]
         pB = Bss[i-1]
-        lam_ramp = (i-1)/(it-2) #constant to multiply by lam
+        lam_ramp = float(i-1)/(it-2) #constant to multiply by lam
+        
         for s in range(len(Xs)):
             X = Xs[s] #X, Y for current subproblem s
             Y = Ys[s]
-            for c in range(X.shape[1]): #column of B we are solving
+            for c in range(Y.shape[1]): #column of B we are solving
+                enet=ElasticNet(alpha=0)
+
                 y = Y[:, [c]]
                 #I = np.eye(X.shape[1])*lambdaR*lam_ramp
                 ypad_l = []
@@ -478,7 +500,7 @@ def iter_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, it):
                 for con in fuse_constraints:
                     conlam = (con.lam*lam_ramp)**0.5
                     if con.c1.c == c and con.c1.sub == s:
-                        targ = pB[con.c2.sub][con.c2.r,con.c2.c]*conlam
+                        targ = pB[99][con.c2.sub][con.c2.r,con.c2.c]*conlam
                         xpad_l.append(np.zeros((1,X.shape[1])))
                         ypad_l.append(targ)
                         xpad_l[-1][0, con.c1.r] = conlam                     
@@ -494,10 +516,24 @@ def iter_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, it):
                 F = np.vstack((X, xpad))
                 p = np.vstack((y, ypad))
                 #we solve b that minimizes Fb = p
+                lambdaRs = np.linspace(0, lambdaR, lambdaR_steps)
+                enet.fit(F,p,lambdas=lambdaRs)
+                print enet._out_n_lambdas
+                print enet.out_lambdas
+                for k in range(lambdaR_steps):
+                    b = enet.get_coefficients_from_lambda_idx(k)
+                    
+                    print (s, k,i)
+                    print len(cB[s])
+                    print len(pB[s])
+                    print 'wtf'
+                    print len(Bss[1])
+                    cB[s][k][:, c] = b
                 
-                (b, resid, rank, sing) = np.linalg.lstsq(F, p)
+                #(b, resid, rank, sing) = np.linalg.lstsq(F, p)
                 
-                cB[s][:, [c]] = b
+                #cB[s][:, [c]] = b
+        #print cB[0][0,0]
     return Bss
 
 
@@ -576,8 +612,24 @@ def solve_ortho_direct(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors,lamP, lam
     if settings == None:
         settings = get_settings()    
     ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
-    fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS, lamS_opt)
+    fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS**0.5, lamS_opt)
     Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR, adjust = settings['adjust'])    
+    
+    return Bs
+
+#iterative solver
+#gene_ls/tf_ls: lists of gene names and tf names for each problem
+#Xs: list of TF expression matrices
+#YS: list of gene expression matrices
+#Orth: list of lists of one_genes
+#priors: list of lists of one_gene pairs
+def solve_ortho_iter(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors,lamP, lamR, lamS, lamS_opt=None, adjust=False, self_reg_pen = 0, settings=None):   
+    if settings == None:
+        settings = get_settings()    
+    ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
+    fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS, lamS_opt)
+                                       
+    Bs = iter_solve(Xs, Ys, fuse_con, ridge_con, lamR, settings['it'], settings['lamR_steps'])
     
     return Bs
 
@@ -1142,15 +1194,6 @@ def pick_a(Bs_init, fuse_constraints, percentile):
     a = np.percentile(deltabetas, percentile)
     
     return a
-
-
-#solves W = argmin_W ((XW - Y)**2).sum() + constraint related terms iteratively
-#Xs, Ys: X and Y for each subproblem
-#fuse_constraints: fusion constraints
-#ridge_constraints: ridge regression constraints. constraints not mentioned are assumed to exist with lam=lambdaR
-#it: number of iterations to run
-#def iter_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, it):
-#    print 'nope'
 
 
 #this code cuts up columns by depth first search

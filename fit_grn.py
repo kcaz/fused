@@ -95,7 +95,11 @@ def fit_model(data_fn, lamP, lamR, lamS, solver='solve_ortho_direct', settings =
         Bs = fl.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, settings = settings)
     if solver == 'solve_ortho_ref':
         Bs = fl.solve_ortho_ref(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, settings = settings)
-    
+    if solver == 'iter_solve':
+        #solve solution paths then return the last value
+        
+        Bs = fl.solve_ortho_iter(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, settings = settings)[-1][-1]
+        
     return Bs
 
 #solves networks separately, then rank combines to get network
