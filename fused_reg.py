@@ -6,12 +6,8 @@ import time
 import scipy.sparse
 import scipy.sparse.linalg
 from sklearn import mixture
-<<<<<<< HEAD
-#from glmnetpython import ElasticNet
-=======
-from glmnetpython import ElasticNet
-from glmnetpython import CVGlmNet
->>>>>>> 9590200c7107f66de2e8b7d3e48a83b32d4664a1
+
+
 try:
     import rpy2
     import rpy2.robjects.packages as rpackages
@@ -485,16 +481,6 @@ def opt_lamR(Xs, Ys, folds, maxlamR, lamR_steps, it):
     return optlamR
 
 
-#solves W = argmin_W ((XW - Y)**2).sum() + constraint related terms
-#Xs, Ys: X and Y for each subproblem
-#fuse_constraints: fusion constraints
-#ridge_constraints: ridge regression constraints. constraints not mentioned are assumed to exist with lam=lambdaR
-#it: number of iterations to run
-<<<<<<< HEAD
-def opt_lamR(Xs, Ys, ridge_constraints, it):
-    for i in range(it):
-        enet=ElasticNet(alpha=0)
-
 
 def lstsq_dumb(A, b):
     return np.dot(np.linalg.pinv(A), b)
@@ -504,11 +490,6 @@ def iter_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, settings):
     it = settings['it']
     iter_eval = settings['iter_eval']
     #from glmnetpython import ElasticNet
-=======
-def iter_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, it, lambdaR_steps):
-    from glmnetpython import ElasticNet
-
->>>>>>> 9590200c7107f66de2e8b7d3e48a83b32d4664a1
     Bs = []
     #set the initial guess (all zero)
     for j in range(len(Xs)):

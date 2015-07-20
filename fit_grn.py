@@ -328,7 +328,7 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
                 organisms.append(dsi.name)
                 err_dicts.append({m : np.zeros((k, 1)) for m in metrics1})
                 err_dicts[len(err_dicts)-1]['params'] = (lamP, lamR, lamS, settings)
-            num_species +=1
+                num_species +=1
     
     
     #set up containers for results
