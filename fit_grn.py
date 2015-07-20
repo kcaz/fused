@@ -320,17 +320,18 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
             num_species += 1
 
     else:
+        print 'good'
+        print num_species
         while os.path.isfile(os.path.join(data_fn, 'expression%d' % (num_species+1))):
             dsi = ds.standard_source(data_fn,num_species)
             all_orgs.append(dsi.name)
             if dsi.name in orgs:
+                print dsi.name
                 dss.append(dsi)
                 organisms.append(dsi.name)
                 err_dicts.append({m : np.zeros((k, 1)) for m in metrics1})
                 err_dicts[len(err_dicts)-1]['params'] = (lamP, lamR, lamS, settings)
                 num_species +=1
-    
-    
     #set up containers for results
     #prc and roc are special (not individual numbers)
     metrics2 = ['prc','roc', 'prc_con','roc_con', 'prc_noncon', 'roc_noncon']

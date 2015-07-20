@@ -6,7 +6,11 @@ import time
 import scipy.sparse
 import scipy.sparse.linalg
 from sklearn import mixture
-
+try:
+    from glmnetpython import ElasticNet
+    from glmnetpython import CVGlmNet
+except ImportError:
+    print 'glmnetpython error'
 
 try:
     import rpy2
@@ -479,7 +483,6 @@ def opt_lamR(Xs, Ys, folds, maxlamR, lamR_steps, it):
         optlamR.append(lambdaRs[opt_ind])
 
     return optlamR
-
 
 
 def lstsq_dumb(A, b):
