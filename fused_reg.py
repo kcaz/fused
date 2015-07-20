@@ -7,6 +7,7 @@ import scipy.sparse
 import scipy.sparse.linalg
 from sklearn import mixture
 from glmnetpython import ElasticNet
+from glmnetpython import CVGlmNet
 try:
     import rpy2
     import rpy2.robjects.packages as rpackages
@@ -450,17 +451,34 @@ def adjust_vol(Xs, cols, fuse_cons, ridge_cons, lamR):
 
 
 #SECTION: ----------------CODE FOR SOLVING THE MODEL-------------------
+
+#solves for the optimal lamR value for Xs, Ys. maxlamR is the max lamR value tried; lamR steps is the number of lamR values between 0 and maxlamR tried. 
+def opt_lamR(Xs, Ys, folds, maxlamR, lamR_steps, it):
+    lambdaRs = np.linspace(0, maxlamR, lamR_steps)
+    optlamR = []
+
+    for i in range(it):
+        tot_dev = []
+
+        for j in range(len(Xs)):
+            for k in range(Ys[j].shape[1]):
+                enet=ElasticNet(alpha=0)
+                enet_cv = CVGlmNet(enet, n_folds=folds)
+                enet_cv.fit(Xs[j],Ys[j][:,k], lambdas=lambdaRs)
+                tot_dev.append(enet_cv._oof_deviances)
+
+        sum_dev = sum(tot_dev)
+        opt_ind = int(np.where(sum_dev == sum_dev.min())[0])
+        optlamR.append(lambdaRs[opt_ind])
+
+    return optlamR
+
+
 #solves W = argmin_W ((XW - Y)**2).sum() + constraint related terms
 #Xs, Ys: X and Y for each subproblem
 #fuse_constraints: fusion constraints
 #ridge_constraints: ridge regression constraints. constraints not mentioned are assumed to exist with lam=lambdaR
 #it: number of iterations to run
-def opt_lamR(Xs, Ys, ridge_constraints, it):
-    for i in range(it):
-        enet=ElasticNet(alpha=0)
-
-
-
 def iter_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, it, lambdaR_steps):
     from glmnetpython import ElasticNet
 
