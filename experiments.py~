@@ -3595,9 +3595,9 @@ def test_iter1():
 def test_iter2(start,stop,num,reps):
     N_TF = 5
     N_G = 10
-    N1 = 4
-    N2 = 4
-    out = os.path.join('data','fake_data','iter_test1')
+    N1 = 7
+    N2 = 7
+    out = os.path.join('data','fake_data','iter_test2')
     ds.write_fake_data1(N1 = N1, N2 = N2, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.0)
 
     its = np.linspace(start,stop,num)
@@ -3609,20 +3609,55 @@ def test_iter2(start,stop,num,reps):
     
     for j in range(reps):
         for i in range(len(its)):
-            (b1n, b2n) = fg.fit_model(out, 1.0, 0.1, 0.0, solver='solve_ortho_direct')
-            (b1d, b2d) = fg.fit_model(out, 1.0, 0.1, 0.5, solver='solve_ortho_direct')
+            (b1n, b2n) = fg.fit_model(out, 1.0, 0.0, 0.0, solver='solve_ortho_direct')
+            (b1d, b2d) = fg.fit_model(out, 1.0, 0.0, 0.5, solver='solve_ortho_direct')
             si = fr.get_settings({'it':int(its[i])})
-            (b1i, b2i) = fg.fit_model(out, 1.0, 0.1, 0.5, solver='iter_solve', settings=si)
+            (b1i, b2i) = fg.fit_model(out, 1.0, 0.0, 0.5, solver='iter_solve', settings=si)
             iterdiff[i][j] = abs(b1d-b1i).sum()
             #print iterdiff[i][j]
             noniterdiff[i][j] = abs(b1n-b1i).sum()
             #print noniterdiff[i][j]
     toplot = np.dstack((iterdiff, noniterdiff))
+    print b1n
+    print '-------------'
+    print b1d
+    print '-------------'
+    print b1i
+    plt.matshow(b1d)
+    plt.show(block=False)
+    plt.matshow(b1i)
+    plt.show(block=False)
+    return b1i
     return toplot	
     xax = pd.Series(its, name="iterations")
     conds = pd.Series(["iter-direct fused", "iter-direct unfused"], name="type")
     sns.tsplot(toplot, time=xax, condition=conds)
     plt.axis(its)
 
+#test optimal lamR on small networks
+def test_optR():
+    N_TF = 50
+    N_G = 100
+    N1 = 400
+    N2 = 400
+    data_fn = os.path.join('data','fake_data','test_optR')
+    ds.write_fake_data1(N1 = N1, N2 = N2, out_dir = data_fn, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.0)
+
+    maxlamR = 10000
+    folds = 2
+    it = 10
+    lamR_steps = 100
+
+    ds1 = ds.standard_source(data_fn,0)
+    ds2 = ds.standard_source(data_fn,1)
+
+    (e1_tr, t1_tr, genes1, tfs1) = ds1.load_data()
+    (e2_tr, t2_tr, genes2, tfs2) = ds2.load_data()
+
+    Xs = [t1_tr, t2_tr]
+    Ys = [e1_tr, e2_tr]
+
+    optRs = fr.opt_lamR(Xs, Ys, folds, maxlamR, lamR_steps, it)
     
+    return optRs
 

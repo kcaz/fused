@@ -3639,6 +3639,7 @@ def test_iter2(start,stop,num,reps):
     sns.tsplot(toplot, time=xax, condition=conds)
     plt.axis(its)
 
+
 #tests to see if the iterative solver converges/runs on real data
 def test_iter_rd():
     out = 'data/bacteria_standard'
@@ -3652,5 +3653,32 @@ def test_iter_rd():
     plt.plot(si['sol_changes'])
     plt.show()
     return b1i
+
+#test optimal lamR on small networks
+def test_optR():
+    N_TF = 50
+    N_G = 100
+    N1 = 40
+    N2 = 40
+    data_fn = os.path.join('data','fake_data','test_optR')
+    ds.write_fake_data1(N1 = N1, N2 = N2, out_dir = data_fn, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.0)
+
+    maxlamR = 10000
+    folds = 2
+    it = 10
+    lamR_steps = 100
+
+    ds1 = ds.standard_source(data_fn,0)
+    ds2 = ds.standard_source(data_fn,1)
+
+    (e1_tr, t1_tr, genes1, tfs1) = ds1.load_data()
+    (e2_tr, t2_tr, genes2, tfs2) = ds2.load_data()
+
+    Xs = [t1_tr, t2_tr]
+    Ys = [e1_tr, e2_tr]
+
+    optRs = fr.opt_lamR(Xs, Ys, folds, maxlamR, lamR_steps, it)
+
     
+    return optRs
 
