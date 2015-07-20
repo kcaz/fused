@@ -6,7 +6,19 @@ from sklearn.metrics import roc_curve, auc, precision_recall_curve
 import os
 import collections
 #SECTION: ------------------UTILITY FUNCTIONS-----------------
+#returns a mean-squared-error evaluator function, which has signature
+# f(Bs) -> mean mse across betas, evaluated on Xs and Ys
+#exclude_tfs: don't evaluate on transcription factors
+def get_mse_evaluator(Xs_te, Ys_te, exclude_tfs=False):
+    def inner(Bs):
+        mse = 0
+        for si in range(len(Bs)):
+            mse += prediction_error(Xs_te[si], Bs[si], Ys_te[si], 'mse', exclude_tfs=exclude_tfs)
+        mse /= len(Bs)
+        return mse
+    return inner
 
+#hey! what does this do?
 def get_rank(scores, labels, coords):
     score_array = np.array(scores)
     label_array = np.array(labels)
@@ -97,8 +109,7 @@ def fit_model(data_fn, lamP, lamR, lamS, solver='solve_ortho_direct', settings =
         Bs = fl.solve_ortho_ref(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, settings = settings)
     if solver == 'iter_solve':
         #solve solution paths then return the last value
-        
-        Bs = fl.solve_ortho_iter(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, settings = settings)[-1][-1]
+        Bs = fl.solve_ortho_iter(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, settings = settings)
         
     return Bs
 
@@ -318,8 +329,8 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
                 err_dicts.append({m : np.zeros((k, 1)) for m in metrics1})
                 err_dicts[len(err_dicts)-1]['params'] = (lamP, lamR, lamS, settings)
             num_species +=1
-        num_species-=1
-
+    
+    
     #set up containers for results
     #prc and roc are special (not individual numbers)
     metrics2 = ['prc','roc', 'prc_con','roc_con', 'prc_noncon', 'roc_noncon']
@@ -410,7 +421,13 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
             Bs = fl.solve_ortho_direct_mcp(organisms, genes, tfs, Xs, Ys, orth, priors_tr_fl, lamP, lamR, lamS, settings = settings)
         if solver == 'solve_ortho_direct_em':
             Bs = fl.solve_ortho_direct_em(organisms, genes, tfs, Xs, Ys, orth, priors_tr_fl, lamP, lamR, lamS, settings = settings)
-
+        if solver == 'iter_solve':
+        #solve solution paths then return the last value
+            if settings['iter_eval']:
+                iter_eval = get_mse_evaluator(Xs_te, Ys_te)
+                settings['iter_eval'] = iter_eval
+                Bs = fl.solve_ortho_iter(organisms, genes, tfs, Xs, Ys, orth, priors_tr_fl, lamP, lamR, lamS, settings = settings)
+            
          #evaluate a bunch of metrics
         (corr, fused_coeffs) = fused_coeff_corr(organisms, genes, tfs, orth, Bs)
             

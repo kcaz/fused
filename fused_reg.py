@@ -6,7 +6,7 @@ import time
 import scipy.sparse
 import scipy.sparse.linalg
 from sklearn import mixture
-from glmnetpython import ElasticNet
+#from glmnetpython import ElasticNet
 try:
     import rpy2
     import rpy2.robjects.packages as rpackages
@@ -31,6 +31,10 @@ def get_settings(override = None):
     d['m_it'] = 5
     d['it'] = 100 #number of iterative solver iterations (lamS steps)
     d['lamR_steps'] = 100
+    d['sol_changes'] = [] #for iterative solver, how fast the solution changes
+    d['iter_eval'] = False #for iterative solver, evaluation function for scoring lambdaS paths. If true, will get filled in as appropriate
+    d['lamS_path'] = [] #gets filled in if iter_eval is supplied
+    d['lamS_scores'] = []
     if override != None:
         for k in override.keys():
             if k in d:
@@ -274,6 +278,9 @@ def orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS, lamS_opt=None):
 #given priors, returns a list of constraints. constraints representing priors have their second coefficient equal to None.
 #NOTE: this function does not allow priors to have different weights.
 def priors_to_constraints(organisms, gene_ls, tf_ls, priors, lam):
+    print organisms
+    print len(gene_ls)
+    
     org_to_ind = {organisms[x] : x for x in range(len(organisms))}
     gene_to_inds = map(lambda o: {gene_ls[o][x] : x for x in range(len(gene_ls[o]))}, range(len(organisms)))
     tf_to_inds = map(lambda o: {tf_ls[o][x] : x for x in range(len(tf_ls[o]))}, range(len(organisms)))
@@ -460,81 +467,100 @@ def opt_lamR(Xs, Ys, ridge_constraints, it):
         enet=ElasticNet(alpha=0)
 
 
+def lstsq_dumb(A, b):
+    return np.dot(np.linalg.pinv(A), b)
 
-def iter_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, it, lambdaR_steps):
-    from glmnetpython import ElasticNet
-
+#iterative solver
+def iter_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, settings):
+    it = settings['it']
+    iter_eval = settings['iter_eval']
+    #from glmnetpython import ElasticNet
     Bs = []
     #set the initial guess (all zero)
     for j in range(len(Xs)):
         Bs.append(np.zeros((Xs[j].shape[1], Ys[j].shape[1])))
-    Bss = []
-    for i in range(it):
-        Bss.append([])
-        for j in range(lambdaR_steps):
-            Bss[i].append(map(lambda x: x.copy(),Bs))
-    print lambdaR_steps
-    print len(Bss[1][0])
-    
+    cB = Bs
+    pB = map(lambda x: x.copy(), Bs)
+    lamS_path = []
+    lam_ramp = np.linspace(0, 1.0, it)
+    sol_changes = []
+    scores = []
+    #build a map from subproblem/column to constraint
+    #note: i think the constraint list generates A -> B and B -> A, but this won't work if that's wrong
+    sc_to_con = collections.defaultdict(lambda: [])
+    for con in fuse_constraints:
+        sc_to_con[(con.c1.sub, con.c1.c)].append(con)
+            
+    #builds a penalty matrix associated with column c of subproblem s
+    def build_pen_targ(s, c):
+        P = np.zeros((len(sc_to_con[s,c]), Bs[s].shape[0]))
+        targ = []
+        for i, con in enumerate(sc_to_con[s, c]):
+            r_fr = con.c1.r
+            r_to = con.c2.r
+            P[i, r_fr] = 1.0
+            targ.append((con.c2.sub, con.c2.r, con.c2.c))
+        return (P, targ)
 
-    #for i in range(it):
-    #    Bss.append(map(lambda x: x.copy(), Bs))
+    #given a list of targets as returned by build_pen_targ, returns vector of targeted values
+    def targ_to_yp(targ):
+        yp = np.zeros((len(targ), 1))
+        for i, (s, r, c) in enumerate(targ):
+            yp[i, 0] = pB[s][r,c]
+        return yp
 
-    for i in range(1,it):
-        cB = Bss[i]
-        pB = Bss[i-1]
-        lam_ramp = float(i-1)/(it-2) #constant to multiply by lam
+    #first, build the penalty matrices and find the targets once
+    P_targ_saved = []
+    for s in range(len(Xs)):
+        P_targ_saved.append([])
+        for c in range(Ys[s].shape[1]):
+            P_targ_saved[-1].append(build_pen_targ(s, c))
         
+    for i in range(it):
+        #first we swap cB and pB
+        tmp = pB
+        pB = cB
+        cB = tmp
         for s in range(len(Xs)):
             X = Xs[s] #X, Y for current subproblem s
             Y = Ys[s]
+            #print 'here1'
+            lamsc = lam_ramp[i]**0.5
+            #print 'here2 %f'%lamsc
+            #lamsc = 0.3
             for c in range(Y.shape[1]): #column of B we are solving
-                enet=ElasticNet(alpha=0)
+                print 'iteration %d, sub %d, col %d'%(i,s,c),
+                print '\r',
 
-                y = Y[:, [c]]
-                #I = np.eye(X.shape[1])*lambdaR*lam_ramp
-                ypad_l = []
-                xpad_l = []
-                
-                #add in the fusion constraints
-                for con in fuse_constraints:
-                    conlam = (con.lam*lam_ramp)**0.5
-                    if con.c1.c == c and con.c1.sub == s:
-                        targ = pB[99][con.c2.sub][con.c2.r,con.c2.c]*conlam
-                        xpad_l.append(np.zeros((1,X.shape[1])))
-                        ypad_l.append(targ)
-                        xpad_l[-1][0, con.c1.r] = conlam                     
-                if len(xpad_l):
-                    xpad = np.vstack(xpad_l)
-                else:
-                    xpad = np.zeros((0, X.shape[1]))
-                if len(ypad_l):
-                    ypad = np.vstack(ypad_l)
-                else:
-                    ypad = np.zeros((0, 1))
+                I = np.eye(X.shape[1])*lambdaR
+                (P, targ) = P_targ_saved[s][c]
+                yp = targ_to_yp(targ)
 
-                F = np.vstack((X, xpad))
-                p = np.vstack((y, ypad))
-                #we solve b that minimizes Fb = p
-                lambdaRs = np.linspace(0, lambdaR, lambdaR_steps)
-                enet.fit(F,p,lambdas=lambdaRs)
-                print enet._out_n_lambdas
-                print enet.out_lambdas
-                for k in range(lambdaR_steps):
-                    b = enet.get_coefficients_from_lambda_idx(k)
-                    
-                    print (s, k,i)
-                    print len(cB[s])
-                    print len(pB[s])
-                    print 'wtf'
-                    print len(Bss[1])
-                    cB[s][k][:, c] = b
+                F = np.vstack((X, I, P * 0.5))
                 
-                #(b, resid, rank, sing) = np.linalg.lstsq(F, p)
                 
-                #cB[s][:, [c]] = b
-        #print cB[0][0,0]
-    return Bss
+                yI = np.zeros((I.shape[0], 1))
+                y = np.vstack((Y[:, [c]], yI, yp *lamsc))
+                
+                #we solve b that minimizes Fb = y
+                #beh = np.dot(np.dot(np.linalg.inv(np.dot(F.T, F)), F.T), y)
+                
+                #SOMETHING WEIRD IS HAPPENING HERE
+                (b, resid, rank, sing) = np.linalg.lstsq(F, y)
+                #b=lstsq_dumb(F, y)
+            
+                cB[s][:, [c]] = b
+            #check for convergence: how much has the solution changed?
+            sol_change = ((pB[s] - cB[s])**2).sum()
+            sol_changes.append(sol_change)
+        if iter_eval:
+            scores.append(iter_eval(cB))
+            print 'iteration %d: score: %f'%(i, scores[-1])
+    #backchannel return sol_changes
+    settings['sol_changes'].append(sol_changes)
+    settings['lamS_path'].append(lam_ramp)
+    settings['lamS_scores'].append(scores)
+    return cB
 
 
 #no cleverness at all
@@ -628,8 +654,8 @@ def solve_ortho_iter(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors,lamP, lamR,
         settings = get_settings()    
     ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
     fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS, lamS_opt)
-                                       
-    Bs = iter_solve(Xs, Ys, fuse_con, ridge_con, lamR, settings['it'], settings['lamR_steps'])
+    #actually pass settings to this one
+    Bs = iter_solve(Xs, Ys, fuse_con, ridge_con, lamR, settings)
     
     return Bs
 
