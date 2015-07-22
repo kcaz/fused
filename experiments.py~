@@ -1271,7 +1271,7 @@ def plot_betas_scad(net_path):
     genes = [genes1, genes2]
     tfs = [tfs1, tfs2]
     (priors1, signs1) = ds1.get_priors()
-    (priors2, signs2) = ds2.get_priors()	
+    (priors2, signs2) = ds2.get_priors()
     priors = priors1 + priors2
     (constraints, marks) = fr.orth_to_constraints_marked(organisms, genes, tfs, orth, 1.0)
 
@@ -1407,7 +1407,7 @@ def plot_betas2():
     genes = [genes1, genes2]
     tfs = [tfs1, tfs2]
     (priors1, signs1) = ds1.get_priors()
-    (priors2, signs2) = ds2.get_priors()	
+    (priors2, signs2) = ds2.get_priors()
     priors = priors1 + priors2
     (constraints, marks) = fr.orth_to_constraints_marked(organisms, genes, tfs, orth, 1.0)
 
@@ -3578,19 +3578,24 @@ def plot_operon_roc(lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None
 
 
 #tests to see if the iterative solver is getting the same solution as the non iterative solver on a small network
-def test_iter1():
-    N_TF = 5
-    N_G = 10
-    N1 = 4
-    N2 = 4
+def test_iter1(sc=1):
+    N_TF = 5*sc
+    N_G = 10*sc
+    N1 = 4*sc
+    N2 = 4*sc
     out = os.path.join('data','fake_data','iter_test1')
     ds.write_fake_data1(N1 = N1, N2 = N2, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.0)
     
     (b1n, b2n) = fg.fit_model(out, 1.0, 0.1, 0.0, solver='solve_ortho_direct')
-    (b1d, b2d) = fg.fit_model(out, 1.0, 0.1, 0.5, solver='solve_ortho_direct')
-    si = fr.get_settings({'it':1000})
-    (b1i, b2i) = fg.fit_model(out, 1.0, 0.1, 0.5, solver='iter_solve', settings=si)
+    (b1d, b2d) = fg.fit_model(out, 1.0, 0.1, 5.5, solver='solve_ortho_direct')
+    si = fr.get_settings({'it':10})
+    (b1i, b2i) = fg.fit_model(out, 1.0, 0.1, 5.5, solver='iter_solve', settings=si)
+    print 'iterative vs. direct: %f' % ((b1d - b1i)**2).mean()
+    print 'unfused vs. direct: %f' % ((b1d - b1n)**2).mean()
+    #plt.plot(si['sol_changes'])
+    #plt.show()
     return (b1n, b1d, b1i)
+
 
 def test_iter2(start,stop,num,reps):
     N_TF = 5
@@ -3628,18 +3633,33 @@ def test_iter2(start,stop,num,reps):
     plt.matshow(b1i)
     plt.show(block=False)
     return b1i
-    return toplot	
+return toplot
     xax = pd.Series(its, name="iterations")
     conds = pd.Series(["iter-direct fused", "iter-direct unfused"], name="type")
     sns.tsplot(toplot, time=xax, condition=conds)
     plt.axis(its)
 
+
+#tests to see if the iterative solver converges/runs on real data
+def test_iter_rd():
+    out = 'data/bacteria_standard'
+    si = fr.get_settings({'it':10, 'iter_eval':True})
+    lamR = 0.2
+    lamS = 1.0
+    lamP = 1.0
+    k = 15
+    (b1i, b2i) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='iter_solve', reverse = True, cv_both = (True, False), exclude_tfs=False, pct_priors=0, seed=44.44, settings=si, orgs=['B_subtilis','B_anthracis'])
+    
+    plt.plot(si['sol_changes'])
+    plt.show()
+    return b1i
+
 #test optimal lamR on small networks
 def test_optR():
     N_TF = 50
     N_G = 100
-    N1 = 400
-    N2 = 400
+    N1 = 40
+    N2 = 40
     data_fn = os.path.join('data','fake_data','test_optR')
     ds.write_fake_data1(N1 = N1, N2 = N2, out_dir = data_fn, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.0)
 
@@ -3658,6 +3678,6 @@ def test_optR():
     Ys = [e1_tr, e2_tr]
 
     optRs = fr.opt_lamR(Xs, Ys, folds, maxlamR, lamR_steps, it)
+
     
     return optRs
-

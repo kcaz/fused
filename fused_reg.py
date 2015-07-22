@@ -516,15 +516,15 @@ def iter_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, settings):
         for i, con in enumerate(sc_to_con[s, c]):
             r_fr = con.c1.r
             r_to = con.c2.r
-            P[i, r_fr] = 1.0
-            targ.append((con.c2.sub, con.c2.r, con.c2.c))
+            P[i, r_fr] = con.lam
+            targ.append((con.c2.sub, con.c2.r, con.c2.c, con.lam))
         return (P, targ)
 
     #given a list of targets as returned by build_pen_targ, returns vector of targeted values
-    def targ_to_yp(targ):
+    def targ_to_yp(targ, lamsc):
         yp = np.zeros((len(targ), 1))
-        for i, (s, r, c) in enumerate(targ):
-            yp[i, 0] = pB[s][r,c]
+        for i, (s, r, c, lam) in enumerate(targ):
+            yp[i, 0] = (lam*lamsc)**0.5 * Bs[s][r,c]
         return yp
 
     #first, build the penalty matrices and find the targets once
@@ -543,29 +543,27 @@ def iter_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, settings):
             X = Xs[s] #X, Y for current subproblem s
             Y = Ys[s]
             #print 'here1'
-            lamsc = lam_ramp[i]**0.5
-            #print 'here2 %f'%lamsc
-            #lamsc = 0.3
+            lamsc = lam_ramp[i]
+            
+            
             for c in range(Y.shape[1]): #column of B we are solving
                 print 'iteration %d, sub %d, col %d'%(i,s,c),
                 print '\r',
 
                 I = np.eye(X.shape[1])*lambdaR
                 (P, targ) = P_targ_saved[s][c]
-                yp = targ_to_yp(targ)
+                P_cat = (P*lamsc)**0.5
 
-                F = np.vstack((X, I, P * 0.5))
-                
+                yp = targ_to_yp(targ, lamsc)
+                #print P*lamsc
+                F = np.vstack((X, I, P_cat))
                 
                 yI = np.zeros((I.shape[0], 1))
-                y = np.vstack((Y[:, [c]], yI, yp *lamsc))
-                
-                #we solve b that minimizes Fb = y
-                #beh = np.dot(np.dot(np.linalg.inv(np.dot(F.T, F)), F.T), y)
-                
+                y = np.vstack((Y[:, [c]], yI, yp))
+                                
                 #SOMETHING WEIRD IS HAPPENING HERE
-                #(b, resid, rank, sing) = np.linalg.lstsq(F, y)
-                b=lstsq_dumb(F, y)
+                (b, resid, rank, sing) = np.linalg.lstsq(F, y)
+                #b=lstsq_dumb(F, y)
                 
                 cB[s][:, [c]] = b
             #check for convergence: how much has the solution changed?
