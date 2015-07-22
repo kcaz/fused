@@ -564,9 +564,9 @@ def iter_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, settings):
                 #beh = np.dot(np.dot(np.linalg.inv(np.dot(F.T, F)), F.T), y)
                 
                 #SOMETHING WEIRD IS HAPPENING HERE
-                (b, resid, rank, sing) = np.linalg.lstsq(F, y)
-                #b=lstsq_dumb(F, y)
-            
+                #(b, resid, rank, sing) = np.linalg.lstsq(F, y)
+                b=lstsq_dumb(F, y)
+                
                 cB[s][:, [c]] = b
             #check for convergence: how much has the solution changed?
             sol_change = ((pB[s] - cB[s])**2).sum()
