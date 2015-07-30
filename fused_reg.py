@@ -547,7 +547,7 @@ def iter_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, settings):
             
             
             for c in range(Y.shape[1]): #column of B we are solving
-                print 'iteration %d, sub %d, col %d'%(i,s,c),
+                print 'iteration %d, lamS=%f, sub %d, col %d'%(i,lam_ramp[i],s,c),
                 print '\r',
 
                 I = np.eye(X.shape[1])*lambdaR
