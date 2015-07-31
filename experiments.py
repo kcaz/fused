@@ -3639,6 +3639,20 @@ def test_iter2(start,stop,num,reps):
     sns.tsplot(toplot, time=xax, condition=conds)
     plt.axis(its)
 
+def test_iter_all(k=2, lamP=1.0, lamR=0.5, lamS=1.0):
+    out = 'data/bacteria_standard'
+    si_all = fr.get_settings({'it':15, 'iter_eval':True})
+    si_su_eu = fr.get_settings({'it':15, 'iter_eval':True})
+    si_su_an = = fr.get_settings({'it':15, 'iter_eval':True})
+
+    errd = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='iter_solve', reverse = True, cv_both = (True, True, True), exclude_tfs=False, pct_priors=0, seed=44.4, settings=si_all, orgs=['B_subtilis','B_anthracis', 'B_subtilis_eu'])
+    errd = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='iter_solve', reverse = True, cv_both = (True, True, True), exclude_tfs=False, pct_priors=0, seed=44.4, settings=si_su_eu, orgs=['B_subtilis','B_subtilis_eu'])
+    errd = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='iter_solve', reverse = True, cv_both = (True, True, True), exclude_tfs=False, pct_priors=0, seed=44.4, settings=si_su_an, orgs=['B_subtilis','B_anthracis'])
+    import pickle
+    with file('lamSpaths') as f:
+        pickle.dump(f, (si_all, si_su_eu, si_su_an))
+    
+
 
 #tests to see if the iterative solver converges/runs on real data
 def test_iter_rd():
@@ -3648,7 +3662,7 @@ def test_iter_rd():
     lamS = 1.0
     lamP = 1.0
     k = 15
-    (b1i, b2i) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='iter_solve', reverse = True, cv_both = (True, False), exclude_tfs=False, pct_priors=0, seed=44.44, settings=si, orgs=['B_subtilis','B_anthracis'])
+    errd = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='iter_solve', reverse = True, cv_both = (True, False), exclude_tfs=False, pct_priors=0, seed=44.44, settings=si, orgs=['B_subtilis','B_anthracis'])
     
     plt.plot(si['sol_changes'])
     plt.show()
