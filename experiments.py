@@ -3654,6 +3654,36 @@ def test_iter_rd():
     plt.show()
     return b1i
 
+def test_optR_rd():
+    data_fn = 'data/bacteria_standard'
+    orgs=['B_subtilis','B_anthracis','B_subtilis_eu']
+    dss = []
+    num_species = 0
+   
+    cand_species = 1
+    while os.path.isfile(os.path.join(data_fn, 'expression%d' % (cand_species))):
+        dsi = ds.standard_source(data_fn,num_species)
+        if dsi.name in orgs:
+            dss.append(dsi)
+            num_species +=1
+        cand_species += 1
+
+    Xs = []
+    Ys = []
+    for i in range(num_species):
+        dsi = ds.standard_source(data_fn,i)
+        (ex, tex, genes, tfs) = dsi.load_data()
+        Xs.append(ex)
+        Ys.append(tex)
+
+    folds = 2
+    maxlamR = 0.5
+    lamR_steps = 20
+    it = 1
+    (optRs, tot_dev, lambdas) = fr.opt_lamR(Xs, Ys, folds, maxlamR, lamR_steps, it)
+    return (optRs, tot_dev, lambdas)
+
+
 #test optimal lamR on small networks
 def test_optR():
     N_TF = 50
@@ -3682,3 +3712,33 @@ def test_optR():
     
     return optRs
 
+
+def operons_scad():
+    net_path = 'data/bacteria_standard'
+    lamR = 0.5
+    lamP = 1
+    lamS = 0.5
+    ds1 = ds.standard_source(net_path,0)
+    ds2 = ds.standard_source(net_path,2)
+    orth_fn = os.path.join(net_path, 'operon')
+    organisms = [ds1.name, ds2.name]
+    orth = ds.load_orth(orth_fn, organisms)
+    (e1, t1, genes1, tfs1) = ds1.load_data()
+    (e2, t2, genes2, tfs2) = ds2.load_data()
+    Xs = [t1, t2]
+    Ys = [e1, e2]
+    genes = [genes1, genes2]
+    tfs = [tfs1, tfs2]
+    (priors1, signs1) = ds1.get_priors()
+    (priors2, signs2) = ds2.get_priors()	
+    priors = priors1 + priors2
+    (constraints, marks) = fr.orth_to_constraints_marked(organisms, genes, tfs, orth, 1.0)
+
+    #Bs_uf = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS=0)
+    #Bs_fr = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
+
+    settings_fs=fr.get_settings({'s_it': 30, 'per':((1/(1+float(0.5)))*100), 'return_cons':True})
+    Bs_fs = fr.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, settings = settings_fs)
+
+    new_fuse_cons = settings_fs['cons'] 
+    return new_fuse_cons
