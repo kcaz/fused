@@ -322,8 +322,8 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
     else:
         cand_species = 1
         while os.path.isfile(os.path.join(data_fn, 'expression%d' % (cand_species))):
-            dsi = ds.standard_source(data_fn,num_species)
-            all_orgs.append(dsi.name)
+            dsi = ds.standard_source(data_fn,cand_species - 1)
+            all_orgs.append(dsi.name)            
             if dsi.name in orgs:
                 dss.append(dsi)
                 organisms.append(dsi.name)
@@ -331,7 +331,7 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
                 err_dicts[len(err_dicts)-1]['params'] = (lamP, lamR, lamS, settings)
                 num_species +=1
             cand_species += 1
-    #set up containers for results
+    #set up containers for resTults
     #prc and roc are special (not individual numbers)
     metrics2 = ['prc','roc', 'prc_con','roc_con', 'prc_noncon', 'roc_noncon']
     for err_dict in err_dicts:
@@ -351,7 +351,7 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
     
     folds = map((lambda x: x.partition_data(k)), dss)
     all_priors = map((lambda x: x.get_priors()[0]), dss)
-
+    
     #helper to return all but ith entry of list x    
     excl = lambda x,i: x[0:i]+x[(i+1):] 
     
@@ -364,6 +364,7 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
         return (p1, p2)
 
     allpriors = map(lambda x: r_partition(x, int(pct_priors*len(x))), all_priors)
+    
     priors_tr = map(lambda x: x[0], allpriors)
     priors_te = map(lambda x: x[1], allpriors)
 
@@ -408,7 +409,7 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
 
             genes[si] = genes_si
             tfs[si] = tfs_si
-
+        print priors_tr
         priors_tr_fl = priors_tr[0] + priors_tr[1]
         #solve the model
         if solver == 'solve_ortho_direct':
