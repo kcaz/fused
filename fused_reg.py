@@ -922,6 +922,7 @@ def weighted_covar(weights, samples):
         w_acc += weights[i]
     return (1/(w_acc-1.0)) * acc
 
+#returns differences between betas which have fusion constraints 
 def beta_diff(Bs, fuse_cons):
     beta_diffs = np.zeros((len(fuse_cons)))
     for i, con in enumerate(fuse_cons):

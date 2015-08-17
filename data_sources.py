@@ -591,6 +591,7 @@ ba_bs_orth = lambda: load_orth('data/bacteria1/bs_ba_ortho_804',['B_anthracis','
 #Okuda S, Katayama T, Kawashima S, Goto S, and Kanehisa M.; ODB: a database of operons accumulating known operons across multiple genomes. Nucleic Acids Res. 34(Database issue):D358-362 (2006).[pubmed]
 
 #takes downloaded operon file and writes new file with just bsu operons
+#makes tfs orthologs of themselves
 def bsu_operon_to_orth(op_file, new_orth_file):
     f = file(op_file)
     w = file(new_orth_file, 'w')
@@ -813,7 +814,7 @@ def generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, organisms, falsepos,
         orth_genes.add(candidate_orth.genes[0])
         orth_genes.add(candidate_orth.genes[1])
         to_add.append(candidate_orth)
-        
+
     #print '%d real, %d fake' % (len(orths_retain), len(to_add))
     real_fake_orths = orths_retain + to_add
     
@@ -951,7 +952,7 @@ def write_orth(outf, orth, organisms):
         row_str[org1].append(gene1)
         row_str[org2].append(gene2)
         f.write('\t'.join(map(lambda x: ','.join(x), row_str))+ '\t'
- + 'True' + '\n')
+ + str(real) + '\n')
 
     f.close()
 
