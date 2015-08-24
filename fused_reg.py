@@ -166,6 +166,7 @@ def orth_to_constraints_marked(organisms, gene_ls, tf_ls, orth, lamS):
     orth_pairs = orth_to_one_one_orth(orth)
 
     #build a set to use for checking on the realness of an orthology
+    
     real_orths = set()
     for orth in orth_pairs:
         if orth.real:
@@ -173,13 +174,20 @@ def orth_to_constraints_marked(organisms, gene_ls, tf_ls, orth, lamS):
             real_orths.add((orth.genes[1], orth.genes[0]))
 
     #build a dictionary mapping each gene to all of its orthologs
-    ortho_dict = dictl()
+    #the orthology file can be messy, and specify the same orthology multiple times, so changing from a list of orthologs to a set of orthologs
+    
+    ortho_dict = collections.defaultdict(lambda: set())#dictl()
     for op in orth_pairs:
         (gene1, gene2) = op.genes
-        ortho_dict[gene1].append(gene2)
-        ortho_dict[gene2].append(gene1)
+        
+        ortho_dict[gene1].add(gene2)
+        ortho_dict[gene2].add(gene1)
+    #for the purposes of operons, it's nice if every gene is an ortholog of itself
+    for org_i in range(len(organisms)):
+        for g_i in range(len(gene_ls[org_i])):
+            g = one_gene(gene_ls[org_i][g_i], organisms[org_i])
+            #ortho_dict[g].add(g)
 
-    
     constraints = []
     marks = []
     for org_i in range(len(organisms)):
@@ -201,24 +209,36 @@ def orth_to_constraints_marked(organisms, gene_ls, tf_ls, orth, lamS):
                             continue #if a tf is orthologous to a non-tf
                         if not tf_orth.name in tf_to_inds[sub2] or not g_orth.name in gene_to_inds[sub2]:
                             continue #orth file might specify genes that we don't have
-
+                        if tf == tf_orth and g == g_orth:
+                            continue #no point in self constraints
                         #now check if it's real
                         real = (g, g_orth) in real_orths and (tf, tf_orth) in real_orths
 
                         coeff1 = coefficient(sub1, tf_to_inds[sub1][tf.name], gene_to_inds[sub1][g.name])
                         coeff2 = coefficient(sub2, tf_to_inds[sub2][tf_orth.name], gene_to_inds[sub2][g_orth.name])
                         
-
+                        
                         constr = constraint(coeff1, coeff2, lamS)
+                        #print 'appending '+str(constr)
+                        #print (tf, g)
+                        #print (tf_orth, g_orth)
+                        #print (ortho_dict[tf]) 
+                        #print ( ortho_dict[g])
+                        #raw_input('')
                         constraints.append(constr)
                         marks.append(real)
     return (constraints, marks)
+
+#now just call orth_to_constraints_marked and throw away the marks. Lost the ability to specify lamS_opt, but we never did that. can add back in later
+def orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS):
+    (con, marks) = orth_to_constraints_marked(organisms, gene_ls, tf_ls, orth, lamS)
+    return con
 
 #enumerates fusion constraints from orthology
 #args as in solve_ortho_direct
 #returns list of constraints. individual constraints are pairs of coefficients, with an associated weight lamS
 #NOTE!!!! THIS IS FUCKED UP IF THEY HAVE OVERLAPPING GENE NAMES! FIX FIX FIX FIX FIX
-def orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS, lamS_opt=None):
+def orth_to_constraints_old(organisms, gene_ls, tf_ls, orth, lamS, lamS_opt=None):
     #build some maps
     
     org_to_ind = {organisms[x] : x for x in range(len(organisms))}
@@ -530,11 +550,13 @@ def iter_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, settings):
         return yp
 
     #first, build the penalty matrices and find the targets once
-    P_targ_saved = []
-    for s in range(len(Xs)):
-        P_targ_saved.append([])
-        for c in range(Ys[s].shape[1]):
-            P_targ_saved[-1].append(build_pen_targ(s, c))
+    #don't do this after all!
+    if False:
+        P_targ_saved = []
+        for s in range(len(Xs)):
+            P_targ_saved.append([])
+            for c in range(Ys[s].shape[1]):
+                P_targ_saved[-1].append(build_pen_targ(s, c))
         
     for i in range(it):
         #first we swap cB and pB
@@ -553,7 +575,8 @@ def iter_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, settings):
                 print '\r',
 
                 I = np.eye(X.shape[1])*lambdaR
-                (P, targ) = P_targ_saved[s][c]
+                (P, targ) = build_pen_targ(s,c)
+                #(P, targ) = P_targ_saved[s][c]
                 P_cat = (P*lamsc)**0.5
 
                 yp = targ_to_yp(targ, lamsc)
@@ -667,11 +690,12 @@ def solve_ortho_direct(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors,lamP, lam
 #YS: list of gene expression matrices
 #Orth: list of lists of one_genes
 #priors: list of lists of one_gene pairs
+#CURRENTLY IGNORING lamS_opt
 def solve_ortho_iter(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors,lamP, lamR, lamS, lamS_opt=None, adjust=False, self_reg_pen = 0, settings=None):   
     if settings == None:
         settings = get_settings()    
     ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
-    fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS, lamS_opt)
+    fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
     #actually pass settings to this one
     Bs = iter_solve(Xs, Ys, fuse_con, ridge_con, lamR, settings)
     

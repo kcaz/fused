@@ -3548,20 +3548,28 @@ def check_operons_priors():
         gene = fr.one_gene(name = d1.genes[coeff.c], organism = d1.name)
         return (tf, gene)
     con_pairs = map(lambda c: (coeff_to_g(c.c1), coeff_to_g(c.c2)), con)
-
+    
     both = filter(lambda cp: cp[0] in priors_s and cp[1] in priors_s, con_pairs)
     neither = filter(lambda cp: not (cp[0] in priors_s or cp[1] in priors_s), con_pairs)
+    either = filter(lambda cp: cp[0] in priors_s or cp[1] in priors_s, con_pairs)
+    both_either = filter(lambda cp: cp[0] in priors_s and cp[1] in priors_s, either)
+    #return (con_pairs, con, both, either, both_either)
+    prob_both = float(len(both)) / len(con_pairs)
+    prob_neither = float(len(neither)) / len(con_pairs)
+    prob_both_cond = float(len(both_either)) / len(either)
+    
+    
     chance_in_priors = float(len(priors)) / (len(d1.tfs) * len(d1.genes))
     chance_both = chance_in_priors ** 2
 
     chance_neither = (1-chance_in_priors)**2
 
-    print (float(len(both))/len(con_pairs), float(len(neither))/len(con_pairs))
-
-    print (chance_both, chance_neither)
-
-    print (float(len(both))/len(con_pairs) / chance_both)
-
+    print 'both in: %f, both out: %f' % (prob_both, prob_neither)
+    print 'P(both | one) = %f' % prob_both_cond
+    print 'relative to chance: %f' % (prob_both / chance_both)
+    print either[0:10]
+    print both_either[0:10]
+    
 def try_solve_operon(lamP = 1.0, lamR = 1.0, lamS = 2):
     settings = fr.get_settings()
     solver = 'solve_ortho_direct'    
@@ -3643,16 +3651,21 @@ def test_iter_all(k=2, lamP=1.0, lamR=0.5, lamS=1.0):
     out = 'data/bacteria_standard'
     si_all = fr.get_settings({'it':15, 'iter_eval':True})
     si_su_eu = fr.get_settings({'it':15, 'iter_eval':True})
-    si_su_an = = fr.get_settings({'it':15, 'iter_eval':True})
+    si_su_an = fr.get_settings({'it':15, 'iter_eval':True})
 
     errd = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='iter_solve', reverse = True, cv_both = (True, True, True), exclude_tfs=False, pct_priors=0, seed=44.4, settings=si_all, orgs=['B_subtilis','B_anthracis', 'B_subtilis_eu'])
     errd = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='iter_solve', reverse = True, cv_both = (True, True, True), exclude_tfs=False, pct_priors=0, seed=44.4, settings=si_su_eu, orgs=['B_subtilis','B_subtilis_eu'])
     errd = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='iter_solve', reverse = True, cv_both = (True, True, True), exclude_tfs=False, pct_priors=0, seed=44.4, settings=si_su_an, orgs=['B_subtilis','B_anthracis'])
     import pickle
-    with file('lamSpaths') as f:
+    with file('lamSpaths','w') as f:
         pickle.dump(f, (si_all, si_su_eu, si_su_an))
     
-
+#computes lamS path for orths coming from operons
+def test_operons_iter(k=2, lamP=1.0, lamR=0.5, lamS=1.0, pct_priors=0):
+    out = 'data/bacteria_standard'
+    si = fr.get_settings({'it':15, 'iter_eval':True})
+    errd = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='iter_solve', reverse = True, cv_both = (True, True, True), exclude_tfs=False, pct_priors=pct_priors, seed=44.4, settings=si, orgs=['B_subtilis'], orth_file=['operon'])
+    return (errd, si)
 
 #tests to see if the iterative solver converges/runs on real data
 def test_iter_rd():

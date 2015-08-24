@@ -18,6 +18,38 @@ def get_mse_evaluator(Xs_te, Ys_te, exclude_tfs=False):
         return mse
     return inner
 
+#returns a R2 evaluator function, which has signature
+# f(Bs) -> mean R2 across betas, evaluated on Xs and Ys
+#exclude_tfs: don't evaluate on transcription factors
+def get_R2_evaluator(Xs_te, Ys_te, exclude_tfs=False):
+    def inner(Bs):
+        mse = 0
+        for si in range(len(Bs)):
+            mse += prediction_error(Xs_te[si], Bs[si], Ys_te[si], 'R2', exclude_tfs=exclude_tfs)
+        mse /= len(Bs)
+        return mse
+    return inner
+
+#returns a R2 evaluator function, which has signature
+# f(Bs) -> mean R2 across betas, evaluated on Xs and Ys
+#exclude_tfs: don't evaluate on transcription factors
+def get_aupr_evaluator(Xs_te, Ys_te, genes, tfs, priors, tr_priors, exclude_tfs=False):
+    
+    def inner(Bs):
+        aupr_acc = 0
+        for si in range(len(Bs)):
+            Xsi = Xs_te[si]
+            Ysi = Ys_te[si]
+            Bsi = Bs[si]
+            S = rescale_betas(Xsi, Ysi, Bsi)
+        
+            (aupr, prc) = eval_network_pr(S, genes[si], tfs[si], priors[si], tr_priors=tr_priors[si], exclude_tfs=exclude_tfs, constraints = None)        
+            
+            if not np.isnan(aupr):
+                aupr_acc += aupr
+        return aupr_acc
+    return inner
+
 #hey! what does this do?
 def get_rank(scores, labels, coords):
     score_array = np.array(scores)
@@ -409,8 +441,8 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
 
             genes[si] = genes_si
             tfs[si] = tfs_si
-        print priors_tr
-        priors_tr_fl = priors_tr[0] + priors_tr[1]
+        
+        priors_tr_fl = reduce(lambda x,y: x+y, priors_tr)
         #solve the model
         if solver == 'solve_ortho_direct':
             Bs = fl.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors_tr_fl, lamP, lamR, lamS, lamS_opt, settings = settings)
@@ -425,7 +457,9 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
         if solver == 'iter_solve':
         #solve solution paths then return the last value
             if settings['iter_eval']:
-                iter_eval = get_mse_evaluator(Xs_te, Ys_te)
+                #iter_eval = get_R2_evaluator(Xs_te, Ys_te)
+                #iter_eval = get_mse_evaluator(Xs_te, Ys_te)
+                iter_eval = get_aupr_evaluator(Xs_te, Ys_te, genes, tfs, priors_te, priors_tr)
                 settings['iter_eval'] = iter_eval
                 Bs = fl.solve_ortho_iter(organisms, genes, tfs, Xs, Ys, orth, priors_tr_fl, lamP, lamR, lamS, settings = settings)
             
@@ -621,6 +655,7 @@ def rescale_betas(X, Y, B):
 def get_scores_labels(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False, constraints = None, non_con = False, sub=None):
     #from matplotlib import pyplot as plt
     if len(priors)==0:
+        
         return ([], [], [])
     org = priors[0][0].organism
     priors_set = set(priors)
@@ -686,6 +721,9 @@ def get_scores_labels(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False
             scores.append(score)#scores[i] = score
             labels.append(label)#labels[i] = label
             coords.append(coord)
+            #print 'wat'
+            #print score
+            #print label
     return (scores, labels, coords)
 
 #evaluates the area under the precision recall curve, with respect to some given priors
@@ -696,13 +734,17 @@ def get_scores_labels(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False
 def eval_network_pr(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False, constraints = None, non_con = False, sub=None):
     (scores, labels, coords) = get_scores_labels(net, genes, tfs, priors, tr_priors, exclude_tfs, constraints, non_con, sub)
     if len(scores):
-            
+        print scores[0:10]
+        print labels[0:10]
+        
         (precision, recall,t) = precision_recall_curve(labels, scores)#prc(scores, labels)
         #precision recall, unlike roc_curve, has one fewer t than precision/recall value. I'm just going to copy the last element.
         t = np.concatenate((t, t[[-1]]))
+        
         aupr = auc(recall, precision)
         return (aupr, (recall, precision, t))
     else:
+        
         aupr = np.nan
     
         return (aupr, (None, None, None))
