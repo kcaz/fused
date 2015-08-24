@@ -363,6 +363,7 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
                 err_dicts[len(err_dicts)-1]['params'] = (lamP, lamR, lamS, settings)
                 num_species +=1
             cand_species += 1
+
     #set up containers for resTults
     #prc and roc are special (not individual numbers)
     metrics2 = ['prc','roc', 'prc_con','roc_con', 'prc_noncon', 'roc_noncon']
@@ -441,8 +442,10 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
 
             genes[si] = genes_si
             tfs[si] = tfs_si
+
         
         priors_tr_fl = reduce(lambda x,y: x+y, priors_tr)
+
         #solve the model
         if solver == 'solve_ortho_direct':
             Bs = fl.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors_tr_fl, lamP, lamR, lamS, lamS_opt, settings = settings)
