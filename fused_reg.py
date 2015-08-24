@@ -320,8 +320,7 @@ def orth_to_constraints_old(organisms, gene_ls, tf_ls, orth, lamS, lamS_opt=None
 #given priors, returns a list of constraints. constraints representing priors have their second coefficient equal to None.
 #NOTE: this function does not allow priors to have different weights.
 def priors_to_constraints(organisms, gene_ls, tf_ls, priors, lam):
-    print organisms
-    print len(gene_ls)
+    
     
     org_to_ind = {organisms[x] : x for x in range(len(organisms))}
     gene_to_inds = map(lambda o: {gene_ls[o][x] : x for x in range(len(gene_ls[o]))}, range(len(organisms)))
@@ -707,6 +706,7 @@ def direct_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR):
 def solve_ortho_ref(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors,lamP, lamR, lamS, lamS_opt, settings=None):
     if settings == None:
         settings = get_settings()
+    (lamR, lamP) = pad_lamRP(lamR, lamP, len(organisms))    
     ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP)
     fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS, lamS_opt)
     Bs = direct_solve(Xs, Ys, fuse_con, ridge_con, lamR, adjust = settings['adjust'])
@@ -722,11 +722,25 @@ def solve_ortho_ref(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors,lamP, lamR, 
 def solve_ortho_direct(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors,lamP, lamR, lamS, lamS_opt=None, adjust=False, self_reg_pen = 0, settings=None):   
     if settings == None:
         settings = get_settings()    
+    (lamR, lamP) = pad_lamRP(lamR, lamP, len(organisms))    
     ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP)
     fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS**0.5, lamS_opt)
     Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR, adjust = settings['adjust'])    
     
     return Bs
+
+#makes sure that lamR/lamS are lists of length N.
+#if lamP is supplied as a scalar, then lamP is assumed to represent a constant multiple of lamR. Otherwise, lamP is the actual lamP value
+def pad_lamRP(lamR, lamP, N):
+    try:
+        lamR[0]
+    except:
+        lamR = [lamR] * N
+    try:
+        lamP[0]
+    except:
+        lamP = [lamP * lamR[i] for i in range(N)]
+    return (lamR, lamP)
 
 #iterative solver
 #gene_ls/tf_ls: lists of gene names and tf names for each problem
@@ -738,13 +752,13 @@ def solve_ortho_direct(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors,lamP, lam
 def solve_ortho_iter(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors,lamP, lamR, lamS, lamS_opt=None, adjust=False, self_reg_pen = 0, settings=None):   
     if settings == None:
         settings = get_settings()    
-<<<<<<< HEAD
-    ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
-    fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
-=======
+    
+    (lamR, lamP) = pad_lamRP(lamR, lamP, len(organisms))    
+    
+
     ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP)
     fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS, lamS_opt)
->>>>>>> fce4033a306ec453488a2497e4b62ca8311aa476
+
     #actually pass settings to this one
     Bs = iter_solve(Xs, Ys, fuse_con, ridge_con, lamR, settings)
     
@@ -757,6 +771,7 @@ def solve_ortho_iter(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors,lamP, lamR,
 def solve_ortho_direct_scad(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS, settings = None):
     if settings == None:
         settings = get_settings()  
+    (lamR, lamP) = pad_lamRP(lamR, lamP, len(organisms))    
     ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP)    
     fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
     Bs = solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, settings['s_it'], settings = settings)
@@ -766,6 +781,7 @@ def solve_ortho_direct_scad(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lam
 def solve_ortho_direct_scad_plot(out, organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS, settings = None):
     if settings == None:
         settings = get_settings()  
+    (lamR, lamP) = pad_lamRP(lamR, lamP, len(organisms))    
     ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP)    
     fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
     Bs = solve_scad_plot(out, Xs, Ys, fuse_con, ridge_con, lamR, lamS, settings['s_it'], settings = settings)
@@ -777,6 +793,7 @@ def solve_ortho_direct_scad_plot(out, organisms, gene_ls, tf_ls, Xs, Ys, orth, p
 def solve_ortho_direct_mcp(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS, settings = None):
     if settings == None:
         settings = get_settings()  
+    (lamR, lamP) = pad_lamRP(lamR, lamP, len(organisms))    
     ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP)    
     fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
     Bs = solve_mcp(Xs, Ys, fuse_con, ridge_con, lamR, lamS, settings['s_it'], settings = settings)
@@ -788,6 +805,7 @@ def solve_ortho_direct_mcp(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP
 def solve_ortho_direct_em(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS, settings = None):
     if settings == None:
         settings = get_settings()  
+    (lamR, lamP) = pad_lamRP(lamR, lamP, len(organisms))    
     ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP)    
     fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
     Bs = solve_em(Xs, Ys, fuse_con, ridge_con, lamR, lamS, settings['s_it'], settings = settings)
@@ -795,7 +813,8 @@ def solve_ortho_direct_em(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP,
 
 #??? fix this later
 def solve_ortho_lasso(organisms, gene_ls, tf_ls, Xs, Ys, Xs_t, Ys_t, orth, priors,lamP, lamR, lamS, n_alpha=100, adjust=False, special_args=None):
-    ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP*lamR)
+    (lamR, lamP) = pad_lamRP(lamR, lamP, len(organisms))    
+    ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP)
     fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
     #first, we find the max dot-product between a regressor and a column of y. This closely matches _alpha_grid code used in linear_models 
     alpha_max = 0
