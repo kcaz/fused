@@ -616,7 +616,7 @@ def iter_solve(Xs, Ys, fuse_constraints, ridge_constraints, lambdaR, settings):
                 print 'iteration %d, lamS=%f, sub %d, col %d'%(i,lam_ramp[i],s,c),
                 print '\r',
 
-                I = np.eye(X.shape[1])*lambdaR
+                I = np.eye(X.shape[1])*lambdaR[s]
                 (P, targ) = build_pen_targ(s,c)
                 #(P, targ) = P_targ_saved[s][c]
                 P_cat = (P*lamsc)**0.5
