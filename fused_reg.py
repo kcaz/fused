@@ -222,10 +222,6 @@ def orth_to_constraints_marked(organisms, gene_ls, tf_ls, orth, lamS, lamS_opt=N
                         if tf == tf_orth and g == g_orth:
                             continue #no point in self constraints
 
-                        if g.name == g_orth.name:
-                            continue #self fusion constraint. comes up in case of operons, where a tf is treated as a gene
-
-
                         #now check if it's real
                         real = (g, g_orth) in real_orths and (tf, tf_orth) in real_orths
 
@@ -1250,7 +1246,7 @@ def solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, s_it, settings):
         a = settings['a']
     else:
         a = pick_a(Bs, fuse_con, settings['per'])
-        
+        settings['a'] = a
     for i in range(s_it-1):
         fuse_con = scad(Bs, fuse_con, lamS, a=a)
         Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
