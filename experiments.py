@@ -7,6 +7,7 @@ import os
 import matplotlib
 #matplotlib.use('PS')
 from matplotlib import pyplot as plt
+import collections
 import random
 import pandas as pd
 import seaborn as sns
@@ -1254,7 +1255,7 @@ def increase_data3():
 def plot_betas_scad(net_path):
     lamR = 2
     lamP = 1
-    lamS = 4
+    lamS = 2
     out2 = os.path.join('data','fake_data','plot_betas_scad')
     if not os.path.exists(out2):
         os.mkdir(out2)
@@ -1274,11 +1275,11 @@ def plot_betas_scad(net_path):
     (priors2, signs2) = ds2.get_priors()	
     priors = priors1 + priors2
     (constraints, marks) = fr.orth_to_constraints_marked(organisms, genes, tfs, orth, 1.0)
-    return constraints[0:10]
+    #return constraints[0:10]
     Bs_uf = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS=0)
     Bs_fr = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
 
-    settings_fs=fr.get_settings({'s_it': 30, 'per':((1/(1+float(0.5)))*100), 'return_cons':True})
+    settings_fs=fr.get_settings({'s_it': 10, 'per':((1/(1+float(0.5)))*100), 'return_cons':True})
     Bs_fs = fr.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, settings = settings_fs)
 
     r1 = Bs_uf[0].shape[0]
@@ -2717,14 +2718,13 @@ def plot_synthetic_roc(lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',normed=
     plot_roc(out, lamP, lamR, lamSs, k, metric,normed=normed)
 
 #as plot synthetic performance, except it plots overlaid ROC curves for different values of lamS
-def plot_bacteria_roc(lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,normed=False,scad=False, cv_both=(True,False), roc_species=0, orgs=None, unfused=False, lamS_opt=None, orth_file=['orth']):
+def plot_bacteria_roc(lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,normed=False,scad=False, cv_both=(True,False), roc_species=0, orgs=None, unfused=False, lamS_opt=None, orth_file=['orth'], pct_priors=0, test_all=False):
     out = os.path.join('data','bacteria_standard')
-    plot_roc(out, lamP, lamR, lamSs, k, metric, savef,normed,scad, cv_both, roc_species, orgs, lamS_opt, unfused, orth_file)
-
+    plot_roc(out, lamP, lamR, lamSs, k, metric, savef,normed,scad, cv_both, roc_species, orgs, lamS_opt, unfused, orth_file, pct_priors,test_all)
 #generic function for above two
 
 #use a list of dictionaries for lamS_opt if using more than one lamS_opt; always include all pairwise lamS for fused species  
-def plot_roc(out, lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,normed=False,scad=False, cv_both=(True,False), roc_species=0, orgs=None, lamS_opt = None, unfused = False, orth_file=['orth']):
+def plot_roc(out, lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,normed=False,scad=False, cv_both=(True,False), roc_species=0, orgs=None, lamS_opt = None, unfused = False, orth_file=['orth'], pct_priors=0, test_all='part'):
 
     seed = np.random.randn()
     scad = False
@@ -2763,25 +2763,33 @@ def plot_roc(out, lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,n
         errdls = []
 
         if unfused == True:
-            errd = fg.cv_unfused(out, lamP=lamP, lamR=lamR, k=k, solver = solver, settings = settings, reverse = True, cv_both = cv_both, exclude_tfs=False, seed = seed, orgs = orgs, lamS_opt = lamS_opt)
+            errd = fg.cv_unfused(out, lamP=lamP, lamR=lamR, k=k, solver = solver, settings = settings, reverse = True, cv_both = cv_both, exclude_tfs=False, pct_priors=pct_priors, seed = seed, orgs = orgs, lamS_opt = lamS_opt)[roc_species]
             errdls.append(errd)
             for i, lamS in enumerate(lamSs):
-                errdf = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver = solver, settings = settings, reverse = True, cv_both = cv_both, exclude_tfs=False, seed = seed, orgs = orgs, lamS_opt = None, orth_file = orth_file)[roc_species]
+                errdf = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver = solver, settings = settings, reverse = True, cv_both = cv_both, exclude_tfs=False, pct_priors=pct_priors, seed = seed, orgs = orgs, lamS_opt = None, orth_file = orth_file, test_all = test_all)[roc_species]
                 errdls.append(errdf)
             if lamS_opt != None:
-                errdf = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver = solver, settings = settings, reverse = True, cv_both = cv_both, exclude_tfs=False, seed = seed, orgs = orgs, lamS_opt = lamS_opt, orth_file = orth_file)[roc_species]
+                errdf = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver = solver, settings = settings, reverse = True, cv_both = cv_both, exclude_tfs=False, pct_priors=pct_priors,seed = seed, orgs = orgs, lamS_opt = lamS_opt, orth_file = orth_file, test_all = test_all)[roc_species]
                 errdls.append(errdf)
         
         else:
             for i, lamS in enumerate(lamSs):
-                print i
-                errdf = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver = solver, settings = settings, reverse = True, cv_both = cv_both, exclude_tfs=False, seed = seed, orgs = orgs, lamS_opt = None, orth_file = orth_file)[roc_species]
+                #print i
+                print roc_species
+                errd = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver = solver, settings = settings, reverse = True, cv_both = cv_both, exclude_tfs=False, pct_priors=pct_priors,seed = seed, orgs = orgs, lamS_opt = None, orth_file = orth_file, test_all = test_all)
+                print len(errd)
+                print errd[0]['aupr']
+                print errd[1]['aupr']
+                #errdf = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver = solver, settings = settings, reverse = True, cv_both = cv_both, exclude_tfs=False, pct_priors=pct_priors,seed = seed, orgs = orgs, lamS_opt = None, orth_file = orth_file, test_all = test_all)[roc_species]
+                errdf = errd[roc_species]
                 errdls.append(errdf)
+                print errdf['aupr']
             if lamS_opt != None:
-                errdf = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver = solver, settings = settings, reverse = True, cv_both = cv_both, exclude_tfs=False, seed = seed, orgs = orgs, lamS_opt = lamS_opt, orth_file = orth_file)[roc_species]
+                errdf = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver = solver, settings = settings, reverse = True, cv_both = cv_both, exclude_tfs=False, pct_priors=pct_priors,seed = seed, orgs = orgs, lamS_opt = lamS_opt, orth_file = orth_file, test_all = test_all)[roc_species]
                 errdls.append(errdf)
                 
     print len(errdls)
+    print errdls[0]['aupr']
     if savef != None and not loaded:
         with file(savef, 'w') as f:
             pickle.dump(errdls, f)
@@ -2791,7 +2799,7 @@ def plot_roc(out, lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,n
     if unfused == True:
         errd = errdls[0]
         rocs = errd[metric]
-        print (errd[summary_measure].mean())
+        #print (errd[summary_measure].mean())
         all_roc_curves.append(rocs)
         chance_rates.append(errd[chancek])
         for i, lamS in enumerate(lamSs):
@@ -2802,7 +2810,7 @@ def plot_roc(out, lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,n
             chance_rates.append(errdf[chancek])
         errd_opt = errdls[-1]
         rocs_opt = errd_opt[metric]
-        print (lamS_opt, errd_opt[summary_measure].mean())
+        print (lamS_optp, errd_opt[summary_measure].mean())
         all_roc_curves.append(rocs_opt)
         chance_rates.append(errd_opt[chancek])
 
@@ -2812,23 +2820,23 @@ def plot_roc(out, lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,n
         linedesc = pd.Series(toplots, name='method') 
     
     else:
+        toplots = []
+        toplots.extend(map(str, lamSs))
         for i, lamS in enumerate(lamSs):
-            print lamS
-            print i
+            #print lamS
+            #print i
             errd = errdls[i]      
             rocs = errd[metric]
             print (lamS, errd[summary_measure].mean())
             all_roc_curves.append(rocs)
             chance_rates.append(errd[chancek])
-        errd_opt = errdls[-1]
-        rocs_opt = errd_opt[metric]
         if lamS_opt != None:
             print (lamS_opt, errd_opt[summary_measure].mean())
-        all_roc_curves.append(rocs_opt)
-        chance_rates.append(errd_opt[chancek])
-        toplots = []
-        toplots.extend(map(str, lamSs))
-        toplots.append(str(lamS_opt))
+            errd_opt = errdls[-1]
+            rocs_opt = errd_opt[metric]        
+            all_roc_curves.append(rocs_opt)
+            chance_rates.append(errd_opt[chancek])
+            toplots.append(str(lamS_opt))
         linedesc = pd.Series(toplots, name='method')
 
     pss = []
@@ -3369,11 +3377,11 @@ def show_penalty():
     lamS = 1
     a=1.0
     def miniscad_dx(theta):
-        theta = np.abs(theta)
-        if theta < a/2:
-            return theta * lamS
-        if theta >= a/2:
-            return lamS * max(0, (a - theta))
+        atheta = np.abs(theta)
+        if atheta < a/2:
+            return atheta * lamS
+        if atheta >= a/2:
+            return lamS * max(0, (a - atheta))
     def miniL2dx(theta):
         return theta*lamS
 
@@ -3747,8 +3755,35 @@ def test_iter_all(k=2, lamP=1.0, lamR=0.5, lamS=1.0):
     errd = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='iter_solve', reverse = True, cv_both = (True, True, True), exclude_tfs=False, pct_priors=0, seed=44.4, settings=si_su_an, orgs=['B_subtilis','B_anthracis'])
     import pickle
 
+
     with file('lamSpaths','w') as f:
         pickle.dump(f, (si_all, si_su_eu, si_su_an))
+
+    dic = collections.defaultdict(lambda: [])
+    for i in range(len(si_all['lamS_scores'])):
+        for j in range(len(si_all['lamS_scores'][i])):
+            dic['subject'].append(i)
+            dic['species'].append('all')
+            dic['MSE'].append(si_all['lamS_scores'][i][j]/si_all['lamS_scores'][i][0])
+            dic['lamS'].append(si_all['lamS_path'][i][j])
+    for i in range(len(si_su_eu['lamS_scores'])):
+        for j in range(len(si_su_eu['lamS_scores'][i])):
+            dic['subject'].append(i)
+            dic['species'].append('subt-subt_eu')
+            dic['MSE'].append(si_su_eu['lamS_scores'][i][j]/si_su_eu['lamS_scores'][i][0])
+            dic['lamS'].append(si_su_eu['lamS_path'][i][j])
+    for i in range(len(si_su_an['lamS_scores'])):
+        for j in range(len(si_su_eu['lamS_scores'][i])):
+            dic['subject'].append(i)
+            dic['species'].append('subt-anth')
+            dic['MSE'].append(si_su_an['lamS_scores'][i][j]/si_su_an['lamS_scores'][i][0])
+            dic['lamS'].append(si_su_an['lamS_path'][i][j])
+
+    df = pd.DataFrame(dic)
+    sns.tsplot(time='lamS',value='MSE',unit='subject',condition='species',data=df)
+
+    return (si_all, si_su_eu, si_su_an)
+
     
 #computes lamS path for orths coming from operons
 def test_operons_iter(k=2, lamP=1.0, lamR=0.5, lamS=1.0, pct_priors=0):
@@ -3798,6 +3833,11 @@ def test_optR_rd():
     lamR_steps = 20
     it = 1
     (optRs, devs, lambdas) = fr.opt_lamR(Xs, Ys, folds, maxlamR, lamR_steps, it)
+    sns.tsplot(devs[0],time='lamR',value='deviance',unit='unit')
+    plt.show()
+    sns.tsplot(devs[1],time='lamR',value='deviance',unit='unit')
+    plt.show()
+ 
     return (optRs, devs, lambdas)
 
 
@@ -3835,12 +3875,12 @@ def test_optR():
 
 #find parameters where scad with operons does better than fused l2 with operons
 def operons_param():
-    it = 2
-    scores = {'solver':[], 'mse 1':[], 'mse 2':[]}
+    it = 1
+    scores = {'solver':[], 'mse 1':[], 'mse 2':[], 'aupr 1':[], 'aupr 2':[]}
 
     net_path = 'data/bacteria_standard'
-    k = 4
-    lamP = [0.0368,0.00789]
+    k = 10
+    lamP = [0.00368,0.000789]
     lamR= [0.368,0.0789]
     settings_fs=fr.get_settings({'s_it': 5, 'per':((1/(1+float(0.5)))*100), 'return_cons':True})
     orth_file=['operon']
@@ -3848,35 +3888,42 @@ def operons_param():
     reverse=False
     cv_both=(True,True)
     exclude_tfs=True
-    seed=None
+    seed=np.random.randn()
     verbose=False
     lamS_opt=None
     lamS=0
     solver='solve_ortho_direct'
+    test_all=True
 
     for i in range(it):
         seed=i*abs(np.random.randn())
-        uf = fg.cv_model_m(net_path,lamP,lamR,lamS,k,solver,settings_fs,reverse,cv_both,exclude_tfs,1,seed,verbose,orth_file,orgs,lamS_opt)
+        lamS=0
+        uf = fg.cv_model_m(net_path,lamP,lamR,lamS,k,solver,settings_fs,reverse,cv_both,exclude_tfs,0.5,seed,verbose,orth_file,orgs,lamS_opt,test_all)
         for i in range(k):
             scores['solver'].append('unfused')
             scores['mse 1'].append(uf[0]['mse'][i][0])
             scores['mse 2'].append(uf[1]['mse'][i][0])
+            scores['aupr 1'].append(uf[0]['aupr'][i][0])
+            scores['aupr 2'].append(uf[1]['aupr'][i][0])
 
         solver='solve_ortho_direct'
         lamS = 0.5
-        l2 = fg.cv_model_m(net_path,lamP,lamR,lamS,k,solver,settings_fs,reverse,cv_both,exclude_tfs,1,seed,verbose,orth_file,orgs,lamS_opt)
+        l2 = fg.cv_model_m(net_path,lamP,lamR,lamS,k,solver,settings_fs,reverse,cv_both,exclude_tfs,0.5,seed,verbose,orth_file,orgs,lamS_opt, test_all)
         for i in range(k):
             scores['solver'].append('l2')
             scores['mse 1'].append(l2[0]['mse'][i][0])
             scores['mse 2'].append(l2[1]['mse'][i][0])
-
+            scores['aupr 1'].append(l2[0]['aupr'][i][0])
+            scores['aupr 2'].append(l2[1]['aupr'][i][0])
 
         solver='solve_ortho_direct_scad'
-        sc = fg.cv_model_m(net_path,lamP,lamR,lamS,k,solver,settings_fs,reverse,cv_both,exclude_tfs,1,seed,verbose,orth_file,orgs,lamS_opt)
+        sc = fg.cv_model_m(net_path,lamP,lamR,lamS,k,solver,settings_fs,reverse,cv_both,exclude_tfs,0.5,seed,verbose,orth_file,orgs,lamS_opt,test_all)
         for i in range(k):
             scores['solver'].append('adaptive fusion')
             scores['mse 1'].append(sc[0]['mse'][i][0])
             scores['mse 2'].append(sc[1]['mse'][i][0])
+            scores['aupr 1'].append(sc[0]['aupr'][i][0])
+            scores['aupr 2'].append(sc[1]['aupr'][i][0])            
 
     return scores
     
@@ -3913,9 +3960,15 @@ def operons_scad():
     gene_to_inds = map(lambda o: {genes[o][x] : x for x in range(len(genes[o]))}, range(len(organisms)))
     tf_to_inds = map(lambda o: {tfs[o][x] : x for x in range(len(tfs[o]))}, range(len(organisms)))
 
-    settings_fs=fr.get_settings({'s_it': 5, 'per':((1/(1+float(0.5)))*100), 'return_cons':True})
-    Bs_fs = fr.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, settings = settings_fs)
-    Bs_uf = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
+    orth_fn2 = os.path.join(net_path, 'orth')
+    orth2 = ds.load_orth(orth_fn2, organisms)
+    all_orth = orth+orth2
+    settings_fs=fr.get_settings({'s_it': 5, 'per':85, 'return_cons':True})
+    #settings_fs=fr.get_settings({'s_it': 5, 'per':((1/(1+float(0.5)))*100), 'return_cons':True})
+    Bs_fs = fr.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, all_orth, priors, lamP, lamR, lamS, settings = settings_fs)
+    lamS = 0
+    Bs_uf = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, all_orth, priors, lamP, lamR, lamS)
+
 
     new_fuse_cons = settings_fs['cons'] 
 
@@ -4118,5 +4171,68 @@ def operons_scad():
     plt.ylabel('lamS')
     plt.show()
 
+#find parameters where scad with operons does better than fused l2 with operons
+def operons_l2():
+    it = 1
+    scores = {'solver':[], 'mse 1':[], 'mse 2':[], 'aupr 1':[], 'aupr 2':[]}
 
+    net_path = 'data/bacteria_standard'
+    k = 10
+    lamP = [0.00368,0.000789]
+    lamR= [0.368,0.0789]
+    settings_fs=fr.get_settings({'s_it': 5, 'per':((1/(1+float(0.5)))*100), 'return_cons':True})
+    orth_file=['operon']
+    orgs=['B_subtilis']
+    reverse=False
+    cv_both=(True,True)
+    exclude_tfs=True
+    seed=np.random.randn()
+    verbose=False
+    lamS_opt=None
+    lamS=0
+    solver='solve_ortho_direct'
+    test_all=True
+
+    for i in range(it):
+        seed=i*abs(np.random.randn())
+        lamS=0
+        uf = fg.cv_model_m(net_path,lamP,lamR,lamS,k,solver,settings_fs,reverse,cv_both,exclude_tfs,0.5,seed,verbose,orth_file,orgs,lamS_opt,test_all)
+        for i in range(k):
+            scores['solver'].append('unfused')
+            scores['mse 1'].append(uf[0]['mse'][i][0])
+            scores['mse 2'].append(uf[1]['mse'][i][0])
+            scores['aupr 1'].append(uf[0]['aupr'][i][0])
+            scores['aupr 2'].append(uf[1]['aupr'][i][0])
+
+        solver='solve_ortho_direct'
+        lamS = 0.5
+        orth_file=['operon']
+        l2_x = fg.cv_model_m(net_path,lamP,lamR,lamS,k,solver,settings_fs,reverse,cv_both,exclude_tfs,0.5,seed,verbose,orth_file,orgs,lamS_opt, test_all)
+        for i in range(k):
+            scores['solver'].append('L2_operon')
+            scores['mse 1'].append(l2_x[0]['mse'][i][0])
+            scores['mse 2'].append(l2_x[1]['mse'][i][0])
+            scores['aupr 1'].append(l2_x[0]['aupr'][i][0])
+            scores['aupr 2'].append(l2_x[1]['aupr'][i][0])   
+
+    return scores
+
+
+def xspecies_perf(lamP=(0.03,0.05), lamR=(0.368,0.5), lamSs=[0,0.5,1], k=10,cv_both=(True,False), orgs=['B_subtilis','B_anthracis'], orth_file=['orth']):
+
+    out = os.path.join('data','bacteria_standard')
+
+    seed = np.random.randn()
+
+    settings = fr.get_settings()
+    solver = 'solve_ortho_direct'
+
+    organisms = ['B_subtilis','B_anthracis']
+    errdf=[]
+    for i in range(len(lamSs)):
+        errd = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamSs[i], k=k, solver=solver, settings=settings, reverse=True, cv_both=cv_both, exclude_tfs=False, seed=seed, orgs=orgs, lamS_opt=None, orth_file=orth_file)[0]    
+        errdf.append(errd)
+    errdu = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=0, k=k, solver=solver, settings=settings, reverse=True, cv_both=cv_both, exclude_tfs=False, seed=seed, orgs=orgs, lamS_opt=None, orth_file=orth_file)
+
+    return (errdf, errdu)
 

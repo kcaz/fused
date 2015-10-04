@@ -33,7 +33,7 @@ def get_R2_evaluator(Xs_te, Ys_te, exclude_tfs=False):
 #returns a R2 evaluator function, which has signature
 # f(Bs) -> mean R2 across betas, evaluated on Xs and Ys
 #exclude_tfs: don't evaluate on transcription factors
-def get_aupr_evaluator(Xs_te, Ys_te, genes, tfs, priors, tr_priors, exclude_tfs=False):
+def get_aupr_evaluator(Xs_te, Ys_te, genes, tfs, priors, tr_priors, exclude_tfs=False, test_all='part'):
     
     def inner(Bs):
         aupr_acc = 0
@@ -43,7 +43,7 @@ def get_aupr_evaluator(Xs_te, Ys_te, genes, tfs, priors, tr_priors, exclude_tfs=
             Bsi = Bs[si]
             S = rescale_betas(Xsi, Ysi, Bsi)
         
-            (aupr, prc) = eval_network_pr(S, genes[si], tfs[si], priors[si], tr_priors=tr_priors[si], exclude_tfs=exclude_tfs, constraints = None)        
+            (aupr, prc) = eval_network_pr(S, genes[si], tfs[si], priors[si], tr_priors=tr_priors[si], exclude_tfs=exclude_tfs, constraints = None, test_all=test_all)        
             
             if not np.isnan(aupr):
                 aupr_acc += aupr
@@ -146,7 +146,7 @@ def fit_model(data_fn, lamP, lamR, lamS, solver='solve_ortho_direct', settings =
     return Bs
 
 #solves networks separately, then rank combines to get network
-def cv_unfused(data_fn, lamP, lamR, k, solver='solve_ortho_direct', settings=None, reverse=False, cv_both=(True,True), exclude_tfs=True, pct_priors=0, seed=None, verbose=False, orth_file='orth', orgs=None, lamS_opt=None):
+def cv_unfused(data_fn, lamP, lamR, k, solver='solve_ortho_direct', settings=None, reverse=False, cv_both=(True,True), exclude_tfs=True, pct_priors=0, seed=None, verbose=False, orth_file='orth', orgs=None, lamS_opt=None, test_all='part'):
     lamS = 0
     if seed != None:
         random.seed(seed)
@@ -308,11 +308,11 @@ def cv_unfused(data_fn, lamP, lamR, k, solver='solve_ortho_direct', settings=Non
         for i, (tf, g) in enumerate(coords_combined):
             rc_B[tf_to_ind[tf], gene_to_ind[g]] = ranks_combined[i]
 
-        (aupr, prc) = eval_network_pr(rc_B, rc_genes, rc_tfs, priorste, tr_priors=priorstr, exclude_tfs=exclude_tfs, constraints = None)
+        (aupr, prc) = eval_network_pr(rc_B, rc_genes, rc_tfs, priorste, tr_priors=priorstr, exclude_tfs=exclude_tfs, constraints = None, test_all=test_all)
         err_dict['aupr'][fold,0] = aupr
         err_dict['prc'][fold] = prc    
     
-        (auc, roc) = eval_network_roc(rc_B, rc_genes, rc_tfs, priorste, tr_priors=priorstr, exclude_tfs=exclude_tfs, constraints = None)
+        (auc, roc) = eval_network_roc(rc_B, rc_genes, rc_tfs, priorste, tr_priors=priorstr, exclude_tfs=exclude_tfs, constraints = None, test_all=test_all)
         err_dict['auc'][fold,0] = auc
         err_dict['roc'][fold] = downsample_roc(roc)
         
@@ -330,7 +330,7 @@ def cv_unfused(data_fn, lamP, lamR, k, solver='solve_ortho_direct', settings=Non
 #this is the master cross-validator!
 #if orgs=[], then use all the organisms in folder; otherwise use the organisms listed in orgs
 #orth_file can be a list of orth file names. if it is a list then it uses all the orth files. 
-def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',settings = None, reverse=False, cv_both=(True,True), exclude_tfs=True, pct_priors=0, seed=None, verbose=False, orth_file=['orth'], orgs=None, lamS_opt = None):
+def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',settings = None, reverse=False, cv_both=(True,True), exclude_tfs=True, pct_priors=0, seed=None, verbose=False, orth_file=['orth'], orgs=None, lamS_opt = None, test_all = 'part', use_TFA=False):
     if seed != None:
         random.seed(seed)
 
@@ -343,7 +343,7 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
 
     if orgs == None:
         while os.path.isfile(os.path.join(data_fn, 'expression%d' % (num_species+1))):
-            dsi = ds.standard_source(data_fn,num_species)
+            dsi = ds.standard_source(data_fn,num_species, use_TFA=use_TFA)
             dss.append(dsi)
             organisms.append(dsi.name)
             all_orgs.append(dsi.name)
@@ -354,7 +354,7 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
     else:
         cand_species = 1
         while os.path.isfile(os.path.join(data_fn, 'expression%d' % (cand_species))):
-            dsi = ds.standard_source(data_fn,cand_species - 1)
+            dsi = ds.standard_source(data_fn,cand_species - 1, use_TFA=use_TFA)
             all_orgs.append(dsi.name)            
             if dsi.name in orgs:
                 dss.append(dsi)
@@ -381,7 +381,7 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
         for i in range(len(orth_file)):
             orth_fn = os.path.join(data_fn, orth_file[i])
             orth += ds.load_orth(orth_fn, all_orgs, organisms)
-    
+
     folds = map((lambda x: x.partition_data(k)), dss)
     all_priors = map((lambda x: x.get_priors()[0]), dss)
     
@@ -399,7 +399,19 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
     allpriors = map(lambda x: r_partition(x, int(pct_priors*len(x))), all_priors)
     
     priors_tr = map(lambda x: x[0], allpriors)
-    priors_te = map(lambda x: x[1], allpriors)
+
+    if test_all == 'all':
+        priors_te = map(lambda x: x[0]+x[1], allpriors)
+
+    elif test_all == 'part':
+        priors_te = map(lambda x: x[1], allpriors)
+
+    elif test_all == 'gold':
+        all_gold = map((lambda x: x.get_gold()[0]), dss)
+        priors_te = all_gold
+
+    else:
+        print 'test_all must be all, part or gold'
 
     f_te = [None]*num_species
     f_tr = [None]*num_species
@@ -490,30 +502,30 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
             else:
                 S = Bsi
             #aupr and prc curves
-            (aupr, prc) = eval_network_pr(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = None)
+            (aupr, prc) = eval_network_pr(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = None, test_all=test_all)
             err_dicts[si]['aupr'][fold,0] = aupr
             err_dicts[si]['prc'][fold] = prc            
             
-            (aupr_noncon, prc_noncon) = eval_network_pr(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, non_con=True, sub = si)
+            (aupr_noncon, prc_noncon) = eval_network_pr(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, non_con=True, sub = si, test_all=test_all)
             err_dicts[si]['aupr_noncon'][fold,0] = aupr_noncon                    
             err_dicts[si]['prc_noncon'][fold] = downsample_roc(prc_noncon)
 
             #constrained aupr and prc curves
-            (aupr_con, prc_con) = eval_network_pr(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, sub = si)
+            (aupr_con, prc_con) = eval_network_pr(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, sub = si, test_all=test_all)
             err_dicts[si]['aupr_con'][fold,0] = aupr_con                
             err_dicts[si]['prc_con'][fold] = downsample_roc(prc_con)
 
             #auc and roc curves
-            (auc, roc) = eval_network_roc(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = None)
+            (auc, roc) = eval_network_roc(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = None, test_all=test_all)
             err_dicts[si]['auc'][fold,0] = auc
             err_dicts[si]['roc'][fold] = downsample_roc(roc)
 
             #constrained auc and roc curves
-            (auc_con, roc_con) = eval_network_roc(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, sub = si)
+            (auc_con, roc_con) = eval_network_roc(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, sub = si, test_all=test_all)
             err_dicts[si]['auc_con'][fold,0] = auc_con
             err_dicts[si]['roc_con'][fold] = downsample_roc(roc_con)
 
-            (auc_noncon, roc_noncon) = eval_network_roc(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, non_con=True, sub = si)
+            (auc_noncon, roc_noncon) = eval_network_roc(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, non_con=True, sub = si,test_all=test_all)
             err_dicts[si]['auc_noncon'][fold,0] = auc_noncon
             err_dicts[si]['roc_noncon'][fold] = downsample_roc(roc_noncon)
             
@@ -655,14 +667,21 @@ def rescale_betas(X, Y, B):
     return S
 
 #returns scores/labels for aupr or auc
-def get_scores_labels(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False, constraints = None, non_con = False, sub=None):
+def get_scores_labels(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False, constraints = None, non_con = False, sub=None, test_all='part'):
     #from matplotlib import pyplot as plt
     if len(priors)==0:
         
         return ([], [], [])
     org = priors[0][0].organism
     priors_set = set(priors)
-    tr_priors_set = set(tr_priors)
+    if test_all == 'all':
+        tr_priors_set = set()
+    elif test_all == 'part':
+        tr_priors_set = set(tr_priors)
+    elif test_all == 'gold':
+        tr_priors_set = set()
+    else:
+        print 'test_all must be all, part, or gold'
     gene_to_ind = {genes[x] : x for x in range(len(genes))}
     
     tf_to_ind = {tfs[x] : x for x in range(len(tfs))}
@@ -734,16 +753,15 @@ def get_scores_labels(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False
 # constraints: if not None, evaluates only on interactions which have fusion constraints
 #sub: name of subproblem. used if constraints != None
 #tr_priors are the training set priors
-def eval_network_pr(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False, constraints = None, non_con = False, sub=None):
-    (scores, labels, coords) = get_scores_labels(net, genes, tfs, priors, tr_priors, exclude_tfs, constraints, non_con, sub)
+def eval_network_pr(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False, constraints = None, non_con = False, sub=None, test_all='part'):
+    (scores, labels, coords) = get_scores_labels(net, genes, tfs, priors, tr_priors, exclude_tfs, constraints, non_con, sub, test_all)
     if len(scores):
-        print scores[0:10]
-        print labels[0:10]
+        #print scores[0:10]
+        #print labels[0:10]
         
         (precision, recall,t) = precision_recall_curve(labels, scores)#prc(scores, labels)
         #precision recall, unlike roc_curve, has one fewer t than precision/recall value. I'm just going to copy the last element.
         t = np.concatenate((t, t[[-1]]))
-        
         aupr = auc(recall, precision)
         return (aupr, (recall, precision, t))
     else:
@@ -755,8 +773,8 @@ def eval_network_pr(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False, 
 
 #evaluates the area under the roc, with respect to some given priors
 
-def eval_network_roc(net, genes, tfs, priors, tr_priors=[], exclude_tfs = True, constraints = None, non_con = False, sub=None):
-    (scores, labels, coords) = get_scores_labels(net, genes, tfs, priors, tr_priors, exclude_tfs, constraints, non_con, sub)
+def eval_network_roc(net, genes, tfs, priors, tr_priors=[], exclude_tfs = True, constraints = None, non_con = False, sub=None, test_all='part'):
+    (scores, labels, coords) = get_scores_labels(net, genes, tfs, priors, tr_priors, exclude_tfs, constraints, non_con, sub, test_all)
     if len(scores):
         (fpr, tpr, t) = roc_curve(labels, scores)
         if any(np.isnan(fpr)) or any(np.isnan(tpr)):

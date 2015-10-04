@@ -222,9 +222,6 @@ def orth_to_constraints_marked(organisms, gene_ls, tf_ls, orth, lamS, lamS_opt=N
                         if tf == tf_orth and g == g_orth:
                             continue #no point in self constraints
 
-                        
-
-
                         #now check if it's real
                         real = (g, g_orth) in real_orths and (tf, tf_orth) in real_orths
 
@@ -543,8 +540,6 @@ def opt_lamR(Xs, Ys, folds, maxlamR, lamR_steps, it):
 
     devs = map(lambda tot_dev: pd.DataFrame([[lamR, deviance, iteration] for lamR, devlist in tot_dev.items() for deviance, iteration in devlist], columns=['lamR', 'deviance','unit']), tot_devs)  
 
-
-
     return (optlamR, devs, lambdaRs)
 
 
@@ -773,8 +768,8 @@ def solve_ortho_direct_scad(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lam
         settings = get_settings()  
     (lamR, lamP) = pad_lamRP(lamR, lamP, len(organisms))    
     ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP)    
-    fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS)
-    Bs = solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, settings['s_it'], settings = settings)
+    fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS**0.5)
+    Bs = solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS**0.5, settings['s_it'], settings = settings)
     return Bs
 
 #same as solve_ortho_direct_scad, but also plots lams at each iteration
@@ -1025,7 +1020,7 @@ def beta_diff(Bs, fuse_cons):
     for i, con in enumerate(fuse_cons):
         b1 = Bs[con.c1.sub][con.c1.r, con.c1.c]
         b2 = Bs[con.c2.sub][con.c2.r, con.c2.c]
-        beta_diffs[i] = b1 - b2
+        beta_diffs[i] = np.abs(b1 - b2)
     return beta_diffs
 
 def beta_diff_rand(Bs, k):
@@ -1250,7 +1245,7 @@ def solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, s_it, settings):
         a = settings['a']
     else:
         a = pick_a(Bs, fuse_con, settings['per'])
-        
+        settings['a'] = a
     for i in range(s_it-1):
         fuse_con = scad(Bs, fuse_con, lamS, a=a)
         Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
@@ -1313,6 +1308,7 @@ def scad2_prime(theta, lamS, a):
 
 #returns a new set of fusion constraints corresponding to a saturating penalty
 def scad(Bs_init, fuse_constraints, lamS, a):
+    count=0
     new_fuse_constraints = []
     import math    
     for i in range(len(fuse_constraints)):
@@ -1325,7 +1321,6 @@ def scad(Bs_init, fuse_constraints, lamS, a):
             nlamS = lamS
         else:
             nlamS = scad2_prime(theta_init, lamS, a) / theta_init
-        
         new_con = constraint(con.c1, con.c2, nlamS)
         new_fuse_constraints.append(new_con)
     return new_fuse_constraints
@@ -1335,7 +1330,7 @@ def pick_a(Bs_init, fuse_constraints, percentile):
     deltabetas = np.abs(beta_diff(Bs_init, fuse_constraints))
     a = np.percentile(deltabetas, percentile)
     
-    return a
+    return a*2
 
 
 #this code cuts up columns by depth first search
