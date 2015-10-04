@@ -5,6 +5,7 @@ import random
 from sklearn.metrics import roc_curve, auc, precision_recall_curve
 import os
 import collections
+import matplotlib.pyplot as plt
 #SECTION: ------------------UTILITY FUNCTIONS-----------------
 #returns a mean-squared-error evaluator function, which has signature
 # f(Bs) -> mean mse across betas, evaluated on Xs and Ys
@@ -484,6 +485,7 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
         (corr, fused_coeffs) = fused_coeff_corr(organisms, genes, tfs, orth, Bs)
             
         for si in range(num_species):
+            print si
             #correlation of fused coefficients
             err_dicts[si]['corr'][fold,0] = corr
 
@@ -723,7 +725,7 @@ def get_scores_labels(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False
             if constraints != None: 
                 if non_con==True:
                     if coeff in con_set:
-                        continue           
+                        continue      
                 else:
                     if not coeff in con_set:
                         continue
