@@ -4,6 +4,9 @@ import random
 import os
 import collections
 from itertools import combinations
+from itertools import izip
+import csv
+import pandas as pd
 
 #SECTION: -------------UTILITY FUNCTIONS------------------------------
 #quantile normalizes conditions AND scales to mean zero/unit variance
@@ -59,6 +62,32 @@ def join_expr_data(names1, names2, exp_a1, exp_a2):
         exp_a[r2+exp_a1.shape[0], :] = exp_a2[r2, name2_fr_inds_a]
 
     return (exp_a, names)
+
+def TFA(X, priors, genes, tfs):
+    gene_to_inds = {genes[x] : x for x in range(len(genes))}
+    tf_to_inds = {tfs[x] : x for x in range(len(tfs))}
+
+    Xt = X.T
+    P = np.zeros((Xt.shape[0],len(tfs)))
+    priors = priors[0]
+
+    for prior in priors:
+        (gene1, gene2) = prior
+        tfi = tf_to_inds[gene1.name]
+        gi = gene_to_inds[gene2.name]
+        P[gi, tfi] = 1
+
+    for i in range(P.shape[0]):
+        if P[i,:].sum() == 0:
+            if i < P.shape[1]:
+                P[i,i] = 1
+
+    Pi = np.linalg.pinv(P)
+    TFA = np.dot(Pi, Xt)
+
+    #TFA = Pi * Xt
+    TFA_norm = normalize(TFA.T, mean_zero = False)
+    return TFA_norm
 
 
 #SECTION: -----------------------------DATA LOADERS------------------
@@ -152,13 +181,14 @@ def generate_timeseries(tf_mat, exp_mat, td, tc):
 
 #this class assumes directory layout we use for generated data
 class standard_source(data_source):
-    def __init__(self, datadir, org_ind):
+    def __init__(self, datadir, org_ind, use_TFA=False):
         #strip last separator
         if datadir[-1] == os.sep:
             datadir = datadir[0:-1]
         
         expr_fn = os.path.join(datadir, 'expression%d' % (org_ind+1))
         prior_fn = os.path.join(datadir,'priors%d') % (org_ind+1)
+        gold_fn = os.path.join(datadir, 'gold%d') % (org_ind+1)
         tfs_fn = os.path.join(datadir, 'tfnames%d') % (org_ind+1)
         time_diff_fn = os.path.join(datadir,'time_diffs%d' % (org_ind+1))
         name_key = 'organism%d' % (org_ind+1)
@@ -219,11 +249,45 @@ class standard_source(data_source):
         self.tfs = tfs
         self.N = exp_mat.shape[0]
         self.prior_fn = prior_fn
+        self.gold_fn = gold_fn
         self.name = name
+
+        if use_TFA==True:
+            tf_mat = TFA(exp_mat, self.get_priors(), genes, tfs)
         
+        #rearrange order so that tfs appear first
+            (tfs, genes, tf_mat, exp_mat) = arrange_tfs_first(tfs, genes, tf_mat, exp_mat)
+            (tf_mat, exp_mat) = generate_timeseries(tf_mat, exp_mat, td, tc)
+            self.exp_mat = exp_mat
+            self.tf_mat = tf_mat
+
+         
         
     def get_priors(self):
         p = file(self.prior_fn)
+        ps = p.read()
+        psn = filter(len, ps.split('\n'))
+        psnt = map(lambda x: x.split('\t'), psn)
+        priors = map(lambda x: (fr.one_gene(x[0], self.name), fr.one_gene(x[1], self.name)), psnt)
+        
+        signs = []
+        for x in psnt:
+            sign = x[2]
+            
+            if sign == '1':
+                signs.append(1)
+            elif sign == '-1':
+                signs.append(-1)
+            else:
+                signs.append(0)
+
+        p.close()
+        
+        return (priors, signs)
+
+
+    def get_gold(self):
+        p = file(self.gold_fn)
         ps = p.read()
         psn = filter(len, ps.split('\n'))
         psnt = map(lambda x: x.split('\t'), psn)
@@ -898,6 +962,13 @@ def write_fake_td(outf, expr):
         for i in range(N/2):
             f.write('%d\t%d\t%f\n' % (i, i+N/2, 1.0))
 
+#writes a td file with a gap time of 1 for steady state, where each condition is preceded by itself
+def write_ss_td(outf, expr):
+    N = expr.shape[0]
+    with file(outf,'w') as f:
+        for i in range(N):
+            f.write('%d\t%d\t%f\n' % (i, i, 1.0))
+
 #write an expression matrix
 #format is: line 1, gene names. line 2-(N+1) expressions.
 #tab delimited
@@ -1226,3 +1297,131 @@ def anthracis_td():
             td = 1.0
             td_file.write('%d\t%d\t%f\n' % (fr, to , td))
             
+#SECTION -----------------TH17----------------------------------------
+
+def th17_ss(use_TFA = True):
+    out_dir = 'data/Th17_standard'
+
+    rna_df = pd.DataFrame.from_csv('data/TH17/Th17Paper_rnaseq_ratios_np.tsv',sep='\t',header=0)
+    rna_genes = list(rna_df.index)
+
+    rna_tffile_old = file('data/TH17/Th17Paper_rnaseq_tfNames.tsv')
+    rna_tflist = rna_tffile_old.read().split('\n')
+    rna_tffile = file('data/Th17_standard/tfnames2','w')
+    rna_tfs = []
+    for i in range(len(rna_tflist)):
+        if rna_tflist[i] in rna_genes:
+            rna_tfs.append(rna_tflist[i])
+            rna_tffile.write(rna_tflist[i]+'\n')
+
+    rna_tffile_old.close()
+    rna_tffile.close()
+
+    ma_df = pd.DataFrame.from_csv('data/TH17/Tr1_Th17_noBatch_Th17PapCut.tsv',sep='\t',header=0)
+    ma_genes = list(ma_df.index)
+
+    ma_tffile_old = file('data/TH17/Tr1_Th17_noBatch_Th17PapCut_TFs.tsv')
+    ma_tflist = ma_tffile_old.read().split('\n')
+    ma_tffile = file('data/Th17_standard/tfnames1','w')
+    ma_tfs = []
+    for i in range(len(ma_tflist)):
+        if ma_tflist[i] in ma_genes:
+            ma_tfs.append(ma_tflist[i])
+            ma_tffile.write(ma_tflist[i]+'\n')
+
+    ma_tffile_old.close()
+    ma_tffile.close()
+
+    priors1 = file('data/Th17_standard/priors1','w')
+    priors2 = file('data/Th17_standard/priors2','w')
+    priorsr = []
+    priorsm = []
+    dfc = pd.DataFrame.from_csv('data/TH17/th17_whole_C_cut_prcnt_0_num_tfs_28_sam_0_deseq_cut_1_Aug_8_2012_priorCut0p75.tsv',sep='\t',header=0)
+    nonzerosy = dfc.apply(np.nonzero, axis=1)
+    for i in range(len(nonzerosy)):
+        for j in range(len(nonzerosy[i][0])):
+            k = nonzerosy[i][0][j]
+            if dfc.columns[k] in ma_tfs:
+                if dfc.index[i] in ma_genes:
+                    priors1.write(dfc.columns[k] + '\t' + dfc.index[i] + '\t' + str(abs(dfc.loc[dfc.index[i], dfc.columns[k]])) + '\n')
+                    priorsm.append((fr.one_gene(dfc.columns[k], 'microrarray'), fr.one_gene(dfc.index[i], 'microarray')))
+            if dfc.columns[k] in ma_genes:
+                if dfc.index[i] in ma_tfs:
+                    priors1.write(dfc.index[i] + '\t' + dfc.columns[k] + '\t' + str(abs(dfc.loc[dfc.index[i], dfc.columns[k]])) + '\n')
+                    priorsm.append((fr.one_gene(dfc.index[i], 'microrarray'), fr.one_gene(dfc.columns[k], 'microarray')))
+            if dfc.columns[k] in rna_tfs:
+                if dfc.index[i] in rna_genes:
+                    priors2.write(dfc.columns[k] + '\t' + dfc.index[i] + '\t' + str(abs(dfc.loc[dfc.index[i], dfc.columns[k]])) + '\n')
+                    priorsr.append((fr.one_gene(dfc.columns[k], 'RNAseq'), fr.one_gene(dfc.index[i], 'RNAseq')))
+            if dfc.columns[k] in rna_genes:
+                if dfc.index[i] in rna_tfs:
+                    priors2.write(dfc.index[i] + '\t' + dfc.columns[k] + '\t' + str(abs(dfc.loc[dfc.index[i], dfc.columns[k]])) + '\n')
+                    priorsr.append((fr.one_gene(dfc.index[i], 'RNAseq'), fr.one_gene(dfc.columns[k], 'RNAseq')))
+    priors1.close()
+    priors2.close()
+
+    gold1 = file('data/Th17_standard/gold1','w')
+    gold2 = file('data/Th17_standard/gold2','w')
+    dfk = pd.DataFrame.from_csv('data/TH17/th17_whole_K_cut_prcnt_20_num_tfs_28_sam_0_deseq_cut_0.25_Aug_8_2012_priorCut0p75.tsv',sep='\t',header=0)
+    nonzerosk = dfk.apply(np.nonzero, axis=1)
+    for i in range(len(nonzerosk)):
+        for j in range(len(nonzerosk[i][0])):
+            k = nonzerosk[i][0][j]
+            if dfk.columns[k] in ma_tfs:
+                if dfk.index[i] in ma_genes:                    
+                    gold1.write(dfk.columns[k] + '\t' + dfk.index[i] + '\t' + str(abs(dfk.loc[dfk.index[i], dfk.columns[k]])) + '\n')
+            if dfk.columns[k] in ma_genes:
+                if dfk.index[i] in ma_tfs:
+                    gold1.write(dfk.index[i] + '\t' + dfk.columns[k] + '\t' + str(abs(dfk.loc[dfk.index[i], dfk.columns[k]])) + '\n')
+            if dfk.columns[k] in rna_tfs:
+                if dfk.index[i] in rna_genes:                    
+                    gold2.write(dfk.columns[k] + '\t' + dfk.index[i] + '\t' + str(abs(dfk.loc[dfk.index[i], dfk.columns[k]])) + '\n')
+            if dfk.columns[k] in rna_genes:
+                if dfk.index[i] in rna_tfs:
+                    gold2.write(dfk.index[i] + '\t' + dfk.columns[k] + '\t' + str(abs(dfk.loc[dfk.index[i], dfk.columns[k]])) + '\n')
+    gold1.close()
+    gold2.close()
+
+
+    rna_df2 = rna_df.T
+    rna_n = np.array(rna_df2)
+    rna_norm = normalize(rna_n, mean_zero = True)
+    rna_df3 = pd.DataFrame(rna_norm)
+    rna_df3.columns = rna_df2.columns
+    rna_df3.to_csv('data/Th17_standard/expression2', sep='\t',header=True, index=False)
+
+    rna_condfile = file('data/Th17_standard/conditions2','w')
+    rna_conditions = list(rna_df2.index)
+    for i in range(len(rna_conditions)):
+        rna_condfile.write(rna_conditions[i]+'\n')
+
+    ma_df2 = ma_df.T
+    ma_n = np.array(ma_df2)
+    ma_norm = normalize(ma_n, mean_zero=True)
+    ma_df3 = pd.DataFrame(ma_norm)
+    ma_df3.columns = ma_df2.columns
+    ma_df3.to_csv('data/Th17_standard/expression1', sep='\t', header=True, index=False)
+
+    ma_condfile = file('data/Th17_standard/conditions1','w')
+    ma_conditions = list(ma_df2.index)
+    for i in range(len(ma_conditions)):
+        ma_condfile.write(ma_conditions[i]+'\n')
+
+
+
+    tc = np.log(2)/10
+    with file(out_dir+os.sep+'description', 'w') as f:
+        f.write('organism1\t%s\norganism2\t%s\n' % ('microarray','RNAseq'))
+        f.write('tc1\t%f\ntc2\t%f' %(tc,tc))
+
+
+    orthfile = file('data/Th17_standard/orth','w')
+    for i in range(len(ma_genes)):
+        if ma_genes[i] in rna_genes:
+            orthfile.write(ma_genes[i] + '\t' + ma_genes[i] + '\t' + 'True' + '\n')
+
+    #write_fake_td(os.path.join(out_dir, 'time_diffs1'), np.array(ma_df2))
+    #write_fake_td(os.path.join(out_dir, 'time_diffs2'), np.array(rna_df2))
+
+    write_ss_td(os.path.join(out_dir, 'time_diffs1'), np.array(ma_df2))
+    write_ss_td(os.path.join(out_dir, 'time_diffs2'), np.array(rna_df2))
