@@ -719,6 +719,7 @@ def solve_ortho_direct(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors,lamP, lam
     (lamR, lamP) = pad_lamRP(lamR, lamP, len(organisms))    
     ridge_con = priors_to_constraints(organisms, gene_ls, tf_ls, priors, lamP)
     fuse_con = orth_to_constraints(organisms, gene_ls, tf_ls, orth, lamS**0.5, lamS_opt)
+    print 'there are %d fuse cons'%len(fuse_con)
     Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR, adjust = settings['adjust'])    
     
     return Bs

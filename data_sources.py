@@ -852,17 +852,18 @@ def generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, organisms, falsepos,
         orth_genes.add(orth.genes[1])
     
     all_possible_orths = []
+
     
     for gene1 in genes1:
         for gene2 in genes2:
             possible_orth = fr.orthology(genes = (fr.one_gene(name=gene1, organism = organisms[0]), fr.one_gene(name=gene2, organism = organisms[1])), real = False)
             all_possible_orths.append(possible_orth)
-
+            
     for tf1 in tfs1:
         for tf2 in tfs2:
             possible_orth = fr.orthology(genes = (fr.one_gene(name=tf1, organism = organisms[0]), fr.one_gene(name=tf2, organism = organisms[1])), real = False)
             all_possible_orths.append(possible_orth)
-            
+
     random.shuffle(all_possible_orths)
     
     to_add = []
@@ -872,6 +873,56 @@ def generate_faulty_orth(orths, genes1, tfs1, genes2, tfs2, organisms, falsepos,
     
         if len(to_add) == num_to_add:
             break
+        if candidate_orth.genes[0] in orth_genes or candidate_orth.genes[1] in orth_genes:
+            continue
+        #add these, to make sure no double dipping
+        orth_genes.add(candidate_orth.genes[0])
+        orth_genes.add(candidate_orth.genes[1])
+        to_add.append(candidate_orth)
+
+    #print '%d real, %d fake' % (len(orths_retain), len(to_add))
+    real_fake_orths = orths_retain + to_add
+    
+    return real_fake_orths
+
+#adds false positives/negatives without generating all possible orthologies.
+#may run forever with large values of false positives
+#now also marks orths as real or fake
+#orth_falsepos: number of fake orthologies to add, in units of the original number of orthologies
+#orth_falseneg: fraction of original orthologies to remove
+def generate_faulty_orth2(orths, genes1, tfs1, genes2, tfs2, organisms, falsepos, falseneg):
+    #make a list of sets containing gene fusion groups to prevent from adding false orths that result in unduly large fusion groups
+        
+    num_to_remove = int(falseneg * len(orths))
+    num_to_add = int(falsepos * len(orths))
+    
+    random.shuffle(orths)
+    final_real_ind = max(0, len(orths)-num_to_remove)
+    orths_retain = orths[0:final_real_ind]
+    orth_genes = set()
+    for orth in orths_retain:
+        orth_genes.add(orth.genes[0])
+        orth_genes.add(orth.genes[1])
+    
+    #take tfs out of genes
+    tfs1_s = set(tfs1)
+    tfs2_s = set(tfs2)
+    genes1 = filter(lambda x: not x in tfs1_s, genes1)
+    genes2 = filter(lambda x: not x in tfs1_s, genes2)
+            
+    to_add = []
+    #add potential orthologies until enough have been added
+    #don't add orthologies for orths that we already have
+    while len(to_add) < num_to_add:
+        #first decide if a tf or gene orth. 
+
+        if random.random() < float(len(tfs1)*len(tfs2))/(len(genes1)*len(genes2)):
+            g1 = random.sample(tfs1,1)[0]
+            g2 = random.sample(tfs2,1)[0]
+        else:
+            g1 = random.sample(genes1,1)[0]
+            g2 = random.sample(genes2,1)[0]
+        candidate_orth = fr.orthology(genes = (fr.one_gene(name=g1, organism = organisms[0]), fr.one_gene(name=g2, organism = organisms[1])), real = False)
         if candidate_orth.genes[0] in orth_genes or candidate_orth.genes[1] in orth_genes:
             continue
         #add these, to make sure no double dipping

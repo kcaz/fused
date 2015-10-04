@@ -398,7 +398,7 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
         return (p1, p2)
 
     allpriors = map(lambda x: r_partition(x, int(pct_priors*len(x))), all_priors)
-    
+    print (len(allpriors))
     priors_tr = map(lambda x: x[0], allpriors)
 
     if test_all == 'all':
@@ -413,7 +413,9 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
 
     else:
         print 'test_all must be all, part or gold'
-
+    print (len(priors_tr[0]), len(priors_tr[1]))
+    print (len(priors_te[0]), len(priors_te[1]))
+    
     f_te = [None]*num_species
     f_tr = [None]*num_species
     genes = [None]*num_species
@@ -757,7 +759,8 @@ def get_scores_labels(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False
 #tr_priors are the training set priors
 def eval_network_pr(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False, constraints = None, non_con = False, sub=None, test_all='part'):
     (scores, labels, coords) = get_scores_labels(net, genes, tfs, priors, tr_priors, exclude_tfs, constraints, non_con, sub, test_all)
-    if len(scores):
+    
+    if len(scores) and scores.any():
         #print scores[0:10]
         #print labels[0:10]
         
@@ -777,7 +780,7 @@ def eval_network_pr(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False, 
 
 def eval_network_roc(net, genes, tfs, priors, tr_priors=[], exclude_tfs = True, constraints = None, non_con = False, sub=None, test_all='part'):
     (scores, labels, coords) = get_scores_labels(net, genes, tfs, priors, tr_priors, exclude_tfs, constraints, non_con, sub, test_all)
-    if len(scores):
+    if len(scores) and scores.any():
         (fpr, tpr, t) = roc_curve(labels, scores)
         if any(np.isnan(fpr)) or any(np.isnan(tpr)):
             return (0.0, (None, None, None)) #no false positives        
