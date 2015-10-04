@@ -758,7 +758,7 @@ def get_scores_labels(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False
 def eval_network_pr(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False, constraints = None, non_con = False, sub=None, test_all='part'):
     (scores, labels, coords) = get_scores_labels(net, genes, tfs, priors, tr_priors, exclude_tfs, constraints, non_con, sub, test_all)
     
-    if len(scores) and scores.any():
+    if len(scores) and np.sum(scores)>0:
         #print scores[0:10]
         #print labels[0:10]
         
@@ -778,7 +778,7 @@ def eval_network_pr(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False, 
 
 def eval_network_roc(net, genes, tfs, priors, tr_priors=[], exclude_tfs = True, constraints = None, non_con = False, sub=None, test_all='part'):
     (scores, labels, coords) = get_scores_labels(net, genes, tfs, priors, tr_priors, exclude_tfs, constraints, non_con, sub, test_all)
-    if len(scores) and scores.any():
+    if len(scores) and np.sum(scores)>0:
         (fpr, tpr, t) = roc_curve(labels, scores)
         if any(np.isnan(fpr)) or any(np.isnan(tpr)):
             return (0.0, (None, None, None)) #no false positives        
