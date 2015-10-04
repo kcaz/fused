@@ -2727,7 +2727,7 @@ def plot_bacteria_roc(lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=No
 def plot_roc(out, lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,normed=False,scad=False, cv_both=(True,False), roc_species=0, orgs=None, lamS_opt = None, unfused = False, orth_file=['orth']):
 
     seed = np.random.randn()
-    #scad = False
+    scad = False
     if scad:
         settings = fr.get_settings({'per' : 90})
         solver = 'solve_ortho_direct_scad'
@@ -3330,8 +3330,11 @@ def plot_lamS_real():
     priors = bs_priors + ba_priors
     
     orths = ds.load_orth('data/bacteria_standard/orth',[subt.name, anthr.name])
-    orth = ds.generate_faulty_orth(orths, bs_genes, bs_tfs, ba_genes, ba_tfs, organisms, orth_falsepos, orth_falseneg)
+    
+    orth = ds.generate_faulty_orth2(orths, bs_genes, bs_tfs, ba_genes, ba_tfs, organisms, orth_falsepos, orth_falseneg)
+    
     (constraints, marks) = fr.orth_to_constraints_marked(organisms, gene_ls, tf_ls, orth, lamS)
+    
     
     Bs = fr.solve_ortho_direct(organisms, gene_ls, tf_ls, Xs, Ys, orth, priors, lamP, lamR, lamS)
     b1 = Bs[0]
@@ -3733,27 +3736,19 @@ def test_iter2(start,stop,num,reps):
     sns.tsplot(toplot, time=xax, condition=conds)
     plt.axis(its)
 
-#returns settings dictionaries that get lamS paths added to them    
-def test_iter_all(k=4, lamP=1.0, lamR=0.5, lamS=1.0):
+def test_iter_all(k=2, lamP=1.0, lamR=0.5, lamS=1.0):
     out = 'data/bacteria_standard'
     si_all = fr.get_settings({'it':15, 'iter_eval':True})
     si_su_eu = fr.get_settings({'it':15, 'iter_eval':True})
     si_su_an = fr.get_settings({'it':15, 'iter_eval':True})
 
-    errd = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='iter_solve', reverse = False, cv_both = (True, True, True), exclude_tfs=False, pct_priors=0, seed=44.4, settings=si_all, orgs=['B_subtilis','B_anthracis', 'B_subtilis_eu'])
-    errd = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='iter_solve', reverse = False, cv_both = (True, True, True), exclude_tfs=False, pct_priors=0, seed=44.4, settings=si_su_eu, orgs=['B_subtilis','B_subtilis_eu'])
-    errd = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='iter_solve', reverse = False, cv_both = (True, True, True), exclude_tfs=False, pct_priors=0, seed=44.4, settings=si_su_an, orgs=['B_subtilis','B_anthracis'])
+    errd = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='iter_solve', reverse = True, cv_both = (True, True, True), exclude_tfs=False, pct_priors=0, seed=44.4, settings=si_all, orgs=['B_subtilis','B_anthracis', 'B_subtilis_eu'])
+    errd = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='iter_solve', reverse = True, cv_both = (True, True, True), exclude_tfs=False, pct_priors=0, seed=44.4, settings=si_su_eu, orgs=['B_subtilis','B_subtilis_eu'])
+    errd = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver='iter_solve', reverse = True, cv_both = (True, True, True), exclude_tfs=False, pct_priors=0, seed=44.4, settings=si_su_an, orgs=['B_subtilis','B_anthracis'])
     import pickle
 
-    return (si_all, si_su_eu, si_su_an)
-
-    with file('lamSpaths2', 'w') as f:
-        pickle.dump(si_all, f)
-        pickle.dump(si_su_eu, f)
-        pickle.dump(si_su_an, f)
-
-    #with file('lamSpaths2','w') as f:
-    #    pickle.dump((si_all, si_su_eu, si_su_an), f)
+    with file('lamSpaths','w') as f:
+        pickle.dump(f, (si_all, si_su_eu, si_su_an))
     
 #computes lamS path for orths coming from operons
 def test_operons_iter(k=2, lamP=1.0, lamR=0.5, lamS=1.0, pct_priors=0):
@@ -3920,7 +3915,6 @@ def operons_scad():
 
     settings_fs=fr.get_settings({'s_it': 5, 'per':((1/(1+float(0.5)))*100), 'return_cons':True})
     Bs_fs = fr.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, settings = settings_fs)
-    lamS = 0
     Bs_uf = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
 
     new_fuse_cons = settings_fs['cons'] 
@@ -3932,10 +3926,6 @@ def operons_scad():
     dist_lamS = dict() 
     dist_lamS['distance']=[]
     dist_lamS['lamS']=[]
-
-    diffdiff_lamS = dict()
-    diffdiff_lamS['diff diff beta']=[]
-    diffdiff_lamS['lamS'] = []
 
     ops = file(orth_fn).read().split('\n')
     for i in range(len(ops)):
@@ -3970,7 +3960,6 @@ def operons_scad():
                 B2 = Bs_fs[coeff2.sub][coeff2.r, coeff2.c]
                 Bs_plot[ind].append(B1)
                 Bs_plot[ind].append(B2)
-                Bdiff = abs(B1-B2)
                 Bsdiff_plot[ind].append(abs(B1-B2))
 
                 Buf1 = Bs_uf[coeff1.sub][coeff1.r, coeff1.c]
@@ -3982,19 +3971,12 @@ def operons_scad():
                 Bufdiff_plot[ind].append(abs(Buf1-Buf2))
                 lamS_s[ind].append(lamS)
 
-                if B1 > 0.001 or B2 > 0.001:
-                    if Buf1 > 0.001 or Buf2 > 0.001:
+                if dist not in dist_S.keys():
+                    dist_S[ind] = []
+                dist_S[ind].append(lamS)
 
-
-                        if dist not in dist_S.keys():
-                            dist_S[ind] = []
-                        dist_S[ind].append(lamS)
-
-                        dist_lamS['distance'].append(dist)
-                        dist_lamS['lamS'].append(lamS)
-
-                        diffdiff_lamS['diff diff beta'].append(abs(Bufdiff - Bdiff))
-                        diffdiff_lamS['lamS'].append(lamS)
+                dist_lamS['distance'].append(dist)
+                dist_lamS['lamS'].append(lamS)
 
 
     for k in range(len(dist_S)):
@@ -4004,9 +3986,7 @@ def operons_scad():
     df = pd.DataFrame([[distance, lambdaS] for distance, lamlist in dist_S.items() for lambdaS in lamlist], columns=['distance','lamS'])
     df2 = pd.DataFrame(dist_lamS)
 
-    return (dist_S, dist_lamS, diffdiff_lamS)
-    #return (df, df2)
-    #sns.pointplot(x="distance",y="lamS",data=df2)
+    sns.pointplot(x="distance",y="lamS",data=df2)
     #pdlist = []
     #for m in range(len(dist_S)):
     #    lamSs = dist_S[dist_S.keys()[m]]
