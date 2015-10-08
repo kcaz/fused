@@ -346,7 +346,7 @@ def test_scad_opt_params3():
     o1 = np.dstack((err_l[1]['aupr'], err_s[1]['aupr']))
 
     xax = pd.Series(lamSs, name="lamS")
-    conds = pd.Series(["Fused L2", "Fused SCAD"], name="method")
+    conds = pd.Series(["Fused L2", "adaptive fusion"], name="method")
 
     plt.subplot(131)
     sns.tsplot(o0, time=xax, condition=conds, value="AUPR")
@@ -4191,7 +4191,7 @@ def operons_l2():
     lamS_opt=None
     lamS=0
     solver='solve_ortho_direct'
-    test_all=True
+    test_all='all'
 
     for i in range(it):
         seed=i*abs(np.random.randn())
@@ -4200,9 +4200,7 @@ def operons_l2():
         for i in range(k):
             scores['solver'].append('unfused')
             scores['mse 1'].append(uf[0]['mse'][i][0])
-            scores['mse 2'].append(uf[1]['mse'][i][0])
             scores['aupr 1'].append(uf[0]['aupr'][i][0])
-            scores['aupr 2'].append(uf[1]['aupr'][i][0])
 
         solver='solve_ortho_direct'
         lamS = 0.5
@@ -4211,9 +4209,7 @@ def operons_l2():
         for i in range(k):
             scores['solver'].append('L2_operon')
             scores['mse 1'].append(l2_x[0]['mse'][i][0])
-            scores['mse 2'].append(l2_x[1]['mse'][i][0])
             scores['aupr 1'].append(l2_x[0]['aupr'][i][0])
-            scores['aupr 2'].append(l2_x[1]['aupr'][i][0])   
 
     return scores
 

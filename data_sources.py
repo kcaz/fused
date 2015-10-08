@@ -30,6 +30,17 @@ def normalize(exp_a, mean_zero = False):
 
     return exp_n_a
 
+def normalize_zscore(exp_a):
+    gene_means = exp_a.mean(axis=0)
+    gene_stds = exp_a.std(axis=0)
+
+    exp_n_a = np.zeros(exp_a.shape)
+    for c in range(exp_a.shape[1]):
+        exp_n_a[:,c] = (exp_a[:,c] - gene_means[c]) / gene_stds[c]
+
+    return exp_n_a
+
+
 
 #creates a new expression matrix by joining two exp mats, with arbitrary gene coverage
 #keeps only the genes that are shared in common
@@ -77,16 +88,15 @@ def TFA(X, priors, genes, tfs):
         gi = gene_to_inds[gene2.name]
         P[gi, tfi] = 1
 
-    for i in range(P.shape[0]):
-        if P[i,:].sum() == 0:
-            if i < P.shape[1]:
-                P[i,i] = 1
+    for i in range(P.shape[1]):
+        if P[:,i].sum() == 0:
+            P[i,i] = 1
 
     Pi = np.linalg.pinv(P)
     TFA = np.dot(Pi, Xt)
 
     #TFA = Pi * Xt
-    TFA_norm = normalize(TFA.T, mean_zero = False)
+    TFA_norm = normalize_zscore(TFA.T)
     return TFA_norm
 
 
@@ -1436,7 +1446,7 @@ def th17_ss(use_TFA = True):
 
     rna_df2 = rna_df.T
     rna_n = np.array(rna_df2)
-    rna_norm = normalize(rna_n, mean_zero = True)
+    rna_norm = normalize_zscore(rna_n)
     rna_df3 = pd.DataFrame(rna_norm)
     rna_df3.columns = rna_df2.columns
     rna_df3.to_csv('data/Th17_standard/expression2', sep='\t',header=True, index=False)
@@ -1448,7 +1458,7 @@ def th17_ss(use_TFA = True):
 
     ma_df2 = ma_df.T
     ma_n = np.array(ma_df2)
-    ma_norm = normalize(ma_n, mean_zero=True)
+    ma_norm = normalize_zscore(ma_n)
     ma_df3 = pd.DataFrame(ma_norm)
     ma_df3.columns = ma_df2.columns
     ma_df3.to_csv('data/Th17_standard/expression1', sep='\t', header=True, index=False)

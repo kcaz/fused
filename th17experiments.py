@@ -13,7 +13,7 @@ def rna_ma_test():
 
     net_path = 'data/Th17_standard'
     k = 1
-    lamP = 0.5
+    lamP = 0.001
     lamR= 3
     orth_file=['orth']
     orgs=['microarray','RNAseq']
@@ -26,12 +26,12 @@ def rna_ma_test():
     solver='solve_ortho_direct'
     test_all='all'
     settings_fs=fr.get_settings()
-    use_TFA=True
+    use_TFA=False
 
     for i in range(it):
         seed=i*abs(np.random.randn())
         lamS=0
-        uf = fg.cv_model_m(net_path,lamP,lamR,lamS,k,solver,settings_fs,reverse,cv_both,exclude_tfs,100,seed,verbose,orth_file,orgs,lamS_opt,test_all, use_TFA)
+        uf = fg.cv_model_m(net_path,lamP,lamR,lamS,k,solver,settings_fs,reverse,cv_both,exclude_tfs,1,seed,verbose,orth_file,orgs,lamS_opt,test_all, use_TFA)
         for i in range(k):
             scores['solver'].append('unfused')
             scores['mse 1'].append(uf[0]['mse'][i][0])
@@ -42,18 +42,18 @@ def rna_ma_test():
         solver='solve_ortho_direct'
         lamS = 0.5
         orth_file=['orth']
-        l2_x = fg.cv_model_m(net_path,lamP,lamR,lamS,k,solver,settings_fs,reverse,cv_both,exclude_tfs,100,seed,verbose,orth_file,orgs,lamS_opt, test_all, use_TFA)
+        l2 = fg.cv_model_m(net_path,lamP,lamR,lamS,k,solver,settings_fs,reverse,cv_both,exclude_tfs,1,seed,verbose,orth_file,orgs,lamS_opt, test_all, use_TFA)
         for i in range(k):
             scores['solver'].append('L2')
-            scores['mse 1'].append(l2_x[0]['mse'][i][0])
-            scores['mse 2'].append(l2_x[1]['mse'][i][0])
-            scores['aupr 1'].append(l2_x[0]['aupr'][i][0])
-            scores['aupr 2'].append(l2_x[1]['aupr'][i][0])   
+            scores['mse 1'].append(l2[0]['mse'][i][0])
+            scores['mse 2'].append(l2[1]['mse'][i][0])
+            scores['aupr 1'].append(l2[0]['aupr'][i][0])
+            scores['aupr 2'].append(l2[1]['aupr'][i][0])   
 
         solver='solve_ortho_direct'
         lamS = 2
         orth_file=['orth']
-        l2_x = fg.cv_model_m(net_path,lamP,lamR,lamS,k,solver,settings_fs,reverse,cv_both,exclude_tfs,100,seed,verbose,orth_file,orgs,lamS_opt, test_all,use_TFA)
+        l2_x = fg.cv_model_m(net_path,lamP,lamR,lamS,k,solver,settings_fs,reverse,cv_both,exclude_tfs,1,seed,verbose,orth_file,orgs,lamS_opt, test_all,use_TFA)
         for i in range(k):
             scores['solver'].append('L2.5')
             scores['mse 1'].append(l2_x[0]['mse'][i][0])
@@ -61,8 +61,7 @@ def rna_ma_test():
             scores['aupr 1'].append(l2_x[0]['aupr'][i][0])
             scores['aupr 2'].append(l2_x[1]['aupr'][i][0])   
 
-    return scores
-
+    return (scores, uf, l2, l2_x)
 
 def test_prior_sign_corr():
     print 'hallo'
@@ -220,8 +219,8 @@ def test_prior_corr():
     #(constraints, marks, orths) = ds.load_constraints(bactf)
     (e1_tr, t1_tr, genes1, tfs1) = ds1.load_data()
     #(e2_tr, t2_tr, genes2, tfs2) = ds2.load_data()
-    
-    prior_cons = fr.priors_to_constraints([ds1.name], [genes1], [tfs1], priors1, 1.0)
+        
+    prior_cons = fr.priors_to_constraints([ds1.name], [genes1], [tfs1], priors1, [1.0])
     #gene_corr = np.corrcoef(e1_tr.T)
     #we now rely on the fact that tfs occur before genes, and in the same order as they do in the list of genes, so indices are the same
     
@@ -248,10 +247,7 @@ def test_prior_corr():
         
         corr = (corrmat[1,0])
         random_interactions[i] = corr
-
     
-    
-
     sns.kdeplot(prior_interactions, shade=True, label='priors')
     
     plt.hold(True)
@@ -260,4 +256,181 @@ def test_prior_corr():
     plt.legend()
     plt.ylabel('frequency')
     print 'prior interactions %f, random interactions %f' %(np.mean(prior_interactions), np.mean(random_interactions))
+    plt.show()
+
+
+#looks at (tf, g) correlations and takes the top k (tf, g) pairs and looks at their priors
+def compare_expcorr_prior(k):
+    dfk = pd.DataFrame.from_csv('data/TH17/th17_whole_K_cut_prcnt_20_num_tfs_28_sam_0_deseq_cut_0.25_Aug_8_2012_priorCut0p75.tsv',sep='\t',header=0)
+    dfc = pd.DataFrame.from_csv('data/TH17/th17_whole_C_cut_prcnt_0_num_tfs_28_sam_0_deseq_cut_1_Aug_8_2012_priorCut0p75.tsv',sep='\t',header=0)
+
+    bactf = 'data/Th17_standard'
+    ds1 = ds.standard_source(bactf,0)
+    ds2 = ds.standard_source(bactf,1)
+    (priors1, signs1) = ds1.get_gold()
+    
+    (priors2, signs2) = ds2.get_priors()
+    (e1_tr, t1_tr, genes1, tfs1) = ds1.load_data()
+    (e2_tr, t2_tr, genes2, tfs2) = ds2.load_data()
+    
+    inds_gene_ma = {i : genes1[i] for i in range(len(genes1))}
+    inds_tf_ma = {i : tfs1[i] for i in range(len(tfs1))}
+    inds_gene_r = {i : genes2[i] for i in range(len(genes2))}
+    inds_tf_r = {i : tfs2[i] for i in range(len(tfs2))}
+
+    prior_genes = list(dfk.index)
+    prior_tfs = list(dfk.columns)
+
+    prior_interactions_ma = np.zeros((len(tfs1),len(genes1)))
+    top_prior_inds_ma = []
+    prior_int_tfa_ma = np.zeros((len(tfs1),len(genes1)))
+    top_prior_inds_tfa_ma = []
+
+    for i in range(len(tfs1)):
+        for j in range(len(genes1)):
+            exp_tf = e1_tr[:,i]
+            exp_g = e1_tr[:,j]
+            corr = np.corrcoef(exp_tf,exp_g)[1,0]
+            prior_interactions_ma[i,j] = corr
+    prior_interactions_ma_f = prior_interactions_ma.flatten()
+    top_prior_inds_ma_f = prior_interactions_ma_f.argsort()[len(tfs1):k+len(tfs1)][::-1]
+
+    for i in range(k):
+        indf = top_prior_inds_ma_f[i]
+        gind = np.mod(indf, len(genes1))
+        tind = indf/len(genes1)
+        top_prior_inds_ma.append((tind, gind))
+
+    prior_vals_ma = []
+    rand_vals_ma = []
+    for i in range(k):
+        (t, g) = top_prior_inds_ma[i]
+        tf = inds_tf_ma[t]
+        gene = inds_gene_ma[g]
+        if tf in prior_tfs:
+            if gene in prior_genes:
+                prior_vals_ma.append(dfk[tf][gene])
+    prior_vals_ma = np.array(prior_vals_ma)
+
+    count = 0
+    for i in range(len(prior_interactions_ma_f)):
+        t = np.random.randint(0, len(tfs1))
+        g = np.random.randint(0, len(genes1))
+        if count < len(prior_vals_ma):
+            if tfs1[t] in prior_tfs:
+                if genes1[g] in prior_genes:
+                    rand_vals_ma.append(dfk[tfs1[t]][genes1[g]])
+                    count+=1
+    rand_vals_ma = np.array(rand_vals_ma)
+
+
+
+    for i in range(len(tfs1)):
+        for j in range(len(tfs1)):
+            exp_t1 = t1_tr[:,i]
+            exp_t2 = t1_tr[:,j]
+            corr = np.corrcoef(exp_t1,exp_t2)[1,0]
+            prior_int_tfa_ma[i,j] = corr
+    prior_int_tfa_ma_f = prior_int_tfa_ma.flatten()
+    top_prior_inds_tfa_ma_f = prior_int_tfa_ma_f.argsort()[len(tfs1):k+len(tfs1)][::-1]
+
+    for i in range(k):
+        indf = top_prior_inds_tfa_ma_f[i]
+        tind2 = np.mod(indf, len(tfs1))
+        tind1 = indf/len(genes1)
+        top_prior_inds_tfa_ma.append((tind1, tind2))
+
+    prior_vals_tfa_ma = []
+    rand_vals_tfa_ma = []
+    for i in range(k):
+        (t1, t2) = top_prior_inds_tfa_ma[i]
+        tf1 = inds_tf_ma[t1]
+        tf2 = inds_tf_ma[t2]
+        if tf1 in prior_tfs:
+            if tf2 in prior_tfs:
+                prior_vals_tfa_ma.append(dfk[tf1][tf2])
+    prior_vals_tfa_ma = np.array(prior_vals_tfa_ma)
+
+    count = 0
+    for i in range(len(prior_int_tfa_ma_f)):
+        t1 = np.random.randint(0, len(tfs1))
+        t2 = np.random.randint(0, len(tfs1))
+        if count < len(prior_vals_tfa_ma):
+            if tfs1[t1] in prior_tfs:
+                if tfs1[t2] in prior_genes:
+                    rand_vals_tfa_ma.append(dfk[tfs1[t1]][tfs1[t2]])
+                    count+=1
+    rand_vals_tfa_ma = np.array(rand_vals_tfa_ma)
+
+
+
+    prior_interactions_r = np.zeros((len(tfs2),len(genes2)))
+    top_prior_inds_r = []
+
+    for i in range(len(tfs2)):
+        for j in range(len(genes2)):
+            exp_tf = e2_tr[:,i]
+            exp_g = e2_tr[:,j]
+            corr = np.corrcoef(exp_tf,exp_g)[1,0]
+            prior_interactions_r[i,j] = corr
+    prior_interactions_r_f = prior_interactions_r.flatten()
+    top_prior_inds_r_f = prior_interactions_r_f.argsort()[len(tfs2):k+len(tfs2)][::-1]
+
+    for i in range(k):
+        indf = top_prior_inds_r_f[i]
+        gind = np.mod(indf, len(genes2))
+        tind = indf/len(genes2)
+        top_prior_inds_r.append((tind, gind))
+
+    prior_vals_r = []
+    rand_vals_r = []
+    for i in range(k):
+        (t, g) = top_prior_inds_r[i]
+        tf = inds_tf_r[t]
+        gene = inds_gene_r[g]
+        if tf in prior_tfs:
+            if gene in prior_genes:
+                prior_vals_r.append(dfk[tf][gene])
+    prior_vals_r = np.array(prior_vals_r)
+
+    count = 0
+    for i in range(len(prior_interactions_r_f)):
+        t = np.random.randint(0, len(tfs2))
+        g = np.random.randint(0, len(genes2))
+        if count < len(prior_vals_r):
+            if tfs2[t] in prior_tfs:
+                if genes2[g] in prior_genes:
+                    rand_vals_r.append(dfk[tfs2[t]][genes2[g]])
+                    count+=1
+    rand_vals_r = np.array(rand_vals_r)
+
+    sns.kdeplot(prior_vals_tfa_ma, shade=True, label='priors')
+    plt.hold(True)
+    sns.kdeplot(rand_vals_tfa_ma, shade=True, label='non-priors')
+    plt.xlabel('KO score')
+    plt.legend()
+    plt.ylabel('frequency')
+    plt.title('microarray TFA')
+    print 'prior interactions %f, random interactions %f' %(np.mean(abs(prior_vals_ma)), np.mean(abs(rand_vals_ma)))
+    plt.show()
+
+    sns.kdeplot(prior_vals_ma, shade=True, label='priors')
+    plt.hold(True)
+    sns.kdeplot(rand_vals_ma, shade=True, label='non-priors')
+    plt.xlabel('KO score')
+    plt.legend()
+    plt.ylabel('frequency')
+    plt.title('microarray')
+    print 'prior interactions %f, random interactions %f' %(np.mean(abs(prior_vals_ma)), np.mean(abs(rand_vals_ma)))
+    plt.show()
+
+
+    sns.kdeplot(prior_vals_r, shade=True, label='highest correlated (TF, gene) pairs')
+    plt.hold(True)
+    sns.kdeplot(rand_vals_r, shade=True, label='random (TF, gene) pairs')
+    plt.xlabel('KO score')
+    plt.legend()
+    plt.ylabel('frequency')
+    plt.title('RNA seq')
+    print 'prior interactions %f, random interactions %f' %(np.mean(abs(prior_vals_r)), np.mean(abs(rand_vals_r)))
     plt.show()

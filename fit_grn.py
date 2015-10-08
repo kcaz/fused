@@ -413,8 +413,8 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
 
     else:
         print 'test_all must be all, part or gold'
-    print (len(priors_tr[0]), len(priors_tr[1]))
-    print (len(priors_te[0]), len(priors_te[1]))
+    #print (len(priors_tr[0]), len(priors_tr[1]))
+    #print (len(priors_te[0]), len(priors_te[1]))
     
     f_te = [None]*num_species
     f_tr = [None]*num_species
@@ -760,7 +760,7 @@ def get_scores_labels(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False
 def eval_network_pr(net, genes, tfs, priors, tr_priors=[], exclude_tfs = False, constraints = None, non_con = False, sub=None, test_all='part'):
     (scores, labels, coords) = get_scores_labels(net, genes, tfs, priors, tr_priors, exclude_tfs, constraints, non_con, sub, test_all)
     
-    if len(scores) and np.sum(scores)>0:
+    if len(scores) and np.sum(labels)>0:
         #print scores[0:10]
         #print labels[0:10]
         
