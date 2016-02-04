@@ -147,7 +147,7 @@ def fit_model(data_fn, lamP, lamR, lamS, solver='solve_ortho_direct', settings =
     return Bs
 
 #solves networks separately, then rank combines to get network
-def cv_unfused(data_fn, lamP, lamR, k, solver='solve_ortho_direct', settings=None, reverse=False, cv_both=(True,True), exclude_tfs=True, pct_priors=0, seed=None, verbose=False, orth_file='orth', orgs=None, lamS_opt=None, test_all='part'):
+def cv_unfused(data_fn, lamP, lamR, k, solver='solve_ortho_direct', settings=None, reverse=False, cv_both=(True,True), exclude_tfs=True, pct_priors=0, seed=None, verbose=False, orth_file=['orth'], orgs=None, lamS_opt=None, test_all='part', use_TFA=False):
     lamS = 0
     if seed != None:
         random.seed(seed)
@@ -162,7 +162,7 @@ def cv_unfused(data_fn, lamP, lamR, k, solver='solve_ortho_direct', settings=Non
 
     if orgs == None:
         while os.path.isfile(os.path.join(data_fn, 'expression%d' % (num_species+1))):
-            dsi = ds.standard_source(data_fn,num_species)
+            dsi = ds.standard_source(data_fn,num_species, use_TFA=use_TFA)
             dss.append(dsi)
             organisms.append(dsi.name)
             all_orgs.append(dsi.name)
@@ -171,7 +171,7 @@ def cv_unfused(data_fn, lamP, lamR, k, solver='solve_ortho_direct', settings=Non
 
     else:
         while os.path.isfile(os.path.join(data_fn, 'expression%d' % (num_species+1))):
-            dsi = ds.standard_source(data_fn,num_species)
+            dsi = ds.standard_source(data_fn,num_species, use_TFA=use_TFA)
             all_orgs.append(dsi.name)
             if dsi.name in orgs:
                 dss.append(dsi)
@@ -186,8 +186,14 @@ def cv_unfused(data_fn, lamP, lamR, k, solver='solve_ortho_direct', settings=Non
     metrics = metrics1 + metrics2
     (constraints, marks, orth) = ds.load_constraints(data_fn, orgs=organisms)
 
-    orth_fn = os.path.join(data_fn, orth_file)
-    orth = ds.load_orth(orth_fn, all_orgs, organisms)
+    if len(orth_file) == 1:
+        orth_fn = os.path.join(data_fn, orth_file[0])
+        orth = ds.load_orth(orth_fn, all_orgs, organisms)
+    else:
+        orth = []
+        for i in range(len(orth_file)):
+            orth_fn = os.path.join(data_fn, orth_file[i])
+            orth += ds.load_orth(orth_fn, all_orgs, organisms)
     
     folds = map((lambda x: x.partition_data(k)), dss)
     all_priors = map((lambda x: x.get_priors()[0]), dss)
@@ -365,7 +371,7 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
                 num_species +=1
             cand_species += 1
 
-    #set up containers for resTults
+    #set up containers for results
     #prc and roc are special (not individual numbers)
     metrics2 = ['prc','roc', 'prc_con','roc_con', 'prc_noncon', 'roc_noncon']
     for err_dict in err_dicts:
@@ -407,7 +413,8 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
     elif test_all == 'part':
         priors_te = map(lambda x: x[1], allpriors)
 
-    elif test_all == 'gold':
+    #right now only used for th17, which has a different gold standard than priors
+    elif test_all == 'gold':    
         all_gold = map((lambda x: x.get_gold()[0]), dss)
         priors_te = all_gold
 
