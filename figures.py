@@ -134,6 +134,22 @@ def datasources_perf(lamP=(0.03,0.007), lamR=(0.368,0.0789), lamSs=[0,0.5], k=10
 
     return (errdr, errdf)
 
+def datasources_perf2(lamP=(1,1), lamR=(0.368,0.368), lamSs=[0,0.5], k=4,cv_both=(True,True), orgs=['B_subtilis','B_subtilis_eu'], orth_file=['orth']):
+    out = os.path.join('data','bacteria_standard')
+
+    seed = np.random.randn()
+
+    settings = fr.get_settings()
+    solver = 'solve_ortho_direct'
+
+    (errdr, errdf2, priors_te_unrank, priorste_rank) = fg.cv_unfused(out, lamP=lamP, lamR=lamR, k=k, solver = solver, settings = settings, reverse = False, cv_both = cv_both, exclude_tfs=False, seed = seed, orgs = orgs, lamS_opt = None)
+
+    errdf=[]
+    for i, lamS in enumerate(lamSs):
+        (errd, priors_tem) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver=solver, settings=settings, reverse=False, cv_both=cv_both, exclude_tfs=False, seed=seed, orgs=orgs, lamS_opt=None, orth_file=orth_file)
+        errdf.append((errd, priors_tem))
+
+    return (errdr, errdf2, priors_te_unrank, priorste_rank, errdf)
 
 def datasources_perf_NOREVERSE(lamP=(0.03,0.007), lamR=(0.368,0.0789), lamSs=[0,0.5], k=10,cv_both=(True,True), orgs=['B_subtilis','B_subtilis_eu'], orth_file=['orth']):
     out = os.path.join('data','bacteria_standard')

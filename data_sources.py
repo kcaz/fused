@@ -83,9 +83,17 @@ def TFA(X, priors, genes, tfs):
 
     for prior in priors:
         (gene1, gene2) = prior
-        tfi = tf_to_inds[gene1.name]
-        gi = gene_to_inds[gene2.name]
-        P[gi, tfi] = 1
+        if gene1.name in tf_to_inds:
+            if gene2.name in gene_to_inds:
+                tfi = tf_to_inds[gene1.name]
+                gi = gene_to_inds[gene2.name]
+                P[gi, tfi] = 1
+            elif gene2.name not in gene_to_inds:
+                print 'prior gene not in genes'
+                print gene2.name
+        elif gene1.name not in tf_to_inds:
+            print 'prior tf not in tfs'
+            print gene1.name
 
     for tf in tfs:
         tfi = tf_to_inds[tf]
@@ -498,8 +506,8 @@ class subt(data_source):
         self.name = 'B_subtilis'
 
     def get_priors(self):
-        #priors_fn = 'data/bacteria1/bsubt_priors_011916'
-        priors_fn = 'data/bacteria1/gsSDnamesWithActivitySign082213'
+        priors_fn = 'data/bacteria1/bsubt_priors_011916'
+        #priors_fn = 'data/bacteria1/gsSDnamesWithActivitySign082213'
         p = file(priors_fn)
         ps = p.read()
         psn = filter(len, ps.split('\n'))
@@ -561,8 +569,8 @@ class subt_eu(data_source):
         self.name = 'B_subtilis'
 
     def get_priors(self):
-        #priors_fn = 'data/bacteria1/bsubt_priors_011916'
-        priors_fn = 'data/bacteria1/gsSDnamesWithActivitySign082213'
+        priors_fn = 'data/bacteria1/bsubt_priors_011916'
+        #priors_fn = 'data/bacteria1/gsSDnamesWithActivitySign082213'
         p = file(priors_fn)
         ps = p.read()
         psn = filter(len, ps.split('\n'))

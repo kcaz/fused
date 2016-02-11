@@ -186,6 +186,50 @@ def cv_unfused(data_fn, lamP, lamR, k, solver='solve_ortho_direct', settings=Non
     metrics = metrics1 + metrics2
     (constraints, marks, orth) = ds.load_constraints(data_fn, orgs=organisms)
 
+
+####ADDED 2/9 TO COMPARE W CV_MODEL_M
+    metrics1 = ['mse','R2','aupr','auc','corr', 'auc_con','aupr_con', 'auc_noncon', 'aupr_noncon', 'chance', 'chance_con', 'B_mse','top_100']
+    cand_species = 0
+    dss = []
+    num_species = 0
+    all_orgs = []
+    err_dicts = []
+    organisms = []
+
+    if orgs == None:
+        while os.path.isfile(os.path.join(data_fn, 'expression%d' % (num_species+1))):
+            dsi = ds.standard_source(data_fn,num_species, use_TFA=use_TFA)
+            dss.append(dsi)
+            organisms.append(dsi.name)
+            all_orgs.append(dsi.name)
+            err_dicts.append({m : np.zeros((k, 1)) for m in metrics1})
+            err_dicts[num_species]['params'] = (lamP, lamR, lamS, settings)
+            num_species += 1
+
+    else:
+        cand_species = 1
+        while os.path.isfile(os.path.join(data_fn, 'expression%d' % (cand_species))):
+            dsi = ds.standard_source(data_fn,cand_species - 1, use_TFA=use_TFA)
+            all_orgs.append(dsi.name)            
+            if dsi.name in orgs:
+                dss.append(dsi)
+                organisms.append(dsi.name)
+                err_dicts.append({m : np.zeros((k, 1)) for m in metrics1})
+                err_dicts[len(err_dicts)-1]['params'] = (lamP, lamR, lamS, settings)
+                num_species +=1
+            cand_species += 1
+
+    #set up containers for results
+    #prc and roc are special (not individual numbers)
+    metrics2 = ['prc','roc', 'prc_con','roc_con', 'prc_noncon', 'roc_noncon']
+    for err_dict in err_dicts:
+        for metric in metrics2:
+            err_dict[metric] = map(lambda x: [], range(k))
+
+#### END OF ADDED 2/9
+
+
+
     if len(orth_file) == 1:
         orth_fn = os.path.join(data_fn, orth_file[0])
         orth = ds.load_orth(orth_fn, all_orgs, organisms)
@@ -218,6 +262,7 @@ def cv_unfused(data_fn, lamP, lamR, k, solver='solve_ortho_direct', settings=Non
     priorste = []
     for priorslist in priors_te:
         priorste.extend(priorslist)
+    priorstest = list(set(priorste))
 
     f_te = [None]*num_species
     f_tr = [None]*num_species
@@ -276,6 +321,80 @@ def cv_unfused(data_fn, lamP, lamR, k, solver='solve_ortho_direct', settings=Non
                 B = fl.solve_ortho_direct_em(organisms[si], genes[si], tfs[si], Xs[si], Ys[si], orth, priors_tr_fl[si], lamP, lamR, lamS, settings = settings)
             Bs[si] = (B)
 
+
+####ADDED 2/9 TO COMPARE W CV_MODEL_M
+         #evaluate a bunch of metrics
+        (corr, fused_coeffs) = fused_coeff_corr(organisms, genes, tfs, orth, Bs)
+            
+        for si in range(num_species):
+            print si
+            #correlation of fused coefficients
+            #err_dicts[si]['corr'][fold,0] = corr
+
+            #mse
+            mse = prediction_error(Xs_te[si], Bs[si], Ys_te[si], 'mse', exclude_tfs=exclude_tfs)
+            err_dicts[si]['mse'][fold, 0] = mse
+
+            #R2
+            R2 = prediction_error(Xs_te[si], Bs[si], Ys_te[si], 'R2', exclude_tfs=exclude_tfs)
+            err_dicts[si]['R2'][fold, 0] = R2
+            
+            Xsi = Xs[si]
+            Ysi = Ys[si]
+            Bsi = Bs[si]
+
+            if True: #always rescale the beta matrix now
+                S = rescale_betas(Xsi, Ysi, Bsi)
+            else:
+                S = Bsi
+            #aupr and prc curves
+            (aupr, prc) = eval_network_pr(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = None, test_all=test_all)
+            err_dicts[si]['aupr'][fold,0] = aupr
+            err_dicts[si]['prc'][fold] = prc            
+            
+            (aupr_noncon, prc_noncon) = eval_network_pr(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, non_con=True, sub = si, test_all=test_all)
+            err_dicts[si]['aupr_noncon'][fold,0] = aupr_noncon                    
+            err_dicts[si]['prc_noncon'][fold] = downsample_roc(prc_noncon)
+
+            #constrained aupr and prc curves
+            (aupr_con, prc_con) = eval_network_pr(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, sub = si, test_all=test_all)
+            err_dicts[si]['aupr_con'][fold,0] = aupr_con                
+            err_dicts[si]['prc_con'][fold] = downsample_roc(prc_con)
+
+            #auc and roc curves
+            (auc, roc) = eval_network_roc(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = None, test_all=test_all)
+            err_dicts[si]['auc'][fold,0] = auc
+            err_dicts[si]['roc'][fold] = downsample_roc(roc)
+
+            #constrained auc and roc curves
+            (auc_con, roc_con) = eval_network_roc(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, sub = si, test_all=test_all)
+            err_dicts[si]['auc_con'][fold,0] = auc_con
+            err_dicts[si]['roc_con'][fold] = downsample_roc(roc_con)
+
+            (auc_noncon, roc_noncon) = eval_network_roc(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, non_con=True, sub = si,test_all=test_all)
+            err_dicts[si]['auc_noncon'][fold,0] = auc_noncon
+            err_dicts[si]['roc_noncon'][fold] = downsample_roc(roc_noncon)
+            
+            #beta error if data is simulated
+            betafile = os.path.join(data_fn, 'beta%d' % (si+1))
+            if os.path.exists(betafile):
+                B_mse = mse_B(Bs[si], betafile)
+                err_dicts[si]['B_mse'][fold,0] = B_mse
+            
+            #chance precision and chance constrained interactions precision
+            chance = compute_chance_precision(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = None, sub = si)
+            err_dicts[si]['chance'][fold, 0] = chance
+            chance_con = compute_chance_precision(S, genes[si], tfs[si], priors_te[si], tr_priors=priors_tr[si], exclude_tfs=exclude_tfs, constraints = constraints, sub = si)
+            err_dicts[si]['chance_con'][fold, 0] = chance
+            
+            #top 100 interactions
+            err_dicts[si]['top_100'] = top_k_interactions(S, genes[si], tfs[si], priors_te[si], k=np.inf)
+########END OF ADDED 2/9
+
+
+
+
+
         allranks = []
         alllabels = []
         allcoords = []
@@ -315,22 +434,22 @@ def cv_unfused(data_fn, lamP, lamR, k, solver='solve_ortho_direct', settings=Non
         for i, (tf, g) in enumerate(coords_combined):
             rc_B[tf_to_ind[tf], gene_to_ind[g]] = ranks_combined[i]
 
-        (aupr, prc) = eval_network_pr(rc_B, rc_genes, rc_tfs, priorste, tr_priors=priorstr, exclude_tfs=exclude_tfs, constraints = None, test_all=test_all)
+        (aupr, prc) = eval_network_pr(rc_B, rc_genes, rc_tfs, priorstest, tr_priors=priorstr, exclude_tfs=exclude_tfs, constraints = None, test_all=test_all)
         err_dict['aupr'][fold,0] = aupr
         err_dict['prc'][fold] = prc    
     
-        (auc, roc) = eval_network_roc(rc_B, rc_genes, rc_tfs, priorste, tr_priors=priorstr, exclude_tfs=exclude_tfs, constraints = None, test_all=test_all)
+        (auc, roc) = eval_network_roc(rc_B, rc_genes, rc_tfs, priorstest, tr_priors=priorstr, exclude_tfs=exclude_tfs, constraints = None, test_all=test_all)
         err_dict['auc'][fold,0] = auc
         err_dict['roc'][fold] = downsample_roc(roc)
         
         #chance precision and chance constrained interactions precision
-        chance = compute_chance_precision(rc_B, rc_genes, rc_tfs, priorste, tr_priors=priorstr, exclude_tfs=exclude_tfs, constraints = None, sub = si)
+        chance = compute_chance_precision(rc_B, rc_genes, rc_tfs, priorstest, tr_priors=priorstr, exclude_tfs=exclude_tfs, constraints = None, sub = si)
         err_dict['chance'][fold, 0] = chance
         
         #top 100 interactions
-        err_dict['top_100'] = top_k_interactions(rc_B, rc_genes, rc_tfs, priorste, org=organisms[si], k=np.inf)
+        err_dict['top_100'] = top_k_interactions(rc_B, rc_genes, rc_tfs, priorstest, org=organisms[si], k=np.inf)
 
-    return err_dict
+    return (err_dict, err_dicts, priors_te, priorstest)
 
 
 
@@ -404,7 +523,7 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
         return (p1, p2)
 
     allpriors = map(lambda x: r_partition(x, int(pct_priors*len(x))), all_priors)
-    print (len(allpriors))
+    #print (len(allpriors))
     priors_tr = map(lambda x: x[0], allpriors)
 
     if test_all == 'all':
@@ -554,7 +673,7 @@ def cv_model_m(data_fn, lamP, lamR, lamS, k, solver='solve_ortho_direct',setting
             
             #top 100 interactions
             err_dicts[si]['top_100'] = top_k_interactions(S, genes[si], tfs[si], priors_te[si], k=np.inf)
-    return err_dicts
+    return (err_dicts, priors_te)
 
 
 #runs the basic model with specified parameters under k-fold cross-validation, and stores a number of metrics
