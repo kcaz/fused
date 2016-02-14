@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+import experiments as e
 
 def rna_ma_test():
     it = 1
@@ -14,19 +15,19 @@ def rna_ma_test():
     net_path = 'data/Th17_standard'
     k = 1
     lamP = 0.001
-    lamR= 3
+    lamR= 50#6#3
     orth_file=['orth']
     orgs=['microarray','RNAseq']
     reverse=False
     cv_both=(True,True)
-    exclude_tfs=True
+    exclude_tfs=False
     seed=np.random.randn()
     verbose=False
     lamS_opt=None
     solver='solve_ortho_direct'
-    test_all='all'
+    test_all='gold'
     settings_fs=fr.get_settings()
-    use_TFA=False
+    use_TFA=True
 
     for i in range(it):
         seed=i*abs(np.random.randn())
@@ -61,7 +62,7 @@ def rna_ma_test():
             scores['aupr 1'].append(l2_x[0]['aupr'][i][0])
             scores['aupr 2'].append(l2_x[1]['aupr'][i][0])   
 
-    return (scores, uf, l2, l2_x)
+    return (scores, uf, l2)
 
 def test_prior_sign_corr():
     print 'hallo'
@@ -434,3 +435,109 @@ def compare_expcorr_prior(k):
     plt.title('RNA seq')
     print 'prior interactions %f, random interactions %f' %(np.mean(abs(prior_vals_r)), np.mean(abs(rand_vals_r)))
     plt.show()
+
+
+#takes priors and gold standard and makes scatter plot of absolute scores to see what the agreement between priors and gold standard is
+def prior_gs_comparison():
+    dfk = pd.DataFrame.from_csv('data/TH17/th17_whole_K_cut_prcnt_20_num_tfs_28_sam_0_deseq_cut_0.25_Aug_8_2012_priorCut0p75.tsv',sep='\t',header=0)
+    dfc = pd.DataFrame.from_csv('data/TH17/th17_whole_C_cut_prcnt_0_num_tfs_28_sam_0_deseq_cut_1_Aug_8_2012_priorCut0p75.tsv',sep='\t',header=0)
+
+    th17 = 'data/Th17_standard'
+    ds1 = ds.standard_source(th17,0)
+    ds2 = ds.standard_source(th17,1)
+    (e1_tr, t1_tr, genes1, tfs1) = ds1.load_data()
+    (e2_tr, t2_tr, genes2, tfs2) = ds2.load_data()
+
+    prior_genes = list(dfc.index)
+    prior_tfs = list(dfc.columns)
+
+    gs_genes = list(dfk.index)
+    gs_tfs = list(dfk.columns)
+
+    p_gene_ind = {prior_genes[i] : i for i in range(len(prior_genes))}
+    p_tf_ind = {prior_tfs[i] : i for i in range(len(prior_tfs))}
+
+    g_gene_ind = {gs_genes[i] : i for i in range(len(gs_genes))}
+    g_tf_ind = {gs_tfs[i] : i for i in range(len(gs_tfs))}
+
+    prior_scores=[]
+    gs_scores = []
+
+    count=0
+    sim_count=0
+    for i in range(len(prior_genes)):
+        for j in range(len(prior_tfs)):
+            if prior_genes[i] in gs_genes:
+                if prior_tfs[j] in gs_tfs:
+                    if (prior_genes[i] in genes1) or (prior_genes[i] in genes2):
+                        if (prior_tfs[j] in tfs1) or (prior_tfs[j] in tfs2):
+                            prior_score = abs(dfc[prior_tfs[j]][prior_genes[i]])
+                            prior_scores.append(prior_score)
+                            gs_score = abs(dfk[prior_tfs[j]][prior_genes[i]])
+                            gs_scores.append(gs_score)
+                            if abs(prior_score-gs_score) <= 0.3:
+                                sim_count+=1
+                            count+=1
+
+    prior_count = 0
+    for i in range(len(prior_genes)):
+        for j in range(len(prior_tfs)):
+            if (prior_genes[i] in genes1) or (prior_genes[i] in genes2):
+                if (prior_tfs[j] in tfs1) or (prior_tfs[j] in tfs2):
+                    prior_count+=1
+    gs_count = 0
+    for i in range(len(gs_genes)):
+        for j in range(len(gs_tfs)):
+            if (gs_genes[i] in genes1) or (gs_genes[i] in genes2):
+                if (gs_tfs[j] in tfs1) or (gs_tfs[j] in tfs2):
+                    gs_count +=1
+
+    plt.scatter(prior_scores,gs_scores)
+    plt.xlabel('prior scores')
+    plt.ylabel('gold standard scores')
+    plt.show()
+    print 'priors: %f' %prior_count
+    print 'gs: %f' %gs_count
+    print 'priors in gs: %f' %count
+    print 'priors similar to gs: %f' %sim_count
+
+
+
+def test_optR_rd():
+    data_fn = 'data/Th17_standard'
+    orgs=['microarray','RNAseq']
+    dss = []
+    num_species = 0
+   
+    cand_species = 1
+    while os.path.isfile(os.path.join(data_fn, 'expression%d' % (cand_species))):
+        dsi = ds.standard_source(data_fn,num_species)
+        if dsi.name in orgs:
+            dss.append(dsi)
+            num_species +=1
+        cand_species += 1
+
+    Xs = []
+    Ys = []
+    for i in range(num_species):
+        dsi = ds.standard_source(data_fn,i)
+        (ex, tex, genes, tfs) = dsi.load_data()
+        Xs.append(ex)
+        Ys.append(tex)
+
+    folds = 2
+    maxlamR = 2
+    lamR_steps = 20
+    it = 1
+    (optRs, devs, lambdas) = fr.opt_lamR(Xs, Ys, folds, maxlamR, lamR_steps, it)
+    sns.tsplot(devs[0],time='lamR',value='deviance',unit='unit')
+    plt.show()
+    sns.tsplot(devs[1],time='lamR',value='deviance',unit='unit')
+    plt.show()
+ 
+    return (optRs, devs, lambdas)
+
+
+def plot_roc(lamP=0.001, lamR=50, lamSs=[0,1], k=1, metric='prc',savef=None,normed=False,scad=False, cv_both=(True,True), roc_species=0, orgs=None, unfused=True, lamS_opt=None, orth_file=['orth'], pct_priors=100, test_all='gold'):
+    out = os.path.join('data','Th17_standard')
+    e.plot_roc(out, lamP, lamR, lamSs, k, metric, savef,normed,scad, cv_both, roc_species, orgs, lamS_opt, unfused, orth_file, pct_priors,test_all)

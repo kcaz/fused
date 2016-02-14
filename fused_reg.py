@@ -1,5 +1,6 @@
 import numpy as np
 from numpy import linalg
+import matplotlib.pyplot as plt
 import pandas as pd
 import random
 import collections
@@ -33,7 +34,7 @@ def get_settings(override = None):
     d['solver'] = 'basic'#use this later
     d['a'] = 0
     d['per'] = 0
-    d['s_it'] = 5
+    d['s_it'] = 2
     d['m_it'] = 5
     d['it'] = 100 #number of iterative solver iterations (lamS steps)
     d['lamR_steps'] = 100
@@ -1241,14 +1242,39 @@ def mcp(Bs_init, fuse_constraints, lamS, lamW=None, a=2):
 #iteratively adjusts fusion constraint weight to approximate saturating penalty
 def solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, s_it, settings): 
     Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
+    import copy
+    Bs0 = copy.copy(Bs)
     if settings['a'] > 0:
         a = settings['a']
     else:
         a = pick_a(Bs, fuse_con, settings['per'])
-        settings['a'] = a
+        settings['a'] = a     
     for i in range(s_it-1):
         fuse_con = scad(Bs, fuse_con, lamS, a=a)
         Bs = direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR)
+    deltabetas=[]
+    fuse_pen=[]
+    for i in range(len(fuse_con)):
+        con = fuse_con[i]
+        db = Bs0[con.c1.sub][con.c1.r,con.c1.c]-Bs0[con.c2.sub][con.c2.r,con.c2.c]
+        fp = con.lam*db**2
+        deltabetas.append(db)
+        fuse_pen.append(fp)
+    plt.scatter(deltabetas,fuse_pen)
+    plt.title('solvescad bs0')
+    plt.show()
+
+    deltabetas=[]
+    fuse_pen=[]
+    for i in range(len(fuse_con)):
+        con = fuse_con[i]
+        db = Bs[con.c1.sub][con.c1.r,con.c1.c]-Bs[con.c2.sub][con.c2.r,con.c2.c]
+        fp = con.lam*db**2
+        deltabetas.append(db)
+        fuse_pen.append(fp)
+    plt.scatter(deltabetas,fuse_pen)
+    plt.title('solvescad bs_s')
+    plt.show()
     if settings['return_cons']:
         settings['cons'] = fuse_con
     return Bs
@@ -1301,16 +1327,22 @@ def scad_prime(theta, lamS, a):
     
 def scad2_prime(theta, lamS, a):
 
-    if theta < a/2:
+#    if theta < a/2:
+    if theta < a:
         return theta * lamS
-    if theta >= a/2:
-        return lamS * max(0, (a - theta))
+#    if theta >= a/2:
+#        return lamS * max(0, (a - theta))
+    if theta >= a:
+        return lamS * max(0, (2*a - theta))
 
 #returns a new set of fusion constraints corresponding to a saturating penalty
 def scad(Bs_init, fuse_constraints, lamS, a):
+    import matplotlib.pyplot as plt
     count=0
     new_fuse_constraints = []
-    import math    
+    import math
+    deltabeta=[]
+    newlams=[]
     for i in range(len(fuse_constraints)):
         con = fuse_constraints[i]
         b_init_1 = Bs_init[con.c1.sub][con.c1.r, con.c1.c]
@@ -1319,19 +1351,63 @@ def scad(Bs_init, fuse_constraints, lamS, a):
         #if theta_init is too small, don't want to cause numerical problems
         if theta_init <= 0.001 * (np.abs(b_init_1) + np.abs(b_init_2)):
             nlamS = lamS
+            deltabeta.append(theta_init)
+            newlams.append(nlamS)
         else:
             nlamS = scad2_prime(theta_init, lamS, a) / theta_init
+            deltabeta.append(theta_init)
+            newlams.append(nlamS)
         new_con = constraint(con.c1, con.c2, nlamS)
         new_fuse_constraints.append(new_con)
+    #plt.scatter(deltabeta, newlams)
+    #plt.title('scad')
+    #plt.xlabel('deltabeta')
+    #plt.ylabel('newlams')
+    #plt.show()
+
+    #db = []
+    #ss = []
+    #for i in range(len(new_fuse_constraints)):
+    #    con = new_fuse_constraints[i]
+    #    b_init_1 = Bs_init[con.c1.sub][con.c1.r, con.c1.c]
+    #    b_init_2 = Bs_init[con.c2.sub][con.c2.r, con.c2.c] 
+    #    db.append(b_init_1 - b_init_2)
+    #    ss.append(con.lam)
+    #plt.scatter(db, ss)
+    #plt.title('scad2')
+    #plt.show()       
+
+    #plt.hist(db)
+    #plt.title('deltabetas - scad')
+    #plt.show()
+
+    #plt.hist(ss)
+    #plt.title('lamss - scad')
+    #plt.show()
+
     return new_fuse_constraints
 
-def pick_a(Bs_init, fuse_constraints, percentile):
-    
+def pick_a(Bs_init, fuse_constraints, perc):
+    newpercentile = 100 - 0.5*(100 - perc)
     deltabetas = np.abs(beta_diff(Bs_init, fuse_constraints))
-    a = np.percentile(deltabetas, percentile)
-    
-    return a*2
+    a = percentile(deltabetas, newpercentile)
+    count1 = 0
+    count2 = 0
+    for i in range(len(deltabetas)):
+        if deltabetas[i] >= a:
+            count1+=1
+        else:
+            count2+=1
+    return a
+    #return a*2
 
+def percentile(scores, perc):
+    import matplotlib.pyplot as plt
+    #plt.hist(scores)
+    #plt.show()
+    n = int(round((float(perc)/100) * len(scores), 1))
+    scores_sorted = np.sort(scores)
+    return scores_sorted[n]
 
 #this code cuts up columns by depth first search
 #returns a list of lists of columns associated with each subproblem

@@ -80,17 +80,28 @@ def TFA(X, priors, genes, tfs):
 
     Xt = X.T
     P = np.zeros((Xt.shape[0],len(tfs)))
-    priors = priors[0]
 
     for prior in priors:
         (gene1, gene2) = prior
-        tfi = tf_to_inds[gene1.name]
-        gi = gene_to_inds[gene2.name]
-        P[gi, tfi] = 1
+        if gene1.name in tf_to_inds:
+            if gene2.name in gene_to_inds:
+                tfi = tf_to_inds[gene1.name]
+                gi = gene_to_inds[gene2.name]
+                P[gi, tfi] = 1
+            elif gene2.name not in gene_to_inds:
+                print 'prior gene not in genes'
+                print gene2.name
+        elif gene1.name not in tf_to_inds:
+            print 'prior tf not in tfs'
+            print gene1.name
 
-    for i in range(P.shape[1]):
-        if P[:,i].sum() == 0:
-            P[i,i] = 1
+    for tf in tfs:
+        tfi = tf_to_inds[tf]
+        P[tfi, tfi] = 1
+
+    #for i in range(P.shape[1]):
+
+    #    P[i,i] = 1
 
     Pi = np.linalg.pinv(P)
     TFA = np.dot(Pi, Xt)
@@ -184,12 +195,13 @@ def generate_timeseries(tf_mat, exp_mat, td, tc):
         #print Xdt
         #print Xtc
         td_tf_mat[td_row, :] = T1
-        td_exp_mat[td_row, :] = Xdt + Xtc
+        td_exp_mat[td_row, :] = Xdt - Xtc
         #print 'using for row %d' % td_row
         #print Xdt + Xtc
     return (td_tf_mat, td_exp_mat)
 
 #this class assumes directory layout we use for generated data
+#if use_TFA != False, 0 < use_TFA <=1, where 1 means TFA uses all the priors. then get_priors()[0] returns the priors that TFA is NOT using. get_priors()[1] returns the priors TFA is using.
 class standard_source(data_source):
     def __init__(self, datadir, org_ind, use_TFA=False):
         #strip last separator
@@ -246,7 +258,17 @@ class standard_source(data_source):
         #rearrange order so that tfs appear first
         (tfs, genes, tf_mat, exp_mat) = arrange_tfs_first(tfs, genes, tf_mat, exp_mat)
 
-        (tf_mat, exp_mat) = generate_timeseries(tf_mat, exp_mat, td, tc)
+        self.prior_fn = prior_fn
+        self.gold_fn = gold_fn
+        self.name = name
+        self.use_TFA = use_TFA
+
+        if use_TFA != False:
+            tf_mat = TFA(exp_mat, self.get_priors()[1], genes, tfs)        
+            (tf_mat, exp_mat) = generate_timeseries(tf_mat, exp_mat, td, tc)
+
+        else:
+            (tf_mat, exp_mat) = generate_timeseries(tf_mat, exp_mat, td, tc)
         #DO NOT normalize here
         #exp_mat = normalize(exp_mat, True)
         #tf_mat = normalize(tf_mat, False)
@@ -254,26 +276,19 @@ class standard_source(data_source):
         self.exp_mat = exp_mat
         self.tf_mat = tf_mat
         self.datadir = datadir
-        
+
         self.genes = genes
         self.tfs = tfs
-        self.N = exp_mat.shape[0]
-        self.prior_fn = prior_fn
-        self.gold_fn = gold_fn
-        self.name = name
-
-        if use_TFA==True:
-            tf_mat = TFA(exp_mat, self.get_priors(), genes, tfs)
-        
-        #rearrange order so that tfs appear first
-            (tfs, genes, tf_mat, exp_mat) = arrange_tfs_first(tfs, genes, tf_mat, exp_mat)
-            (tf_mat, exp_mat) = generate_timeseries(tf_mat, exp_mat, td, tc)
-            self.exp_mat = exp_mat
-            self.tf_mat = tf_mat
-
-         
+        self.N = exp_mat.shape[0]         
         
     def get_priors(self):
+        def r_partition(x, t):
+            inds = np.arange(len(x))
+            random.shuffle(inds)
+            p1 = map(lambda i: x[i], inds[0:t])
+            p2 = map(lambda i: x[i], inds[t:])
+            return (p1, p2)
+
         p = file(self.prior_fn)
         ps = p.read()
         psn = filter(len, ps.split('\n'))
@@ -290,10 +305,16 @@ class standard_source(data_source):
                 signs.append(-1)
             else:
                 signs.append(0)
-
         p.close()
-        
-        return (priors, signs)
+
+        if self.use_TFA != False:
+            pct_priors = self.use_TFA
+            t = int(pct_priors*len(priors))
+            (te_priors, tfa_priors) = r_partition(priors, t)
+            return (te_priors, tfa_priors, signs)    
+
+        else:
+            return (priors, signs)
 
 
     def get_gold(self):
@@ -313,9 +334,10 @@ class standard_source(data_source):
                 signs.append(-1)
             else:
                 signs.append(0)
-
         p.close()
         
+
+
         return (priors, signs)
 
 #SUBSECTION: ----------------------REAL DATA----------------------
@@ -361,9 +383,10 @@ class ba_timeseries(data_source):
     
         tf_mat = tf_mat_t.T
 
-        self.exp_mat = normalize(exp_mat, True)
-        self.tf_mat = normalize(tf_mat, False)
-        
+        #self.exp_mat = normalize(exp_mat, True)
+        #self.tf_mat = normalize(tf_mat, False)
+        self.exp_mat = normalize_zscore(exp_mat)
+        self.tf_mat = normalize_zscore(tf_mat)        
         self.genes = genes
         self.tfs = tfs
         self.N = exp_mat.shape[0]
@@ -417,8 +440,10 @@ class ba_iron(data_source):
         tf_mat = tf_mat_t.T
         #NOTE removing normalization here
         #NOTE: adding back in, removed from standard source
-        self.exp_mat = normalize(exp_mat, True)
-        self.tf_mat = normalize(tf_mat, False)
+        #self.exp_mat = normalize(exp_mat, True)
+        #self.tf_mat = normalize(tf_mat, False)
+        self.exp_mat = normalize_zscore(exp_mat)
+        self.tf_mat = normalize_zscore(tf_mat)
         #self.exp_mat = exp_mat
         #self.tf_mat = tf_mat
         self.genes = genes
@@ -468,8 +493,10 @@ class subt(data_source):
         tf_mat = tf_mat_t.T
         #NOTE: removed normalization
         #NOTE: adding back in, removed from standard source
-        self.exp_mat = normalize(exp_mat, True)
-        self.tf_mat = normalize(tf_mat, False)
+        #self.exp_mat = normalize(exp_mat, True)
+        #self.tf_mat = normalize(tf_mat, False)
+        self.exp_mat = normalize_zscore(exp_mat)
+        self.tf_mat = normalize_zscore(tf_mat)
         #self.exp_mat = exp_mat
         #self.tf_mat = tf_mat
         self.genes = genes
@@ -479,7 +506,8 @@ class subt(data_source):
         self.name = 'B_subtilis'
 
     def get_priors(self):
-        priors_fn = 'data/bacteria1/gsSDnamesWithActivitySign082213'
+        priors_fn = 'data/bacteria1/bsubt_priors_011916'
+        #priors_fn = 'data/bacteria1/gsSDnamesWithActivitySign082213'
         p = file(priors_fn)
         ps = p.read()
         psn = filter(len, ps.split('\n'))
@@ -528,8 +556,10 @@ class subt_eu(data_source):
         tf_mat = tf_mat_t.T
         #NOTE: removed normalization
         #NOTE: adding back in, removed from standard source
-        self.exp_mat = normalize(exp_mat, True)
-        self.tf_mat = normalize(tf_mat, False)
+        #self.exp_mat = normalize(exp_mat, True)
+        #self.tf_mat = normalize(tf_mat, False)
+        self.exp_mat = normalize_zscore(exp_mat)
+        self.tf_mat = normalize_zscore(tf_mat)
         #self.exp_mat = exp_mat
         #self.tf_mat = tf_mat
         self.genes = genes
@@ -539,7 +569,8 @@ class subt_eu(data_source):
         self.name = 'B_subtilis'
 
     def get_priors(self):
-        priors_fn = 'data/bacteria1/gsSDnamesWithActivitySign082213'
+        priors_fn = 'data/bacteria1/bsubt_priors_011916'
+        #priors_fn = 'data/bacteria1/gsSDnamesWithActivitySign082213'
         p = file(priors_fn)
         ps = p.read()
         psn = filter(len, ps.split('\n'))

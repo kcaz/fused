@@ -303,7 +303,7 @@ def test_scad_opt_params3():
     N_G = 200
     amt_fused = 0.5
     orth_err = [0,0.5,0.75,1]
-    lamSs = [0,2,4]#[0, 2, 4, 6]
+    lamSs = [0,1,2,3, 4]#[0, 2, 4, 6]
     seed = 10
     reps = 1
     k = 5
@@ -581,7 +581,7 @@ def test_scad2():
         Bs_unfused = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP=1.0, lamR=0.1, lamS=0)
         fuse_constraints = fr.orth_to_constraints(organisms, genes, tfs, orth, 0.5)
         #print fuse_constraints
-        new_fuse_constraints = fr.scad(Bs_unfused, fuse_constraints, lamS, lamW=None, a=0.5)
+        new_fuse_constraints = fr.scad(Bs_unfused, fuse_constraints, lamS, a=0.5)
 
         #get delta beta for each fusion constraint pair
         for pair in new_fuse_constraints:
@@ -2720,7 +2720,8 @@ def plot_synthetic_roc(lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',normed=
 #as plot synthetic performance, except it plots overlaid ROC curves for different values of lamS
 def plot_bacteria_roc(lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,normed=False,scad=False, cv_both=(True,False), roc_species=0, orgs=None, unfused=False, lamS_opt=None, orth_file=['orth'], pct_priors=0, test_all='part'):
     out = os.path.join('data','bacteria_standard')
-    plot_roc(out, lamP, lamR, lamSs, k, metric, savef,normed,scad, cv_both, roc_species, orgs, lamS_opt, unfused, orth_file, pct_priors,test_all)
+    errdls = plot_roc(out, lamP, lamR, lamSs, k, metric, savef,normed,scad, cv_both, roc_species, orgs, lamS_opt, unfused, orth_file, pct_priors,test_all)
+    return errdls
 #generic function for above two
 
 #use a list of dictionaries for lamS_opt if using more than one lamS_opt; always include all pairwise lamS for fused species  
@@ -2810,7 +2811,7 @@ def plot_roc(out, lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,n
             chance_rates.append(errdf[chancek])
         errd_opt = errdls[-1]
         rocs_opt = errd_opt[metric]
-        print (lamS_optp, errd_opt[summary_measure].mean())
+        print (lamS_opt, errd_opt[summary_measure].mean())
         all_roc_curves.append(rocs_opt)
         chance_rates.append(errd_opt[chancek])
 
@@ -2857,6 +2858,7 @@ def plot_roc(out, lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,n
     chance_y = [np.mean(chance_rates), np.mean(chance_rates)]
     #plt.plot(chance_x, chance_y,'--k')
     plt.show()
+    return errdls
 
 #plots error dictionaries
 #this one includes lots of incorrect orthology
@@ -3548,7 +3550,7 @@ def con_noncon():
     N_TF = 20
     N_G = 200
     amt_fuseds = [0,0.25,0.5,0.75]
-    lamSs = [0,2,4]
+    lamSs = [0,1,2,3,4,5]
     seed = 10
     k = 5
 
@@ -3583,22 +3585,23 @@ def con_noncon():
     conds = pd.Series(["Constrained", "Non constrained", "Whole network"], name="method")
 
     plt.subplot(141)
-    sns.tsplot(o0, time=xax, condition=conds, value="AUPR")
+    sns.tsplot(o0, time=xax, condition=conds, value="AUPR", legend=False)
     plt.axis([0,4,0.65,1])
     plt.title("Amount fused = 0")
+    plt.legend(loc='upper left')
 
     plt.subplot(142)
-    sns.tsplot(o025, time=xax, condition=conds, value="AUPR")
+    sns.tsplot(o025, time=xax, condition=conds, value="AUPR", legend=False)
     plt.axis([0,4,0.65,1])
     plt.title("Amount fused = 0.25")
 
     plt.subplot(143)
-    sns.tsplot(o05, time=xax, condition=conds, value="AUPR")
+    sns.tsplot(o05, time=xax, condition=conds, value="AUPR", legend=False)
     plt.axis([0,4,0.65,1])
     plt.title("Amount fused = 0.5")
 
     plt.subplot(144)
-    sns.tsplot(o075, time=xax, condition=conds, value="AUPR")
+    sns.tsplot(o075, time=xax, condition=conds, value="AUPR", legend=False)
     plt.axis([0,4,0.65,1])
     plt.title("Amount fused = 0.75")
     plt.show()
@@ -4196,11 +4199,19 @@ def operons_l2():
     for i in range(it):
         seed=i*abs(np.random.randn())
         lamS=0
-        uf = fg.cv_model_m(net_path,lamP,lamR,lamS,k,solver,settings_fs,reverse,cv_both,exclude_tfs,0.5,seed,verbose,orth_file,orgs,lamS_opt,test_all)
+        uf = fg.cv_model_m(net_path,lamP,lamR,lamS,k,solver,settings_fs,reverse,cv_both,exclude_tfs,0,seed,verbose,orth_file,orgs,lamS_opt,test_all)
         for i in range(k):
-            scores['solver'].append('unfused')
+            scores['solver'].append('unfused, no priors')
             scores['mse 1'].append(uf[0]['mse'][i][0])
             scores['aupr 1'].append(uf[0]['aupr'][i][0])
+
+
+        lamS=0
+        ufp = fg.cv_model_m(net_path,lamP,lamR,lamS,k,solver,settings_fs,reverse,cv_both,exclude_tfs,0.5,seed,verbose,orth_file,orgs,lamS_opt,test_all)
+        for i in range(k):
+            scores['solver'].append('unfused, priors')
+            scores['mse 1'].append(ufp[0]['mse'][i][0])
+            scores['aupr 1'].append(ufp[0]['aupr'][i][0])
 
         solver='solve_ortho_direct'
         lamS = 0.5
@@ -4232,3 +4243,754 @@ def xspecies_perf(lamP=(0.03,0.05), lamR=(0.368,0.5), lamSs=[0,0.5,1], k=10,cv_b
 
     return (errdf, errdu)
 
+def tfa_test():
+    it = 1
+    scores = {'solver':[], 'mse 1':[], 'mse 2': [], 'aupr 1':[], 'aupr 2': []}
+
+    net_path = 'data/bacteria_standard'
+    k = 1
+    lamP = 1
+    lamR= 0.368
+    orth_file=['operon']
+    orgs=['B_subtilis']
+    reverse=False
+    cv_both=(True,False)
+    exclude_tfs=False
+    seed=np.random.randn()
+    verbose=False
+    lamS_opt=None
+    solver='solve_ortho_direct'
+    test_all='all'
+    settings_fs=fr.get_settings()
+    use_TFA=0.5
+
+    for i in range(it):
+        seed=i*abs(np.random.randn())
+        lamS=0
+        uf_tfa = fg.cv_model_m(net_path,lamP,lamR,lamS,k,solver,settings_fs,reverse,cv_both,exclude_tfs,0,seed,verbose,orth_file,orgs,lamS_opt,test_all, use_TFA)
+        for i in range(k):
+            scores['solver'].append('unfused, TFA')
+            scores['mse 1'].append(uf_tfa[0]['mse'][i][0])
+            scores['aupr 1'].append(uf_tfa[0]['aupr'][i][0])
+
+        lamS=0
+        use_TFA=False
+        uf_ntfa = fg.cv_model_m(net_path,lamP,lamR,lamS,k,solver,settings_fs,reverse,cv_both,exclude_tfs,0,seed,verbose,orth_file,orgs,lamS_opt,test_all, use_TFA)
+        for i in range(k):
+            scores['solver'].append('unfused, no TFA')
+            scores['mse 1'].append(uf_ntfa[0]['mse'][i][0])
+            scores['aupr 1'].append(uf_ntfa[0]['aupr'][i][0])
+
+        lamS = 0.5
+        use_TFA=0.5
+        l2_tfa = fg.cv_model_m(net_path,lamP,lamR,lamS,k,solver,settings_fs,reverse,cv_both,exclude_tfs,0,seed,verbose,orth_file,orgs,lamS_opt, test_all, use_TFA)
+        for i in range(k):
+            scores['solver'].append('L2, TFA')
+            scores['mse 1'].append(l2_tfa[0]['mse'][i][0])
+            scores['aupr 1'].append(l2_tfa[0]['aupr'][i][0]) 
+
+        lamS = 0.5
+        use_TFA=False
+        l2_ntfa = fg.cv_model_m(net_path,lamP,lamR,lamS,k,solver,settings_fs,reverse,cv_both,exclude_tfs,0,seed,verbose,orth_file,orgs,lamS_opt, test_all, use_TFA)
+        for i in range(k):
+            scores['solver'].append('L2, no TFA')
+            scores['mse 1'].append(l2_ntfa[0]['mse'][i][0])
+            scores['aupr 1'].append(l2_ntfa[0]['aupr'][i][0]) 
+
+    return scores
+
+
+def tfa_test2():
+    it = 1
+    scores = {'solver':[], 'mse 1':[], 'mse 2': [], 'aupr 1':[], 'aupr 2': []}
+
+    net_path = 'data/bacteria_standard'
+    k = 1
+    lamP = 1
+    lamR= 0.368
+    orth_file=['orth']
+    orgs=['B_subtilis','B_subtilis_eu']
+    reverse=False
+    cv_both=(True,True)
+    exclude_tfs=False
+    seed=np.random.randn()
+    verbose=False
+    lamS_opt=None
+    solver='solve_ortho_direct'
+    test_all='part'
+    settings_fs=fr.get_settings()
+    use_TFA=0.5
+
+    for i in range(it):
+        seed=i*abs(np.random.randn())
+        lamS=0
+        uf_tfa = fg.cv_model_m(net_path,lamP,lamR,lamS,k,solver,settings_fs,reverse,cv_both,exclude_tfs,0,seed,verbose,orth_file,orgs,lamS_opt,test_all, use_TFA)
+#        for i in range(k):
+#            scores['solver'].append('unfused, TFA')
+#            scores['mse 1'].append(uf_tfa[0]['mse'][i][0])
+#            scores['mse 2'].append(uf_tfa[0]['mse'][i][1])            
+#            scores['aupr 1'].append(uf_tfa[0]['aupr'][i][0])
+#            scores['aupr 2'].append(uf_tfa[0]['aupr'][i][1])
+
+        lamS=0
+        use_TFA=False
+        uf_ntfa = fg.cv_model_m(net_path,lamP,lamR,lamS,k,solver,settings_fs,reverse,cv_both,exclude_tfs,0,seed,verbose,orth_file,orgs,lamS_opt,test_all, use_TFA)
+#        for i in range(k):
+#            scores['solver'].append('unfused, no TFA')
+#            scores['mse 1'].append(uf_ntfa[0]['mse'][i][0])
+#            scores['mse 2'].append(uf_ntfa[0]['mse'][i][1])
+#            scores['aupr 1'].append(uf_ntfa[0]['aupr'][i][0])
+#            scores['aupr 2'].append(uf_ntfa[0]['aupr'][i][1])
+
+        lamS = 0.5
+        use_TFA=0.5
+        l2_tfa = fg.cv_model_m(net_path,lamP,lamR,lamS,k,solver,settings_fs,reverse,cv_both,exclude_tfs,0,seed,verbose,orth_file,orgs,lamS_opt, test_all, use_TFA)
+#        for i in range(k):
+#            scores['solver'].append('L2, TFA')
+#            scores['mse 1'].append(l2_tfa[0]['mse'][i][0])
+#            scores['mse 2'].append(l2_tfa[0]['mse'][i][1])
+#            scores['aupr 1'].append(l2_tfa[0]['aupr'][i][0]) 
+#            scores['aupr 2'].append(l2_tfa[0]['aupr'][i][1]) 
+
+        lamS = 0.5
+        use_TFA=False
+        l2_ntfa = fg.cv_model_m(net_path,lamP,lamR,lamS,k,solver,settings_fs,reverse,cv_both,exclude_tfs,0,seed,verbose,orth_file,orgs,lamS_opt, test_all, use_TFA)
+#        for i in range(k):
+#            scores['solver'].append('L2, no TFA')
+#            scores['mse 1'].append(l2_ntfa[0]['mse'][i][0])
+#            scores['mse 2'].append(l2_ntfa[0]['mse'][i][1])
+#            scores['aupr 1'].append(l2_ntfa[0]['aupr'][i][0]) 
+#            scores['aupr 2'].append(l2_ntfa[0]['aupr'][i][1]) 
+
+#    return scores
+    return (uf_tfa, uf_ntfa, l2_tfa, l2_ntfa)
+
+def tfa_test3():
+    it = 1
+    scores = {'solver':[], 'mse 1':[], 'mse 2': [], 'aupr 1':[], 'aupr 2': []}
+
+    net_path = 'data/bacteria_standard'
+    k = 1
+    lamP = 1
+    lamR= 0.368
+    orth_file=['orth']
+    orgs=['B_subtilis','B_subtilis_eu']
+    reverse=False
+    cv_both=(True,True)
+    exclude_tfs=False
+    seed=np.random.randn()
+    verbose=False
+    lamS_opt=None
+    solver='solve_ortho_direct'
+    test_all='part'
+    settings_fs=fr.get_settings()
+    use_TFA=0.5
+
+    for i in range(it):
+        seed=i*abs(np.random.randn())
+        lamS=0
+
+        uf_tfa = fg.cv_unfused(net_path,lamP,lamR,k,solver,settings_fs,reverse,cv_both,exclude_tfs,0,seed,verbose,orth_file,orgs,lamS_opt,test_all,use_TFA)
+#        for i in range(k):
+#            scores['solver'].append('unfused, TFA')
+#            scores['mse 1'].append(uf_tfa[0]['mse'][i][0])
+#            scores['mse 2'].append(uf_tfa[0]['mse'][i][1])            
+#            scores['aupr 1'].append(uf_tfa[0]['aupr'][i][0])
+#            scores['aupr 2'].append(uf_tfa[0]['aupr'][i][1])
+
+        lamS=0
+        use_TFA=False
+        uf_ntfa = fg.cv_unfused(net_path,lamP,lamR,k,solver,settings_fs,reverse,cv_both,exclude_tfs,0,seed,verbose,orth_file,orgs,lamS_opt,test_all,use_TFA)
+#        for i in range(k):
+#            scores['solver'].append('unfused, no TFA')
+#            scores['mse 1'].append(uf_ntfa[0]['mse'][i][0])
+#            scores['mse 2'].append(uf_ntfa[0]['mse'][i][1])
+#            scores['aupr 1'].append(uf_ntfa[0]['aupr'][i][0])
+#            scores['aupr 2'].append(uf_ntfa[0]['aupr'][i][1])
+
+        lamS = 0.5
+        use_TFA=0.5
+        l2_tfa = fg.cv_model_m(net_path,lamP,lamR,lamS,k,solver,settings_fs,reverse,cv_both,exclude_tfs,0,seed,verbose,orth_file,orgs,lamS_opt, test_all, use_TFA)
+#        for i in range(k):
+#            scores['solver'].append('L2, TFA')
+#            scores['mse 1'].append(l2_tfa[0]['mse'][i][0])
+#            scores['mse 2'].append(l2_tfa[0]['mse'][i][1])
+#            scores['aupr 1'].append(l2_tfa[0]['aupr'][i][0]) 
+#            scores['aupr 2'].append(l2_tfa[0]['aupr'][i][1]) 
+
+        lamS = 0.5
+        use_TFA=False
+        l2_ntfa = fg.cv_model_m(net_path,lamP,lamR,lamS,k,solver,settings_fs,reverse,cv_both,exclude_tfs,0,seed,verbose,orth_file,orgs,lamS_opt, test_all, use_TFA)
+#        for i in range(k):
+#            scores['solver'].append('L2, no TFA')
+#            scores['mse 1'].append(l2_ntfa[0]['mse'][i][0])
+#            scores['mse 2'].append(l2_ntfa[0]['mse'][i][1])
+#            scores['aupr 1'].append(l2_ntfa[0]['aupr'][i][0]) 
+#            scores['aupr 2'].append(l2_ntfa[0]['aupr'][i][1]) 
+
+#    return scores
+    return (uf_tfa, uf_ntfa, l2_tfa, l2_ntfa)
+
+#for fixed orth_err, picks various percentiles to choose a, then plots lamS for true and false fusion constraints. then looks at the distribution of true differences in fusion constraints
+def adapt_perc():
+    if not os.path.exists(os.path.join('data','fake_data','a')):
+        os.mkdir(os.path.join('data','fake_data','a'))
+
+    out = os.path.join('data','fake_data','a')
+
+    N_TF = 35
+    N_G = 200
+    amt_fused = 1.0
+    orth_err = 0.5
+    lamS =10
+    ds.write_fake_data1(N1 = 40, N2 = 40, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = orth_err, orth_falseneg = orth_err, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.5, fuse_std = 0.1)
+    ds1 = ds.standard_source(out,0)
+    ds2 = ds.standard_source(out,1)
+    orth_fn=os.path.join(out, 'orth')
+    organisms=[ds1.name, ds2.name]
+    orth = ds.load_orth(orth_fn, organisms)
+    (e1, t1, genes1, tfs1) = ds1.load_data()
+    (e2, t2, genes2, tfs2) = ds2.load_data()
+    Xs = [t1, t2]
+    Ys = [e1, e2]
+    (priors1, signs1) = ds1.get_priors()
+    (priors2, signs2) = ds2.get_priors()
+    priors = priors1 + priors2
+    genes = [genes1, genes2]
+    tfs = [tfs1, tfs2]
+    (constraints, marks) = fr.orth_to_constraints_marked(organisms, genes, tfs, orth, lamS)
+    betafile1 = os.path.join(out, 'beta1')
+    betafile2 = os.path.join(out, 'beta2')
+    percs = np.linspace(50,95,5)
+
+    lamP = 1
+    lamR = 4
+    lamS = 0
+    Bs_uf = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
+    lamS = 10
+    Bs_fr = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
+
+    #plt.hold(True)
+    for i, N in enumerate(percs):
+
+        scad_settings = fr.get_settings({'s_it':2, 'per':N, 'return_cons':True})
+
+        lamP = 1
+        lamR = 1
+
+        Bs_fs = fr.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, scad_settings)
+
+        false = []
+        true = []
+        cons = []
+
+        for i in range(len(constraints)):#[0:subs]:
+            con = constraints[i]
+            cons.append(con.lam)
+            mark = marks[i]
+
+            con_fs = scad_settings['cons'][i]
+            lams = con_fs.lam**2
+
+            if mark == True:
+                true.append(lams)
+            if mark == False:
+                false.append(lams)
+
+        plt.figure(i)
+        plt.hist(true, label='true', alpha = 0.5)
+        plt.hist(false, label='false',alpha=0.5)
+        plt.title('percentile: %s' % N)
+        plt.legend()
+        plt.show()
+        #plt.show(block=False)
+
+    (B1, genes_1, tfs_1) = ds.load_network(betafile1)
+    (B2, genes_2, tfs_2) = ds.load_network(betafile1)
+    B_true = []
+    B_false = []
+    for i in range(len(constraints)):
+        con = constraints[i]
+        mark = marks[i]
+        if mark == True:
+            B_true.append(abs(B1[con.c1.r,con.c1.c]-B2[con.c2.r,con.c2.c]))
+        if mark == False:
+            B_false.append(abs(B1[con.c1.r,con.c1.c]-B2[con.c2.r,con.c2.c]))
+    bins = np.linspace(0,5,40)
+    plt.hist(B_true, bins, histtype='stepfilled',label='true', alpha=0.5)
+    plt.hist(B_false, bins, histtype = 'stepfilled',label='false',alpha=0.5)
+    plt.legend()
+    plt.xlabel('absolute value of delta beta')
+    plt.ylabel('frequency')
+    plt.show()
+
+
+    bactf = out
+    ds1 = ds.standard_source(bactf,0)
+    ds2 = ds.standard_source(bactf,1)
+    (priors1, signs1) = ds1.get_priors()
+    
+    (priors2, signs2) = ds2.get_priors()
+    (constraints, marks, orths) = ds.load_constraints(bactf)
+    (e1_tr, t1_tr, genes1, tfs1) = ds1.load_data()
+    (e2_tr, t2_tr, genes2, tfs2) = ds2.load_data()
+    
+    tfs_set_subt = set(tfs1)
+    tfs_set_anth = set(tfs2)
+
+    orth_set_subt = set(map(lambda orth: orth.genes[0].name, orths))
+    orth_set_anth = set(map(lambda orth: orth.genes[1].name, orths))
+    #map from one to the other, OK if orthology 1-1
+    subt_to_anth = {orths[x].genes[0].name : orths[x].genes[1].name for x in range(len(orths))}
+    anth_to_subt = {orths[x].genes[1].name : orths[x].genes[0].name for x in range(len(orths))}
+
+
+    tfs_orth_subt = filter(lambda tf: tf in orth_set_subt and subt_to_anth[tf] in tfs_set_anth, tfs1)
+    tfs_orth_anth = filter(lambda tf: tf in orth_set_anth and anth_to_subt[tf] in tfs_set_subt, tfs2)
+
+    gen_orth_subt = filter(lambda g: g in orth_set_subt, genes1)
+    gen_orth_anth = filter(lambda g: g in orth_set_anth, genes2)
+
+    gene_inds_subt = {genes1[i] : i for i in range(len(genes1))}
+    gene_inds_anth = {genes2[i] : i for i in range(len(genes2))}
+
+    subt_corr_mat = np.zeros((len(tfs_orth_subt), len(gen_orth_subt)))
+    anth_corr_mat = np.zeros((len(tfs_orth_anth), len(gen_orth_anth)))
+    subt_B_mat = np.zeros((len(tfs_orth_subt), len(gen_orth_subt)))
+    anth_B_mat = np.zeros((len(tfs_orth_anth), len(gen_orth_anth)))
+    subt_Bfr_mat = np.zeros((len(tfs_orth_subt), len(gen_orth_subt)))
+    anth_Bfr_mat = np.zeros((len(tfs_orth_anth), len(gen_orth_anth)))
+    subt_Breal_mat = np.zeros((len(tfs_orth_subt), len(gen_orth_subt)))
+    anth_Breal_mat = np.zeros((len(tfs_orth_anth), len(gen_orth_anth)))
+   #subt_corr_mat = np.random.randn(50,50)#len(tfs_orth_subt), len(gen_orth_subt))
+    #anth_corr_mat = np.random.randn(50,50)#len(tfs_orth_anth), len(gen_orth_anth))
+    
+    
+    for r, tf in enumerate(tfs_orth_subt):
+        for c, g in enumerate(gen_orth_subt):
+            
+            tfi = gene_inds_subt[tf]
+            gi = gene_inds_subt[g]
+            corr = np.corrcoef( np.hstack((e1_tr[:, [tfi]], e1_tr[:, [gi]])).T )[0,1]            
+            subt_corr_mat[r, c] = corr
+            subt_B_mat[r, c] = Bs_uf[0][tfi, gi]
+            subt_Bfr_mat[r, c] = Bs_fr[0][tfi, gi]
+            subt_Breal_mat[r, c] = B1[tfi, gi]
+
+    anth_to_subt = {orths[x].genes[1].name : orths[x].genes[0].name for x in range(len(orths))}
+    #for the anthracis correlations, we map the tf or gene onto the corresponding subtilis gene, then compute that index
+    tfs_orth_subt_ind = {tfs_orth_subt[i] : i for i in range(len(tfs_orth_subt))}
+    gen_orth_subt_ind = {gen_orth_subt[i] : i for i in range(len(gen_orth_subt))}
+
+    for r, tf in enumerate(tfs_orth_anth):
+        for c, g in enumerate(gen_orth_anth):
+            tfi = gene_inds_anth[tf]
+            gi = gene_inds_anth[g]
+            corr = np.corrcoef( np.hstack((e2_tr[:, [tfi]], e2_tr[:, [gi]])).T )[0, 1]
+
+            tf_subt = anth_to_subt[tf]
+            g_subt = anth_to_subt[g]
+       
+            r_subt = tfs_orth_subt_ind[tf_subt]
+            c_subt = gen_orth_subt_ind[g_subt]
+            
+            anth_corr_mat[r_subt, c_subt] = corr
+            anth_B_mat[r_subt, c_subt] = Bs_uf[1][tfi,gi]
+            anth_Bfr_mat[r_subt, c_subt] = Bs_fr[1][tfi,gi]
+            anth_Breal_mat[r_subt, c_subt] = B2[tfi,gi] 
+            
+    subt_corrs = subt_corr_mat.ravel()
+    anth_corrs = anth_corr_mat.ravel()
+    subt_B = subt_B_mat.ravel()
+    anth_B = anth_B_mat.ravel()
+    subt_Bfr = subt_Bfr_mat.ravel()
+    anth_Bfr = anth_Bfr_mat.ravel()
+    subt_B_real = subt_Breal_mat.ravel()
+    anth_B_real = anth_Breal_mat.ravel()
+    
+    plt.scatter((subt_B - anth_B), np.abs(subt_corrs - anth_corrs), alpha=0.5)
+    plt.xlabel('delta beta, unfused')
+    plt.ylabel('delta correlation')
+    plt.show()
+    plt.scatter((subt_Bfr - anth_Bfr), np.abs(subt_corrs - anth_corrs), alpha=0.5)
+    plt.xlabel('delta beta, fused L2')
+    plt.ylabel('delta correlation')
+    plt.show()
+    plt.scatter((subt_B_real - anth_B_real), np.abs(subt_corrs - anth_corrs), alpha=0.5)
+    plt.xlabel('delta beta, true')
+    plt.ylabel('delta correlation')
+    plt.show()
+
+
+def adapt_a():
+    if not os.path.exists(os.path.join('data','fake_data','adapt_a')):
+        os.mkdir(os.path.join('data','fake_data','adapt_a'))
+
+    out = os.path.join('data','fake_data','adapt_a')
+
+    N_TF = 35
+    N_G = 200
+    amt_fused = 0.75
+    orth_err = 1
+    lamS =10
+
+    ds.write_fake_data1(N1 = 40, N2 = 40, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = orth_err, orth_falseneg = 0, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0, fuse_std = 0.1)
+    ds1 = ds.standard_source(out,0)
+    ds2 = ds.standard_source(out,1)
+    orth_fn=os.path.join(out, 'orth')
+    organisms=[ds1.name, ds2.name]
+    orth = ds.load_orth(orth_fn, organisms)
+    (e1, t1, genes1, tfs1) = ds1.load_data()
+    (e2, t2, genes2, tfs2) = ds2.load_data()
+    Xs = [t1, t2]
+    Ys = [e1, e2]
+    (priors1, signs1) = ds1.get_priors()
+    (priors2, signs2) = ds2.get_priors()
+    priors = priors1 + priors2
+    genes = [genes1, genes2]
+    tfs = [tfs1, tfs2]
+    (constraints, marks) = fr.orth_to_constraints_marked(organisms, genes, tfs, orth, lamS)
+    betafile1 = os.path.join(out, 'beta1')
+    betafile2 = os.path.join(out, 'beta2')
+
+    lamP = 1
+    lamR = 4
+    lamS = 0
+    Bs_uf = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
+    lamS = 10
+    Bs_fr = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
+
+    lamP = (1,1)
+    lamR = (4,4)
+    ridge_con = fr.priors_to_constraints(organisms, genes, tfs, priors, lamP)
+    fuse_con = fr.orth_to_constraints(organisms, genes, tfs, orth, lamS**0.5)
+    Bs = fr.direct_solve_factor(Xs,Ys,fuse_con, ridge_con, lamR)
+
+    scad_settings = fr.get_settings({'s_it':2, 'per':85, 'return_cons':True})
+
+    lamP = 1
+    lamR = 4
+
+    Bs_fs = fr.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, scad_settings)
+
+    (B1, genes_1, tfs_1) = ds.load_network(betafile1)
+    (B2, genes_2, tfs_2) = ds.load_network(betafile1)
+
+    deltabeta_l2=[]
+    deltabeta_s=[]
+    lams_con=[]
+    fusion_pen_s=[]
+    fusion_pen_l2=[]
+    colors_l2 = []
+    colors_s = []
+
+    print scad_settings['a']
+    constraints = scad_settings['cons']
+
+    for i in range(len(constraints)):
+        con = constraints[i]    
+        b1 = Bs[con.c1.sub][con.c1.r,con.c1.c]
+        b2 = Bs[con.c2.sub][con.c2.r,con.c2.c]
+        b_1 = Bs_uf[con.c1.sub][con.c1.r,con.c1.c]
+        b_2 = Bs_uf[con.c2.sub][con.c2.r,con.c2.c]
+        b_1l2 = Bs_fr[con.c1.sub][con.c1.r,con.c1.c]
+        b_2l2 = Bs_fr[con.c2.sub][con.c2.r,con.c2.c]
+        b_1s = Bs_fs[con.c1.sub][con.c1.r,con.c1.c]
+        b_2s = Bs_fs[con.c2.sub][con.c2.r,con.c2.c]
+        deltabeta_l2.append(b_1l2-b_2l2)
+        deltabeta_s.append(b_1s-b_2s)
+        lams_con.append(con.lam**2)
+        if abs(b_1l2-b_2l2) > scad_settings['a']:
+#        if abs(b_1-b_2) > scad_settings['a']:
+            colors_l2.append('r')
+        if abs(b_1l2-b_2l2) <= scad_settings['a']:
+#        if abs(b_1-b_2) <= scad_settings['a']:
+            colors_l2.append('g')
+
+#        if abs(b_1s-b_2s) > scad_settings['a']:
+#        if abs(b_1-b_2) <= scad_settings['a']:
+        if abs(b1-b2) > scad_settings['a']:
+            colors_s.append('r')
+#        if abs(b_1s-b_2s) <= scad_settings['a']:
+#        if abs(b_1-b_2) <= scad_settings['a']:
+        if abs(b1-b2) <= scad_settings['a']:
+            colors_s.append('g')
+#        fusion_pen_s.append((con.lam**2)*(b_1s-b_2s)**2)
+#        fusion_pen_s.append((con.lam**2)*(b_1-b_2)**2)
+        fusion_pen_s.append((con.lam**2)*(b1-b2)**2)
+        fusion_pen_l2.append(lamS*(b_1l2-b_2l2)**2)
+#        fusion_pen_l2.append(lamS*(b_1-b_2)**2)
+
+    plt.scatter(deltabeta_l2, fusion_pen_l2, c=colors_l2, alpha=0.5)
+    plt.title('fused l2')
+    plt.show()
+    plt.scatter(deltabeta_s, fusion_pen_s, c=colors_s, alpha=0.5)
+    plt.title('adaptive fusion')
+    plt.show()
+
+    n, bins, patches = plt.hist(deltabeta_l2)
+
+    for i in range(len(bins)-1):
+        if abs(bins[i]) >= scad_settings['a']:
+            plt.setp(patches[i], 'facecolor', 'r')
+        else:
+            plt.setp(patches[i], 'facecolor', 'g')
+    plt.show()
+    #return (deltabeta, fusion_pen, colors)
+
+    new_fuse_con = scad_settings['cons']
+    fuse_pen=[]
+    deltabetas=[]
+    for i in range(len(new_fuse_con)):
+        con = new_fuse_con[i]
+        db = Bs[con.c1.sub][con.c1.r,con.c1.c]-Bs[con.c2.sub][con.c2.r,con.c2.c]
+        fp = (con.lam**2)*(db**2)
+        deltabetas.append(db)
+        fuse_pen.append(fp)
+    plt.scatter(deltabetas,fuse_pen)
+    plt.show()
+
+
+
+
+def adapt_test():
+    out = os.path.join('data','fake_data','adapt_a')
+    lamP=(1,1)
+    lamR=(4,4)
+    lamS=4
+
+    ds1 = ds.standard_source(out,0)
+    ds2 = ds.standard_source(out,1)
+    orth_fn=os.path.join(out, 'orth')
+    organisms=[ds1.name, ds2.name]
+    orth = ds.load_orth(orth_fn, organisms)
+    (e1, t1, genes1, tfs1) = ds1.load_data()
+    (e2, t2, genes2, tfs2) = ds2.load_data()
+    Xs = [t1, t2]
+    Ys = [e1, e2]
+    (priors1, signs1) = ds1.get_priors()
+    (priors2, signs2) = ds2.get_priors()
+    priors = priors1 + priors2
+    genes = [genes1, genes2]
+    tfs = [tfs1, tfs2]
+    (constraints, marks) = fr.orth_to_constraints_marked(organisms, genes, tfs, orth, lamS)
+    betafile1 = os.path.join(out, 'beta1')
+    betafile2 = os.path.join(out, 'beta2')
+
+    ridge_con = fr.priors_to_constraints(organisms, genes, tfs, priors, lamP)
+    fuse_con = fr.orth_to_constraints(organisms, genes, tfs, orth, lamS**0.5)
+
+    Bs = fr.direct_solve_factor(Xs,Ys,fuse_con, ridge_con, lamR)
+    deltabetas=[]
+    fuse_pen=[]
+    for i in range(len(fuse_con)):
+        con = fuse_con[i]
+        db = Bs[con.c1.sub][con.c1.r,con.c1.c]-Bs[con.c2.sub][con.c2.r,con.c2.c]
+        fp = con.lam*db**2
+        deltabetas.append(db)
+        fuse_pen.append(fp)
+    plt.scatter(deltabetas,fuse_pen)
+    plt.xlabel('deltabeta')
+    plt.ylabel('fusion penalty')  
+    plt.show()
+
+    settings = fr.get_settings({'s_it':2, 'per':99, 'return_cons':True})
+    s_it = 2
+    Bs_ss = fr.solve_scad(Xs, Ys, fuse_con, ridge_con, lamR, lamS, s_it, settings)
+
+    new_fuse_con = settings['cons']
+    fuse_pen=[]
+    deltabetas=[]
+    for i in range(len(new_fuse_con)):
+        con = new_fuse_con[i]
+        db = Bs[con.c1.sub][con.c1.r,con.c1.c]-Bs[con.c2.sub][con.c2.r,con.c2.c]
+        fp = (con.lam**2)*(db**2)
+        deltabetas.append(db)
+        fuse_pen.append(fp)
+    plt.scatter(deltabetas,fuse_pen)
+    plt.show()
+    #return (Bs, Bs_ss)
+
+
+def scad_tf2():
+    if not os.path.exists(os.path.join('data','fake_data','fused_w_err')):
+        os.mkdir(os.path.join('data','fake_data','fused_w_err'))
+
+    out = os.path.join('data','fake_data','fused_w_err')
+    #out = os.path.join('data','fake_data','deltb_lams')
+
+    N_TF = 35
+    N_G = 200
+    amt_fused = 1.0
+    orth_err = 0.4
+    lamS =10
+    ds.write_fake_data1(N1 = 20, N2 = 20, out_dir = out, tfg_count1=(N_TF, N_G), tfg_count2 = (N_TF, N_G), pct_fused = amt_fused, orth_falsepos = orth_err, orth_falseneg = orth_err, measure_noise1 = 0.1, measure_noise2 = 0.1, sparse=0.0, fuse_std = 0.1)
+
+    scad_settings = fr.get_settings({'s_it':5, 'per':95, 'return_cons':True})
+    #scad_settings = fr.get_settings({'s_it':5, 'a':5000, 'return_cons':True})
+    #'per':((1/(1+float(orth_err)))*100), 'return_cons' : True})
+
+    lamP = 1
+    lamR = 1
+    #(errd1s, errd2s) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=5, solver='solve_ortho_direct_scad', reverse = False, settings = scad_settings, cv_both = (True, True))
+
+    #errd1u, errd2u) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=0, k=5, solver='solve_ortho_direct', reverse = False, settings = None, cv_both = (True, True))
+
+    #(errd1f, errd2f) = fg.cv_model_m(out, lamP=lamP, lamR=lamR,lamS=lamS, k=5, solver='solve_ortho_direct', reverse=False, settings=None, cv_both=(True,True))
+
+    ds1 = ds.standard_source(out,0)
+    ds2 = ds.standard_source(out,1)
+    orth_fn=os.path.join(out, 'orth')
+    organisms=[ds1.name, ds2.name]
+    orth = ds.load_orth(orth_fn, organisms)
+    (e1, t1, genes1, tfs1) = ds1.load_data()
+    (e2, t2, genes2, tfs2) = ds2.load_data()
+    Xs = [t1, t2]
+    Ys = [e1, e2]
+    (priors1, signs1) = ds1.get_priors()
+    (priors2, signs2) = ds2.get_priors()
+    priors = priors1 + priors2
+    genes = [genes1, genes2]
+    tfs = [tfs1, tfs2]
+    (constraints, marks) = fr.orth_to_constraints_marked(organisms, genes, tfs, orth, lamS)
+    betafile1 = os.path.join(out, 'beta1')
+    betafile2 = os.path.join(out, 'beta2')
+
+    lamS=0
+    Bs_uf = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
+    #lamS=8
+    lamS=10
+    Bs_fr = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
+
+    Bs_fs = fr.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS, scad_settings)
+
+    #Bs_fr2 = fr.direct_solve_factor(Xs, Ys, fuse_con, ridge_con, lamR, adjust = scad_settings['adjust'])
+
+    #r1 = Bs_uf[0].shape[0]
+    #c1 = Bs_uf[0].shape[1]
+    #r2 = Bs_uf[1].shape[0]
+    #c2 = Bs_uf[1].shape[1]
+    Buf1 = []
+    Buf2 = []
+    Bfr1 = []
+    Bfr2 = []
+    Bfs1 = []
+    Bfs2 = []
+
+    Bufd = []
+    Bfrd = []
+    Bfsd = []
+
+    colors = []
+    con_inds = np.random.permutation(range(len(constraints)))
+    area_fr = []
+    area_fs = []
+    area_fm = []
+    cons = []
+    cons_fs = []
+
+    subs = 2000
+    for i in con_inds:#[0:subs]:
+        con = constraints[i]
+        cons.append(con.lam)
+        mark = marks[i]
+        Buf1.append(Bs_uf[con.c1.sub][con.c1.r, con.c1.c])
+        Buf2.append(Bs_uf[con.c2.sub][con.c2.r, con.c2.c])
+        Bufd.append(Bs_uf[con.c1.sub][con.c1.r, con.c1.c]-Bs_uf[con.c2.sub][con.c2.r, con.c2.c])
+        Bfr1.append(Bs_fr[con.c1.sub][con.c1.r, con.c1.c])
+        Bfr2.append(Bs_fr[con.c2.sub][con.c2.r, con.c2.c])
+        Bfrd.append(Bs_fr[con.c1.sub][con.c1.r, con.c1.c]-Bs_fr[con.c2.sub][con.c2.r, con.c2.c])
+
+        con_fs = scad_settings['cons'][i]
+        cons_fs.append(con_fs.lam)
+        Bfs1.append(Bs_fs[con_fs.c1.sub][con_fs.c1.r, con_fs.c1.c])
+        Bfs2.append(Bs_fs[con_fs.c2.sub][con_fs.c2.r, con_fs.c2.c])
+        Bfsd.append(Bs_fs[con_fs.c1.sub][con_fs.c1.r, con_fs.c1.c]-Bs_fs[con.c2.sub][con.c2.r, con.c2.c])
+
+        if mark == 1:
+            colors.append('g')
+        else:
+            colors.append('r')
+
+    plt.figure()
+    plt.subplot(131)
+    plt.scatter(Buf1, Buf2, c=colors, alpha=0.5)
+    plt.xlabel('beta network 1')
+    plt.ylabel('beta network 2')
+    plt.axis('equal') 
+    plt.title('Unfused')
+
+    plt.subplot(132)
+    plt.scatter(Bfr1, Bfr2, c=colors, alpha=0.5)
+    plt.xlabel('beta network 1')
+    plt.ylabel('beta network 2')
+    plt.axis('equal') 
+    plt.title('Fused L2')
+
+    plt.subplot(133)
+    plt.scatter(Bfs1, Bfs2, c=colors, alpha=0.5)
+    plt.xlabel('beta network 1')
+    plt.ylabel('beta network 2')
+    plt.title('Adaptive fusion')
+    plt.axis('equal') 
+    plt.show()
+
+    (B1, genes_1, tfs_1) = ds.load_network(betafile1)
+    (B2, genes_2, tfs_2) = ds.load_network(betafile1)
+
+    a=collections.defaultdict(lambda:[])
+
+    for i in range(len(constraints)):
+        con = constraints[i]
+        mark = marks[i]
+        realdiff = B1[con.c1.r, con.c1.c]-B2[con.c2.r, con.c2.c]
+        ufdiff1 = abs(Bs_uf[con.c1.sub][con.c1.r,con.c1.c] - B1[con.c1.r,con.c1.c])
+        ufdiff2 = abs(Bs_uf[con.c2.sub][con.c2.r,con.c2.c] - B2[con.c2.r,con.c1.c])
+        frdiff1 = abs(Bs_fr[con.c1.sub][con.c1.r,con.c1.c] - B1[con.c1.r,con.c1.c])
+        frdiff2 = abs(Bs_fr[con.c2.sub][con.c2.r,con.c2.c] - B2[con.c2.r,con.c1.c])
+        scdiff1 = abs(Bs_fs[con.c1.sub][con.c1.r,con.c1.c] - B1[con.c1.r,con.c1.c])
+        scdiff2 = abs(Bs_fs[con.c2.sub][con.c2.r,con.c2.c] - B2[con.c2.r,con.c1.c])
+
+        if mark == True:
+            a['MSE'].append(ufdiff1)
+            a['solver'].append('unfused')
+            a['ortholog'].append('True')
+            a['MSE'].append(ufdiff2)
+            a['solver'].append('unfused')
+            a['ortholog'].append('True')
+            a['MSE'].append(frdiff1)
+            a['solver'].append('fused L2')
+            a['ortholog'].append('True')
+            a['MSE'].append(frdiff2)
+            a['solver'].append('fused L2')
+            a['ortholog'].append('True')
+            a['MSE'].append(scdiff1)
+            a['solver'].append('adaptive fusion')
+            a['ortholog'].append('True')
+            a['MSE'].append(scdiff2)
+            a['solver'].append('adaptive fusion')
+            a['ortholog'].append('True')
+        if mark == False:
+            a['MSE'].append(ufdiff1)
+            a['solver'].append('unfused')
+            a['ortholog'].append('False')
+            a['MSE'].append(ufdiff2)
+            a['solver'].append('unfused')
+            a['ortholog'].append('False')
+            a['MSE'].append(frdiff1)
+            a['solver'].append('fused L2')
+            a['ortholog'].append('False')
+            a['MSE'].append(frdiff2)
+            a['solver'].append('fused L2')
+            a['ortholog'].append('False')
+            a['MSE'].append(scdiff1)
+            a['solver'].append('adaptive fusion')
+            a['ortholog'].append('False')
+            a['MSE'].append(scdiff2)
+            a['solver'].append('adaptive fusion')
+            a['ortholog'].append('False')
+
+    sns.set_palette("Paired")
+    df = pd.DataFrame(a)
+    sns.barplot(x='solver',y='MSE',hue='ortholog',data=df)
+    plt.show()    
