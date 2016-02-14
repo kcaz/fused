@@ -2718,7 +2718,7 @@ def plot_synthetic_roc(lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',normed=
     plot_roc(out, lamP, lamR, lamSs, k, metric,normed=normed)
 
 #as plot synthetic performance, except it plots overlaid ROC curves for different values of lamS
-def plot_bacteria_roc(lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,normed=False,scad=False, cv_both=(True,False), roc_species=0, orgs=None, unfused=False, lamS_opt=None, orth_file=['orth'], pct_priors=0, test_all=False):
+def plot_bacteria_roc(lamP=1.0, lamR=5, lamSs=[0,1], k=20, metric='roc',savef=None,normed=False,scad=False, cv_both=(True,False), roc_species=0, orgs=None, unfused=False, lamS_opt=None, orth_file=['orth'], pct_priors=0, test_all='part'):
     out = os.path.join('data','bacteria_standard')
     plot_roc(out, lamP, lamR, lamSs, k, metric, savef,normed,scad, cv_both, roc_species, orgs, lamS_opt, unfused, orth_file, pct_priors,test_all)
 #generic function for above two
