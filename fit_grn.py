@@ -83,9 +83,20 @@ def get_rank(scores, labels, coords):
 
     return (ranks, sorted_labels, sorted_coords)
 
+def to_rank(arr):
+    arr = np.abs(arr)
+    shape = arr.shape
+    arr = arr.ravel()
+    idx = np.argsort(arr)
+    ranks = np.zeros(arr.shape[0])
+
+    ranks[idx] = np.arange(arr.shape[0])
+    return ranks.reshape(shape)
+    
 #take lists and averages ranks across coords, where each coords is a list of (tf, g) pairs corresponding to ranks
 #labels_combined should be a list of 0s and 1s, unless there is disagreement among gold standards
 def rank_combine(rankslist, labelslist, coordslist):
+    rankslist = map(to_rank, rankslist)
     rank_dict = {}
     for i in range(len(coordslist)):
         for count, [tf,g] in enumerate(coordslist[i]):
@@ -109,6 +120,27 @@ def rank_combine(rankslist, labelslist, coordslist):
     return (ranks_combined, labels_combined, coords_combined)
 
 
+def rank_combine2(Ss, tfs, genes):
+    def inds(x):
+        idx = x.argsort()
+        y = np.empty(x.shape)
+        y[idx] = np.arange(x.shape[0])
+        return y
+
+    Ss_ranks = map(lambda S: inds(S.ravel()).reshape(S.shape), Ss)
+    coeff_to_ranks = collections.defaultdict(lambda: [])
+    for i, S in enumerate(Ss_ranks):
+        for row, tf in enumerate(tfs[i]):
+            for col, gene in enumerate(genes[i]):
+                coeff_to_ranks[(tf, gene)].append(S[row, col])
+    
+    tfs_u = list(reduce(lambda x,y: x.intersection(y), map(lambda z: set(z), tfs)))
+    genes_u = list(reduce(lambda x,y: x.intersection(y), map(lambda z: set(z), genes)))
+    rc_S = np.zeros((len(tfs_u), len(genes_u)))
+    for row, tf in enumerate(tfs_u):
+        for col, gene in enumerate(genes_u):
+            rc_S[row, col] = np.mean(coeff_to_ranks[(tf, gene)])
+    return (rc_S, tfs_u, genes_u)
 #SECTION: ------------------FOR RUNNING BACTERIAL DATA
 
 def fit_model(data_fn, lamP, lamR, lamS, solver='solve_ortho_direct', settings = None, orth_file ='orth'):
@@ -398,7 +430,8 @@ def cv_unfused(data_fn, lamP, lamR, k, solver='solve_ortho_direct', settings=Non
         allranks = []
         alllabels = []
         allcoords = []
-    
+        Ss = []
+        #return (Xs, Ys, Bs, genes, tfs, all_priors, priors_tr)
         for si in range(num_species):
             Xsi = Xs[si]    
             Ysi = Ys[si]
@@ -408,7 +441,7 @@ def cv_unfused(data_fn, lamP, lamR, k, solver='solve_ortho_direct', settings=Non
                 S = rescale_betas(Xsi, Ysi, Bsi)
             else:
                 S = Bsi
-
+            Ss.append(S)
             (scores, labels, coords) = get_scores_labels(S, genes[si], tfs[si], all_priors[si], tr_priors=priors_tr[si], exclude_tfs = False, constraints = None, non_con = False, sub=None)
 
             (ranks, sorted_labels, sorted_coords) = get_rank(scores, labels, coords)
@@ -417,22 +450,8 @@ def cv_unfused(data_fn, lamP, lamR, k, solver='solve_ortho_direct', settings=Non
             alllabels.append(sorted_labels)
             allcoords.append(sorted_coords)
 
-        (ranks_combined, labels_combined, coords_combined) = rank_combine(allranks, alllabels, allcoords)                  
-
-        rc_tfs = []
-        for tf_list in tfs:
-            rc_tfs.extend(tf_list)        
-        rc_genes = []
-        for g_list in genes:
-            rc_genes.extend(g_list)
-
-        rc_B = np.zeros((len(rc_tfs), len(rc_genes)))
-
-        gene_to_ind = {rc_genes[x] : x for x in range(len(rc_genes))}    
-        tf_to_ind = {rc_tfs[x] : x for x in range(len(rc_tfs))}
-
-        for i, (tf, g) in enumerate(coords_combined):
-            rc_B[tf_to_ind[tf], gene_to_ind[g]] = ranks_combined[i]
+        #(ranks_combined, labels_combined, coords_combined) = rank_combine(allranks, alllabels, allcoords)                  
+        (rc_B, rc_tfs, rc_genes) = rank_combine2(Ss, tfs, genes)
 
         (aupr, prc) = eval_network_pr(rc_B, rc_genes, rc_tfs, priorstest, tr_priors=priorstr, exclude_tfs=exclude_tfs, constraints = None, test_all=test_all)
         err_dict['aupr'][fold,0] = aupr
