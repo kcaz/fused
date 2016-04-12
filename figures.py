@@ -86,6 +86,20 @@ def xspecies_perf4(lamP=(0.03,0.05), lamR=(0.368,0.5), lamSs=[0,0.5,1], k=5,cv_b
     #sanity check - errdu gives same answer as errdf
     return errd
 
+def xspecies_perf5(lamP=(1.0,1.0), lamR=(5,5), lamSs=[0,0.5,5], k=10,cv_both=(True,False), orgs=['B_subtilis','B_anthracis'], orth_file=['orth']):
+
+    out = os.path.join('data','bacteria_standard')
+    seed = np.random.randn()
+    settings = fr.get_settings()
+    solver = 'solve_ortho_direct'
+    errd = []
+    for i in range(len(lamSs)):
+        errdf = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamSs[i], k=k, solver=solver, settings=settings, reverse=True, cv_both=cv_both, exclude_tfs=False, seed=seed, orgs=orgs, lamS_opt=None, orth_file=orth_file)
+        errd.append(errdf)
+    #errdu = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=0, k=k, solver=solver, settings=settings, reverse=True, cv_both=cv_both, exclude_tfs=False, seed=seed, orgs=orgs, lamS_opt=None, orth_file=orth_file)
+    #sanity check - errdu gives same answer as errdf
+    return errd
+
 
 def datasources_perf(lamP=(0.03,0.007), lamR=(0.368,0.0789), lamSs=[0,0.5], k=10,cv_both=(True,True), orgs=['B_subtilis','B_subtilis_eu'], orth_file=['orth']):
     out = os.path.join('data','bacteria_standard')
@@ -134,7 +148,7 @@ def datasources_perf(lamP=(0.03,0.007), lamR=(0.368,0.0789), lamSs=[0,0.5], k=10
 
     return (errdr, errdf)
 
-def datasources_perf2(lamP=(1,1), lamR=(0.368,0.368), lamSs=[0,0.5], k=4,cv_both=(True,True), orgs=['B_subtilis','B_subtilis_eu'], orth_file=['orth']):
+def datasources_perf3(lamP=(1,1), lamR=(0.5,0.5), lamSs=[0,1], k=10,cv_both=(True,True), orgs=['B_subtilis','B_subtilis_eu'], orth_file=['orth']):
     out = os.path.join('data','bacteria_standard')
 
     seed = np.random.randn()
@@ -142,14 +156,14 @@ def datasources_perf2(lamP=(1,1), lamR=(0.368,0.368), lamSs=[0,0.5], k=4,cv_both
     settings = fr.get_settings()
     solver = 'solve_ortho_direct'
 
-    (errdr, errdf2, priors_te_unrank, priorste_rank) = fg.cv_unfused(out, lamP=lamP, lamR=lamR, k=k, solver = solver, settings = settings, reverse = False, cv_both = cv_both, exclude_tfs=False, seed = seed, orgs = orgs, lamS_opt = None)
+    errdr = fg.cv_unfused(out, lamP=lamP, lamR=lamR, k=k, solver = solver, settings = settings, reverse = False, cv_both = cv_both, exclude_tfs=False, seed = seed, orgs = orgs, lamS_opt = None)
 
     errdf=[]
     for i, lamS in enumerate(lamSs):
-        (errd, priors_tem) = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver=solver, settings=settings, reverse=False, cv_both=cv_both, exclude_tfs=False, seed=seed, orgs=orgs, lamS_opt=None, orth_file=orth_file)
-        errdf.append((errd, priors_tem))
+        errd = fg.cv_model_m(out, lamP=lamP, lamR=lamR, lamS=lamS, k=k, solver=solver, settings=settings, reverse=False, cv_both=cv_both, exclude_tfs=False, seed=seed, orgs=orgs, lamS_opt=None, orth_file=orth_file)
+        errdf.append(errd)
 
-    return (errdr, errdf2, priors_te_unrank, priorste_rank, errdf)
+    return (errdr, errdf)
 
 def datasources_perf_NOREVERSE(lamP=(0.03,0.007), lamR=(0.368,0.0789), lamSs=[0,0.5], k=10,cv_both=(True,True), orgs=['B_subtilis','B_subtilis_eu'], orth_file=['orth']):
     out = os.path.join('data','bacteria_standard')
@@ -903,8 +917,8 @@ def show_penalty():
     dl2 = map(miniL2dx, xs)
     l2=[np.trapz(dl2[:i], xs[:i]) for i in range(len(xs))]
     sc=[np.trapz(dms[:i], xs[:i]) for i in range(len(xs))]
-    plt.plot(xs, dms)
-    plt.plot(xs, dl2,'--')
+    plt.plot(xs, dms,'--')
+    plt.plot(xs, dl2)
     plt.legend(('adaptive fusion', 'L2'))
     plt.xlabel('|B0 - B1|')
     plt.ylabel('derivative of penalty')
@@ -916,8 +930,8 @@ def show_penalty():
     #plt.plot(xs, (xs[1]-xs[0])*np.cumsum(dms))
     #plt.show()
     #plt.plot(xs, (xs[1]-xs[0])*np.cumsum(dl2),'--')
-    plt.plot(xs, l2)
     plt.plot(xs, sc, '--')
+    plt.plot(xs, l2)
     plt.legend(('adaptive fusion','L2'))
     plt.xlabel('|B0 - B1|')
     plt.ylabel('penalty')
@@ -1156,6 +1170,8 @@ def adapt_perc():
     betafile2 = os.path.join(out, 'beta2')
     percs = np.linspace(50,95,5)
 
+    lamP = 1
+    lamR = 1
     lamS = 0
     Bs_uf = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, orth, priors, lamP, lamR, lamS)
     lamS = 10
@@ -1304,3 +1320,110 @@ def adapt_perc():
     plt.xlabel('correlation difference')
     plt.ylabel('frequency')
     plt.show()
+
+
+def bsub_fakeorth(falsepos=0.3,use_TFA=True):
+    out = os.path.join('data','bacteria_standard')
+    fil = file(os.path.join(out, 'orth'))
+    fs = fil.read()
+    fsn = filter(len, fs.split('\n'))
+    fsnt = map(lambda x: x.split('\t'), fsn)    
+    orths = []
+
+    organisms = ['B_subtilis','B_anthracis']
+    for o in fsnt:
+        real = True
+        if len(o[0]) > 0:
+            if len(o[1]) > 1:
+                orth = fr.orthology(genes = (fr.one_gene(name=o[1],organism=organisms[1]), fr.one_gene(name=o[0], organism=organisms[0])), real = real)
+        orths.append(orth)
+
+    falseneg=0
+
+    ds_sub = ds.standard_source(out,0, use_TFA=use_TFA)
+    ds_ant = ds.standard_source(out,1, use_TFA=use_TFA)
+    (exp_sub, tfexp_sub, genes_sub, tfs_sub) = ds_sub.load_data()
+    (exp_ant, tfexp_ant, genes_ant, tfs_ant) = ds_ant.load_data()
+    priors_sub = ds_sub.get_priors()[0]
+    priors_ant = ds_ant.get_priors()[0]
+
+    tfs_sub2 = map(lambda x: x, tfs_sub)
+    genes_sub2 = map(lambda x: x, genes_sub)
+    tfs_ant2 = map(lambda x: x, tfs_ant)
+    genes_ant2 = map(lambda x: x, genes_ant)
+
+    new_orths = ds.generate_faulty_orth3(orths, genes_sub2, tfs_sub2, genes_ant2, tfs_ant2, organisms, falsepos, falseneg)
+    ds.write_orth(out+os.sep+'fake_orth', new_orths, organisms)
+
+    seed = np.random.randn()
+    settings = fr.get_settings()
+    solver = 'solve_ortho_direct_scad'
+    N = 20
+    scad_settings = fr.get_settings({'s_it':5, 'per':N, 'return_cons':True})
+    genes = [genes_sub, genes_ant]
+    tfs = [tfs_sub, tfs_ant]
+    Xs = [tfexp_sub, tfexp_ant]
+    Ys = [exp_sub, exp_ant]
+    priors = []
+    (constraints, marks, orths) = ds.load_constraints(out, 'fake_orth', ['B_subtilis','B_anthracis'])
+
+    constraint_dict=dict()
+    lamS=0
+    lamP=1
+    lamR=0.5
+    Bs_uf = fr.solve_ortho_direct(organisms, genes, tfs, Xs, Ys, new_orths, priors, lamP, lamR, lamS)
+
+    false_constraints_dbs = []
+    true_constraints_dbs = []
+    for i in range(len(constraints)):
+        con = constraints[i]
+        mark = marks[i]
+        if mark == False:
+            #constraint_dict[con] = abs(Bs_uf[con.c1.sub][con.c1.r, con.c1.c] - Bs_uf[con.c2.sub][con.c2.r,con.c2.c])
+            false_constraints_dbs.append(abs(Bs_uf[con.c1.sub][con.c1.r, con.c1.c] - Bs_uf[con.c2.sub][con.c2.r,con.c2.c]))
+        if mark == True:
+            true_constraints_dbs. append(abs(Bs_uf[con.c1.sub][con.c1.r, con.c1.c] - Bs_uf[con.c2.sub][con.c2.r,con.c2.c]))
+
+    lamS = 1
+    Bs_fs = fr.solve_ortho_direct_scad(organisms, genes, tfs, Xs, Ys, new_orths, priors, lamP, lamR, lamS, scad_settings)
+
+    false = []
+    true = []
+    true_count = 0
+    true_unfused = 0
+    false_count = 0
+    false_unfused = 0
+    cons = []
+
+    for i in range(len(constraints)):#[0:subs]:
+        con = constraints[i]
+        cons.append(con.lam)
+        mark = marks[i]
+
+        con_fs = scad_settings['cons'][i]
+        lams = con_fs.lam**2
+
+        if mark == True:
+            true.append(lams)
+            true_count +=1
+            if lams == 0:
+                true_unfused +=1
+        if mark == False:
+            false.append(lams)
+            false_count +=1
+            if lams == 0:
+                false_unfused +=1
+
+    fun = false_unfused / float(false_count)
+    tun = true_unfused / float(true_count)
+
+    plt.bar([0,1], [fun,tun])
+
+    bins = np.linspace(0,8,13)
+    plt.hist(false_constraints_dbs, bins, alpha=0.5)
+    plt.hist(true_constraints_dbs, bins)
+
+    (a1,b1,c1)=plt.hist(true_constraints_dbs, bins, alpha=0.5)
+    (a2,b2,c2)=plt.hist(false_constraints_dbs, bins, alpha=0.5)
+    plt.plot((b1[0:-1] + b1[1:])/2, a1/a1.sum())
+    plt.plot((b2[0:-1] + b2[1:])/2, a2/a2.sum())

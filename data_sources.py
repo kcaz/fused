@@ -30,6 +30,29 @@ def normalize(exp_a, mean_zero = False):
 
     return exp_n_a
 
+#quantile normalizes multiple expression matrices; takes 
+def quant_normalize_mats(exp_mats):
+    canonical_dist = np.sort(exp_mats[0], axis=1).mean(axis=0)
+    canonical_mean = canonical_dist.mean()
+    canonical_dist = (canonical_dist - canonical_mean)/canonical_dist.std() + canonical_mean
+
+    new_exp_mats = []
+    for i in range(len(exp_mats)):
+        exp_norm = np.zeros(exp_mat[i].shape)
+        new_colnum = exp_mat[i].shape[1]
+        ints = 100/float(new_colnum)
+        percentiles = np.arange(0,100,ints)
+        new_canonical_dist = map(lambda per: scipy.stats.scoreatpercentile(canonical_dist, per), percentiles)
+
+        for r in range(exp_mat[i].shape[0]):
+            order = np.argsort(exp_mat[i][r,:])
+            exp_norm[r, order] = new_canonical_dist
+        new_exp_mats.append(exp_norm)
+
+    return new_exp_mats
+    
+
+
 def normalize_zscore(exp_a):
     gene_means = exp_a.mean(axis=0)
     gene_stds = exp_a.std(axis=0)
@@ -976,6 +999,53 @@ def generate_faulty_orth2(orths, genes1, tfs1, genes2, tfs2, organisms, falsepos
     
     return real_fake_orths
 
+#creates sets of tfs, genes which are not already in orth, and creates faulty orths from them
+def generate_faulty_orth3(orths, genes1, tfs1, genes2, tfs2, organisms, falsepos, falseneg):
+
+    num_to_remove = int(falseneg * len(orths))
+    num_to_add = int(falsepos * len(orths))
+    
+    random.shuffle(orths)
+    final_real_ind = max(0, len(orths)-num_to_remove)
+    orths_retain = orths[0:final_real_ind]
+    orth_genes = set()
+    for orth in orths_retain:
+        orth_genes.add(orth.genes[0])
+        orth_genes.add(orth.genes[1])
+    
+    #take tfs out of genes
+    tfs1_s = set(tfs1)
+    tfs2_s = set(tfs2)
+    genes1 = set(filter(lambda x: not x in tfs1_s, genes1))
+    genes2 = set(filter(lambda x: not x in tfs1_s, genes2))
+            
+    to_add = []
+    #add potential orthologies until enough have been added
+    #don't add orthologies for orths that we already have
+    while len(to_add) < num_to_add:
+        #first decide if a tf or gene orth. 
+        if random.random() < float(len(tfs1_s)*len(tfs2_s))/(len(genes1)*len(genes2)):
+            g1 = random.sample(tfs1_s,1)[0]
+            g2 = random.sample(tfs2_s,1)[0]
+            tfs1_s.remove(g1)
+            tfs2_s.remove(g2)
+        else:
+            g1 = random.sample(genes1,1)[0]
+            g2 = random.sample(genes2,1)[0]
+            genes1.remove(g1)
+            genes2.remove(g2)
+        candidate_orth = fr.orthology(genes = (fr.one_gene(name=g1, organism = organisms[0]), fr.one_gene(name=g2, organism = organisms[1])), real = False)
+        #add these, to make sure no double dipping
+        orth_genes.add(candidate_orth.genes[0])
+        orth_genes.add(candidate_orth.genes[1])
+        to_add.append(candidate_orth)
+
+    #print '%d real, %d fake' % (len(orths_retain), len(to_add))
+    real_fake_orths = orths_retain + to_add
+    
+    return real_fake_orths
+
+
 
 #writes fake data, assumes some reasonable defaults
 def write_fake_data1(out_dir=None, tfg_count1=(5,10), tfg_count2=(5,10), N1=10, N2=10, max_grp_size=2, pct_fused=1.0, fuse_std=0.5, sparse=0.0, organisms = ['uno','dos'], prior_falsepos=0.0, prior_falseneg=0.0, orth_falsepos=0.0, orth_falseneg=0.0, measure_noise1=0.1, measure_noise2=0.1):
@@ -1194,6 +1264,9 @@ def voodoo():
     (bs_e, bs_t, bs_genes, bs_tfs) = sub.load_data()
     (bseu_e, bseu_t, bseu_genes, bseu_tfs) = sub_eu.load_data()
     (ba_e, ba_t, ba_genes, ba_tfs) = anth.load_data()
+
+    #[bs_e, bseu_e, ba_e] = quant_normalize_mats([bs_e, bseu_e, ba_e])
+    #[bs_t, bseu_t, ba_t] = quant_normalize_mats([bs_t, bseu_t, ba_t])
 
     def orth_sub(bs_genes, bseu_genes, bs_tfs, bseu_tfs):
         organisms = ['B_subtilis', 'B_subtilis_eu']
