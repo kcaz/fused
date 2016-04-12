@@ -96,6 +96,7 @@ def to_rank(arr):
 #take lists and averages ranks across coords, where each coords is a list of (tf, g) pairs corresponding to ranks
 #labels_combined should be a list of 0s and 1s, unless there is disagreement among gold standards
 def rank_combine(rankslist, labelslist, coordslist):
+    rankslist = map(to_rank, rankslist)
     rank_dict = {}
     for i in range(len(coordslist)):
         for count, [tf,g] in enumerate(coordslist[i]):
@@ -140,6 +141,27 @@ def rank_combine2(Ss, tfs, genes):
             rc_S[row, col] = np.mean(coeff_to_ranks[(tf, gene)])
     return (rc_S, tfs_u, genes_u)
 
+def rank_combine2(Ss, tfs, genes):
+    def inds(x):
+        idx = x.argsort()
+        y = np.empty(x.shape)
+        y[idx] = np.arange(x.shape[0])
+        return y
+
+    Ss_ranks = map(lambda S: inds(S.ravel()).reshape(S.shape), Ss)
+    coeff_to_ranks = collections.defaultdict(lambda: [])
+    for i, S in enumerate(Ss_ranks):
+        for row, tf in enumerate(tfs[i]):
+            for col, gene in enumerate(genes[i]):
+                coeff_to_ranks[(tf, gene)].append(S[row, col])
+    
+    tfs_u = list(reduce(lambda x,y: x.intersection(y), map(lambda z: set(z), tfs)))
+    genes_u = list(reduce(lambda x,y: x.intersection(y), map(lambda z: set(z), genes)))
+    rc_S = np.zeros((len(tfs_u), len(genes_u)))
+    for row, tf in enumerate(tfs_u):
+        for col, gene in enumerate(genes_u):
+            rc_S[row, col] = np.mean(coeff_to_ranks[(tf, gene)])
+    return (rc_S, tfs_u, genes_u)
 #SECTION: ------------------FOR RUNNING BACTERIAL DATA
 
 def fit_model(data_fn, lamP, lamR, lamS, solver='solve_ortho_direct', settings = None, orth_file ='orth'):
@@ -310,8 +332,11 @@ def cv_unfused(data_fn, lamP, lamR, k, solver='solve_ortho_direct', settings=Non
                 B = fl.solve_ortho_direct_em(organisms[si], genes[si], tfs[si], Xs[si], Ys[si], orth, priors_tr_fl[si], lamP, lamR, lamS, settings = settings)
             Bs[si] = (B)
 
+        allranks = []
+        alllabels = []
+        allcoords = []
         Ss = []
-    
+        #return (Xs, Ys, Bs, genes, tfs, all_priors, priors_tr)
         for si in range(num_species):
             Xsi = Xs[si]    
             Ysi = Ys[si]
