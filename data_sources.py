@@ -30,7 +30,7 @@ def normalize(exp_a, mean_zero = False):
 
     return exp_n_a
 
-#quantile normalizes multiple expression matrices; takes 
+#quantile normalizes multiple expression matrices
 def quant_normalize_mats(exp_mats):
     canonical_dist = np.sort(exp_mats[0], axis=1).mean(axis=0)
     canonical_mean = canonical_dist.mean()
@@ -94,8 +94,8 @@ def join_expr_data(names1, names2, exp_a1, exp_a2):
     name2_fr_inds_a = np.array(name2_fr_inds)
     for r2 in range(exp_a2.shape[0]):
         exp_a[r2+exp_a1.shape[0], :] = exp_a2[r2, name2_fr_inds_a]
-
     return (exp_a, names)
+
 
 def TFA(X, priors, genes, tfs):
     gene_to_inds = {genes[x] : x for x in range(len(genes))}
@@ -122,14 +122,8 @@ def TFA(X, priors, genes, tfs):
         tfi = tf_to_inds[tf]
         P[tfi, tfi] = 1
 
-    #for i in range(P.shape[1]):
-
-    #    P[i,i] = 1
-
     Pi = np.linalg.pinv(P)
     TFA = np.dot(Pi, Xt)
-
-    #TFA = Pi * Xt
     TFA_norm = normalize_zscore(TFA.T)
     return TFA_norm
 
@@ -358,14 +352,9 @@ class standard_source(data_source):
             else:
                 signs.append(0)
         p.close()
-        
-
-
         return (priors, signs)
 
 #SUBSECTION: ----------------------REAL DATA----------------------
-
-
 
 class ba_timeseries(data_source):
     def __init__(self):
@@ -382,7 +371,6 @@ class ba_timeseries(data_source):
         f_tf = file('data/bacteria1/tfNamesAnthracis')
         f_tfs = f_tf.read()
         tfs = filter(len, f_tfs.split('\n'))
-
 
         for r in range(exp_mat_t.shape[0]):
             gene_str_full = fsnt[r+2][0]
@@ -403,11 +391,7 @@ class ba_timeseries(data_source):
             gi = gene_to_ind[tfs[ti]]
             tf_mat_t[ti, :] = exp_mat_t[gi, :]
         exp_mat = exp_mat_t.T
-    
         tf_mat = tf_mat_t.T
-
-        #self.exp_mat = normalize(exp_mat, True)
-        #self.tf_mat = normalize(tf_mat, False)
         self.exp_mat = normalize_zscore(exp_mat)
         self.tf_mat = normalize_zscore(tf_mat)        
         self.genes = genes
@@ -461,14 +445,8 @@ class ba_iron(data_source):
         exp_mat = exp_mat_t.T
 
         tf_mat = tf_mat_t.T
-        #NOTE removing normalization here
-        #NOTE: adding back in, removed from standard source
-        #self.exp_mat = normalize(exp_mat, True)
-        #self.tf_mat = normalize(tf_mat, False)
         self.exp_mat = normalize_zscore(exp_mat)
         self.tf_mat = normalize_zscore(tf_mat)
-        #self.exp_mat = exp_mat
-        #self.tf_mat = tf_mat
         self.genes = genes
         self.tfs = tfs
         self.N = exp_mat.shape[0]
@@ -495,7 +473,6 @@ class subt(data_source):
         t.close()
 
         tfs_set = set(tfs)
-
     
         conds = fslc[0]
         genes = map(lambda x: x[0], fslc[1:])
@@ -514,14 +491,8 @@ class subt(data_source):
 
         exp_mat = exp_mat_t.T
         tf_mat = tf_mat_t.T
-        #NOTE: removed normalization
-        #NOTE: adding back in, removed from standard source
-        #self.exp_mat = normalize(exp_mat, True)
-        #self.tf_mat = normalize(tf_mat, False)
         self.exp_mat = normalize_zscore(exp_mat)
         self.tf_mat = normalize_zscore(tf_mat)
-        #self.exp_mat = exp_mat
-        #self.tf_mat = tf_mat
         self.genes = genes
         self.tfs = tfs
         self.N = exp_mat.shape[0]
@@ -577,14 +548,8 @@ class subt_eu(data_source):
 
         exp_mat = exp_mat_t.T
         tf_mat = tf_mat_t.T
-        #NOTE: removed normalization
-        #NOTE: adding back in, removed from standard source
-        #self.exp_mat = normalize(exp_mat, True)
-        #self.tf_mat = normalize(tf_mat, False)
         self.exp_mat = normalize_zscore(exp_mat)
         self.tf_mat = normalize_zscore(tf_mat)
-        #self.exp_mat = exp_mat
-        #self.tf_mat = tf_mat
         self.genes = genes
         self.tfs = tfs
         self.N = exp_mat.shape[0]
@@ -609,7 +574,6 @@ class subt_eu(data_source):
         return (priors, signs)
 
 
-#NOTE: I just changed anthracis to quantile normalize separately before combining. I can't see a downside to doing it this way, or the other way
 class anthr(data_source):
     def __init__(self):
         self.ba_i = ba_iron()
@@ -640,10 +604,6 @@ class anthr(data_source):
     
     def get_priors(self):
         return ([], [])
-
-#NOTE: I am missing the (largely unsuccessful) loader for subtilis that takes into account timeseries data
-
-
 
 #SECTION: ----------------------------------ORTHOLOGY LOADERS----------
 
